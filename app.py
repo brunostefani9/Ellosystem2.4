@@ -17,8 +17,13 @@ if 'estoque' not in st.session_state:
 
 # --- ABA DASHBOARD ---
 if aba == "Dashboard":
-    st.title("📊 Painel de Controle")
-    st.write("Visão geral do seu faturamento e próximos eventos.")
+    st.title("📊 Ellosystem - Painel de Controle")
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("💰 Faturamento Hoje", "R$ 1200")
+    col2.metric("📦 Produtos em Estoque", len(st.session_state.estoque))
+    col3.metric("🧾 Vendas Hoje", "23")
 
 # --- ABA FICHAS TÉCNICAS ---
 elif aba == "Fichas Técnicas":
@@ -35,9 +40,11 @@ elif aba == "Estoque":
 # --- ABA FINANCEIRO ---
 elif aba == "Financeiro":
     st.title("💰 Controle Financeiro")
-    st.write("Lançamentos de Entradas e Saídas.")
+
     col1, col2 = st.columns(2)
+
     with col1:
         st.number_input("Valor de Entrada (R$)", min_value=0.0)
+
     with col2:
         st.number_input("Valor de Saída (R$)", min_value=0.0)
