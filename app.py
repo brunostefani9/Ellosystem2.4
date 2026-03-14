@@ -1,68 +1,155 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Sistema Open Bar", layout="wide")
+st.set_page_config(page_title="Ellosystem Open Bar", layout="wide")
 
-st.sidebar.title("Navegação")
-aba = st.sidebar.radio("Ir para:", ["Dashboard", "Fichas Técnicas", "Estoque", "Financeiro"])
+st.sidebar.title("🍸 Ellosystem")
+aba = st.sidebar.radio(
+    "Menu",
+    ["Dashboard", "Produtos", "Drinks", "Orçamento", "Estoque", "Financeiro"]
+)
 
-# Banco inicial
-if 'estoque' not in st.session_state:
-    st.session_state.estoque = pd.DataFrame({
-        'Produto': ['Rum', 'Gin', 'Limão'],
-        'Quantidade': [10, 5, 50],
-        'Preço_Unit': [120.0, 150.0, 0.5]
-    })
+# ----------------------------
+# Bancos de dados simples
+# ----------------------------
 
-if 'receitas' not in st.session_state:
-    st.session_state.receitas = []
+if "produtos" not in st.session_state:
+    st.session_state.produtos = pd.DataFrame(
+        columns=["Produto", "Preço", "Unidade"]
+    )
 
-if 'financeiro' not in st.session_state:
+if "drinks" not in st.session_state:
+    st.session_state.drinks = []
+
+if "financeiro" not in st.session_state:
     st.session_state.financeiro = []
 
+# ----------------------------
 # DASHBOARD
+# ----------------------------
+
 if aba == "Dashboard":
 
-    st.title("📊 Ellosystem - Painel de Controle")
+    st.title("📊 Painel do Sistema")
 
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("Produtos em estoque", len(st.session_state.estoque))
-    col2.metric("Receitas cadastradas", len(st.session_state.receitas))
+    col1.metric("Produtos cadastrados", len(st.session_state.produtos))
+    col2.metric("Drinks cadastrados", len(st.session_state.drinks))
     col3.metric("Movimentações financeiras", len(st.session_state.financeiro))
 
-# FICHAS TECNICAS
-elif aba == "Fichas Técnicas":
+# ----------------------------
+# PRODUTOS
+# ----------------------------
 
-    st.title("🍸 Cadastro de Receitas")
+elif aba == "Produtos":
 
-    nome = st.text_input("Nome do Drink")
-    ingrediente = st.text_input("Ingrediente")
-    quantidade = st.number_input("Quantidade (ml ou g)", min_value=0)
+    st.title("📦 Cadastro de Produtos")
 
-    if st.button("Adicionar Receita"):
+    nome = st.text_input("Nome do produto")
+    preco = st.number_input("Preço", min_value=0.0)
+    unidade = st.text_input("Unidade (ml, g, unidade, garrafa)")
+
+    if st.button("Cadastrar produto"):
+
+        novo = pd.DataFrame(
+            [[nome, preco, unidade]],
+            columns=["Produto", "Preço", "Unidade"]
+        )
+
+        st.session_state.produtos = pd.concat(
+            [st.session_state.produtos, novo],
+            ignore_index=True
+        )
+
+        st.success("Produto cadastrado!")
+
+    if not st.session_state.produtos.empty:
+        st.subheader("Produtos cadastrados")
+        st.dataframe(st.session_state.produtos)
+
+# ----------------------------
+# DRINKS
+# ----------------------------
+
+elif aba == "Drinks":
+
+    st.title("🍸 Cadastro de Drinks")
+
+    nome_drink = st.text_input("Nome do drink")
+
+    ingrediente = st.selectbox(
+        "Ingrediente",
+        st.session_state.produtos["Produto"]
+        if not st.session_state.produtos.empty else []
+    )
+
+    quantidade = st.number_input("Quantidade usada")
+
+    if st.button("Adicionar receita"):
 
         receita = {
-            "Drink": nome,
+            "Drink": nome_drink,
             "Ingrediente": ingrediente,
             "Quantidade": quantidade
         }
 
-        st.session_state.receitas.append(receita)
-        st.success("Receita cadastrada!")
+        st.session_state.drinks.append(receita)
 
-    if st.session_state.receitas:
-        st.write("Receitas cadastradas:")
-        st.table(pd.DataFrame(st.session_state.receitas))
+        st.success("Ingrediente adicionado ao drink!")
 
+    if st.session_state.drinks:
+        st.subheader("Receitas cadastradas")
+        st.table(pd.DataFrame(st.session_state.drinks))
+
+# ----------------------------
+# ORÇAMENTO
+# ----------------------------
+
+elif aba == "Orçamento":
+
+    st.title("📋 Orçamento de Evento")
+
+    pessoas = st.number_input("Número de pessoas", min_value=1)
+    horas = st.number_input("Horas de evento", min_value=1)
+
+    lista_drinks = list(
+        set([d["Drink"] for d in st.session_state.drinks])
+    )
+
+    drinks_escolhidos = st.multiselect(
+        "Drinks do evento",
+        lista_drinks
+    )
+
+    if st.button("Calcular consumo estimado"):
+
+        consumo_medio = 3
+        total = pessoas * horas * consumo_medio
+
+        st.subheader("Resultado")
+
+        st.write("Pessoas:", pessoas)
+        st.write("Horas:", horas)
+        st.write("Drinks escolhidos:", drinks_escolhidos)
+        st.write("Total estimado de drinks:", total)
+
+# ----------------------------
 # ESTOQUE
+# ----------------------------
+
 elif aba == "Estoque":
 
-    st.title("📦 Gestão de Estoque")
+    st.title("📦 Controle de Estoque")
 
-    st.session_state.estoque = st.data_editor(st.session_state.estoque)
+    if not st.session_state.produtos.empty:
+        estoque = st.data_editor(st.session_state.produtos)
+        st.session_state.produtos = estoque
 
+# ----------------------------
 # FINANCEIRO
+# ----------------------------
+
 elif aba == "Financeiro":
 
     st.title("💰 Controle Financeiro")
@@ -82,5 +169,5 @@ elif aba == "Financeiro":
         st.success("Movimentação registrada!")
 
     if st.session_state.financeiro:
-        st.write("Histórico financeiro")
+        st.subheader("Histórico financeiro")
         st.table(pd.DataFrame(st.session_state.financeiro))
