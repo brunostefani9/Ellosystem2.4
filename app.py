@@ -1,353 +1,107 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
+from datetime import datetime
 
-st.set_page_config(page_title="Ellosystem Open Bar", layout="wide")
+st.set_page_config(page_title="Ellosystem", layout="wide")
+
+# -------------------------
+# DATABASE
+# -------------------------
+
+conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS produtos(
+nome TEXT,
+tipo TEXT,
+unidade TEXT
+)""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS precos(
+produto TEXT,
+marca TEXT,
+volume REAL,
+preco REAL,
+custo_unit REAL
+)""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS receitas(
+drink TEXT,
+ingrediente TEXT,
+quantidade REAL,
+unidade TEXT
+)""")
+
+cursor.execute("""CREATE TABLE IF NOT EXISTS vendas(
+evento TEXT,
+valor REAL,
+data TEXT
+)""")
+
+conn.commit()
+
+# -------------------------
+# SIDEBAR
+# -------------------------
 
 st.sidebar.title("🍸 Ellosystem")
 
 menu = st.sidebar.radio(
-    "Menu",
-    [
-        "Dashboard",
-        "Base de Produtos",
-        "Marcas / Insumos",
-        "Drinks",
-        "Orçamentos",
-        "Estoque"
-    ]
+"Menu",
+[
+"Relatórios",
+"Estoque",
+"Precificação",
+"Receitas",
+"Orçamentos",
+"Vendas"
+]
 )
 
 # -------------------------
-# BANCOS DE DADOS
+# RELATÓRIOS
 # -------------------------
 
-if "produtos_base" not in st.session_state:
-    st.session_state.produtos_base = pd.DataFrame(
-        columns=["Produto", "Categoria"]
-    )
+if menu == "Relatórios":
 
-if "insumos" not in st.session_state:
-    st.session_state.insumos = pd.DataFrame(
-        columns=[
-            "Produto",
-            "Marca",
-            "Embalagem",
-            "Quantidade",
-            "Unidade",
-            "Preço",
-            "Custo_unitario"
-        ]
-    )
+    st.title("Relatórios")
 
-if "receitas" not in st.session_state:
-    st.session_state.receitas = pd.DataFrame(
-        columns=[
-            "Drink",
-            "Ingrediente",
-            "Quantidade",
-            "Unidade"
-        ]
-    )
+    vendas = pd.read_sql("SELECT * FROM vendas", conn)
 
-# -------------------------
-# DASHBOARD
-# -------------------------
+    if not vendas.empty:
 
-if menu == "Dashboard":
+        vendas["data"] = pd.to_datetime(vendas["data"])
+        vendas["mes"] = vendas["data"].dt.to_period("M")
 
-    st.title("📊 Ellosystem")
+        vendas_mes = vendas.groupby("mes")["valor"].sum()
 
-    col1, col2, col3 = st.columns(3)
+        media = vendas_mes.mean()
 
-    col1.metric("Produtos base", len(st.session_state.produtos_base))
-    col2.metric("Insumos cadastrados", len(st.session_state.insumos))
-    col3.metric("Receitas cadastradas", len(st.session_state.receitas))
+        mes_atual = datetime.now().strftime("%Y-%m")
 
-# -------------------------
-# BASE DE PRODUTOS
-# -------------------------
+        vendas_mes_atual = vendas[vendas["mes"] == mes_atual]["valor"].sum()
 
-elif menu == "Base de Produtos":
+        eventos_mes = len(vendas[vendas["mes"] == mes_atual])
 
-    st.title("📦 Base de Produtos")
+        meta = media
 
-    tab1, tab2 = st.tabs(["Cadastrar", "Produtos cadastrados"])
+        perc = (vendas_mes_atual / meta) * 100 if meta > 0 else 0
 
-    with tab1:
+        c1,c2,c3,c4 = st.columns(4)
 
-        with st.form("form_produto", clear_on_submit=True):
+        c1.metric("Vendas no mês", f"R$ {round(vendas_mes_atual,2)}")
+        c2.metric("Eventos no mês", eventos_mes)
+        c3.metric("Meta média", f"R$ {round(meta,2)}")
+        c4.metric("% meta atingida", f"{round(perc,1)}%")
 
-            produto = st.text_input("Nome do produto")
+        st.subheader("Comparativo mês a mês")
 
-            categoria = st.selectbox(
-                "Categoria",
-                [
-                    "Destilado",
-                    "Licor",
-                    "Fruta",
-                    "Refrigerante",
-                    "Xarope",
-                    "Insumo"
-                ]
-            )
-
-            submit = st.form_submit_button("Cadastrar produto")
-
-            if submit:
-
-                novo = pd.DataFrame(
-                    [[produto, categoria]],
-                    columns=["Produto", "Categoria"]
-                )
-
-                st.session_state.produtos_base = pd.concat(
-                    [st.session_state.produtos_base, novo],
-                    ignore_index=True
-                )
-
-                st.success("Produto cadastrado!")
-
-    with tab2:
-
-        st.data_editor(
-            st.session_state.produtos_base,
-            use_container_width=True
-        )
-
-# -------------------------
-# MARCAS / INSUMOS
-# -------------------------
-
-elif menu == "Marcas / Insumos":
-
-    st.title("🏷️ Banco de Insumos")
-
-    tab1, tab2 = st.tabs(["Cadastrar insumo", "Lista de insumos"])
-
-    with tab1:
-
-        if not st.session_state.produtos_base.empty:
-
-            with st.form("form_insumo", clear_on_submit=True):
-
-                produto = st.selectbox(
-                    "Produto",
-                    st.session_state.produtos_base["Produto"]
-                )
-
-                marca = st.text_input("Marca")
-
-                embalagem = st.selectbox(
-                    "Embalagem",
-                    ["Garrafa", "Kg", "Pacote", "Unidade"]
-                )
-
-                quantidade = st.number_input(
-                    "Quantidade da embalagem",
-                    min_value=0.0
-                )
-
-                unidade = st.selectbox(
-                    "Unidade",
-                    ["ml", "g", "unidade"]
-                )
-
-                preco = st.number_input(
-                    "Preço da embalagem (R$)",
-                    min_value=0.0
-                )
-
-                submit = st.form_submit_button("Cadastrar insumo")
-
-                if submit:
-
-                    custo = 0
-
-                    if quantidade > 0:
-                        custo = preco / quantidade
-
-                    novo = pd.DataFrame(
-                        [[
-                            produto,
-                            marca,
-                            embalagem,
-                            quantidade,
-                            unidade,
-                            preco,
-                            custo
-                        ]],
-                        columns=st.session_state.insumos.columns
-                    )
-
-                    st.session_state.insumos = pd.concat(
-                        [st.session_state.insumos, novo],
-                        ignore_index=True
-                    )
-
-                    st.success("Insumo cadastrado!")
-
-        else:
-
-            st.warning("Cadastre produtos primeiro.")
-
-    with tab2:
-
-        st.data_editor(
-            st.session_state.insumos,
-            use_container_width=True
-        )
-
-# -------------------------
-# DRINKS
-# -------------------------
-
-elif menu == "Drinks":
-
-    st.title("🍸 Ficha Técnica dos Drinks")
-
-    if "ingredientes_temp" not in st.session_state:
-        st.session_state.ingredientes_temp = []
-
-    tab1, tab2 = st.tabs(["Criar receita", "Receitas cadastradas"])
-
-    with tab1:
-
-        nome_drink = st.text_input("Nome do drink")
-
-        if not st.session_state.produtos_base.empty:
-
-            ingrediente = st.selectbox(
-                "Ingrediente",
-                st.session_state.produtos_base["Produto"]
-            )
-
-            quantidade = st.number_input(
-                "Quantidade usada",
-                min_value=0.0
-            )
-
-            unidade = st.selectbox(
-                "Unidade",
-                ["ml", "g", "unidade"]
-            )
-
-            if st.button("Adicionar ingrediente"):
-
-                st.session_state.ingredientes_temp.append({
-                    "Ingrediente": ingrediente,
-                    "Quantidade": quantidade,
-                    "Unidade": unidade
-                })
-
-        if st.session_state.ingredientes_temp:
-
-            st.subheader("Ingredientes do drink")
-
-            df_temp = pd.DataFrame(st.session_state.ingredientes_temp)
-
-            st.table(df_temp)
-
-        if st.button("Salvar receita"):
-
-            for item in st.session_state.ingredientes_temp:
-
-                novo = pd.DataFrame(
-                    [[
-                        nome_drink,
-                        item["Ingrediente"],
-                        item["Quantidade"],
-                        item["Unidade"]
-                    ]],
-                    columns=st.session_state.receitas.columns
-                )
-
-                st.session_state.receitas = pd.concat(
-                    [st.session_state.receitas, novo],
-                    ignore_index=True
-                )
-
-            st.session_state.ingredientes_temp = []
-
-            st.success("Receita salva!")
-
-    with tab2:
-
-        if not st.session_state.receitas.empty:
-
-            drinks = st.session_state.receitas["Drink"].unique()
-
-            for drink in drinks:
-
-                with st.expander(drink):
-
-                    df = st.session_state.receitas[
-                        st.session_state.receitas["Drink"] == drink
-                    ]
-
-                    st.table(df[["Ingrediente", "Quantidade", "Unidade"]])
-
-        else:
-
-            st.info("Nenhuma receita cadastrada.")
-
-# -------------------------
-# ORÇAMENTOS
-# -------------------------
-
-elif menu == "Orçamentos":
-
-    st.title("📋 Orçamento de Evento")
-
-    pessoas = st.number_input("Número de pessoas", min_value=1)
-
-    modo = st.radio(
-        "Modo de cálculo",
-        [
-            "Drinks por pessoa no evento",
-            "Drinks por pessoa por hora"
-        ]
-    )
-
-    if modo == "Drinks por pessoa no evento":
-
-        drinks_pessoa = st.number_input(
-            "Drinks por pessoa",
-            min_value=1,
-            value=6
-        )
-
-        total_drinks = pessoas * drinks_pessoa
+        st.line_chart(vendas_mes)
 
     else:
 
-        horas = st.number_input(
-            "Horas de evento",
-            min_value=1
-        )
-
-        drinks_hora = st.number_input(
-            "Drinks por pessoa por hora",
-            min_value=1,
-            value=3
-        )
-
-        total_drinks = pessoas * horas * drinks_hora
-
-    st.divider()
-
-    st.subheader("Resultado estimado")
-
-    st.metric(
-        "Total de drinks estimado",
-        total_drinks
-    )
-
-    drinks_disponiveis = st.session_state.receitas["Drink"].unique()
-
-    drinks = st.multiselect(
-        "Drinks do evento",
-        drinks_disponiveis
-    )
+        st.info("Sem dados de vendas ainda.")
 
 # -------------------------
 # ESTOQUE
@@ -355,15 +109,215 @@ elif menu == "Orçamentos":
 
 elif menu == "Estoque":
 
-    st.title("📦 Controle de Estoque")
+    st.title("Estoque")
 
-    if not st.session_state.insumos.empty:
+    tab1,tab2 = st.tabs(["Cadastro de produtos","Lista"])
 
-        st.data_editor(
-            st.session_state.insumos,
-            use_container_width=True
-        )
+    with tab1:
+
+        nome = st.text_input("Produto")
+        tipo = st.text_input("Tipo")
+        unidade = st.selectbox("Unidade",["ml","g","kg","un"])
+
+        if st.button("Cadastrar"):
+
+            cursor.execute(
+            "INSERT INTO produtos VALUES (?,?,?)",
+            (nome,tipo,unidade)
+            )
+
+            conn.commit()
+
+            st.success("Produto cadastrado")
+
+    with tab2:
+
+        df = pd.read_sql("SELECT * FROM produtos", conn)
+
+        st.dataframe(df)
+
+# -------------------------
+# PRECIFICAÇÃO
+# -------------------------
+
+elif menu == "Precificação":
+
+    st.title("Precificação")
+
+    produtos = pd.read_sql("SELECT * FROM produtos", conn)
+
+    if produtos.empty:
+
+        st.warning("Cadastre produtos primeiro.")
 
     else:
 
-        st.info("Cadastre insumos primeiro.")
+        produto = st.selectbox("Produto", produtos["nome"])
+
+        marca = st.text_input("Marca")
+
+        volume = st.number_input("Volume")
+
+        preco = st.number_input("Preço de compra")
+
+        if st.button("Cadastrar preço"):
+
+            custo = preco / volume if volume > 0 else 0
+
+            cursor.execute(
+            "INSERT INTO precos VALUES (?,?,?,?,?)",
+            (produto,marca,volume,preco,custo)
+            )
+
+            conn.commit()
+
+            st.success("Preço cadastrado")
+
+        st.subheader("Lista")
+
+        df = pd.read_sql("SELECT * FROM precos", conn)
+
+        if not df.empty:
+
+            for categoria in df["produto"].unique():
+
+                st.subheader(categoria)
+
+                st.dataframe(df[df["produto"]==categoria])
+
+# -------------------------
+# RECEITAS
+# -------------------------
+
+elif menu == "Receitas":
+
+    tab1,tab2 = st.tabs(["Criar receita","Visualizar"])
+
+    with tab1:
+
+        st.title("Nova receita")
+
+        drink = st.text_input("Nome do drink")
+
+        produtos = pd.read_sql("SELECT nome FROM produtos", conn)
+
+        ingrediente = st.selectbox("Ingrediente", produtos)
+
+        qtd = st.number_input("Quantidade")
+
+        unidade = st.selectbox("Unidade",["ml","g","un","fatia","gota"])
+
+        if st.button("Adicionar ingrediente"):
+
+            cursor.execute(
+            "INSERT INTO receitas VALUES (?,?,?,?)",
+            (drink,ingrediente,qtd,unidade)
+            )
+
+            conn.commit()
+
+            st.success("Ingrediente adicionado")
+
+    with tab2:
+
+        df = pd.read_sql("SELECT * FROM receitas", conn)
+
+        for drink in df["drink"].unique():
+
+            with st.expander(drink):
+
+                st.dataframe(df[df["drink"]==drink])
+
+# -------------------------
+# ORÇAMENTOS
+# -------------------------
+
+elif menu == "Orçamentos":
+
+    st.title("Orçamento de Evento")
+
+    pessoas = st.number_input("Número de pessoas")
+
+    horas = st.number_input("Horas de evento")
+
+    drinks_pessoa = st.number_input("Drinks por pessoa",value=6)
+
+    total_drinks = pessoas * drinks_pessoa
+
+    st.metric("Total estimado de drinks", total_drinks)
+
+    receitas = pd.read_sql("SELECT * FROM receitas", conn)
+
+    drinks = receitas["drink"].unique()
+
+    selecionados = st.multiselect("Selecionar drinks",drinks)
+
+    if st.button("Calcular"):
+
+        ingredientes = {}
+
+        precos = pd.read_sql("SELECT * FROM precos", conn)
+
+        custo_total = 0
+
+        for drink in selecionados:
+
+            receita = receitas[receitas["drink"]==drink]
+
+            for _,row in receita.iterrows():
+
+                ing = row["ingrediente"]
+
+                qtd = row["quantidade"] * total_drinks
+
+                ingredientes[ing] = ingredientes.get(ing,0)+qtd
+
+                preco = precos[precos["produto"]==ing]
+
+                if not preco.empty:
+
+                    custo = preco.iloc[0]["custo_unit"]
+
+                    custo_total += qtd * custo
+
+        df = pd.DataFrame(
+        ingredientes.items(),
+        columns=["Ingrediente","Quantidade"]
+        )
+
+        st.subheader("Checklist")
+
+        st.dataframe(df)
+
+        st.metric("Custo total", f"R$ {round(custo_total,2)}")
+
+# -------------------------
+# VENDAS
+# -------------------------
+
+elif menu == "Vendas":
+
+    tab1,tab2 = st.tabs(["Novo evento","Eventos realizados"])
+
+    with tab1:
+
+        evento = st.text_input("Nome do evento")
+
+        valor = st.number_input("Valor de venda")
+
+        if st.button("Registrar venda"):
+
+            cursor.execute(
+            "INSERT INTO vendas VALUES (?,?,?)",
+            (evento,valor,str(datetime.now()))
+            )
+
+            conn.commit()
+
+            st.success("Venda registrada")
+
+    with tab2:
+
+        df = pd.read_sql("SELECT * FROM vendas", conn)
+
+        st.dataframe(df)
