@@ -12,32 +12,54 @@ st.set_page_config(page_title="Ellosystem", layout="wide")
 conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
 cursor = conn.cursor()
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS produtos(
-nome TEXT,
-tipo TEXT,
-unidade TEXT
-)""")
+def criar_tabela(nome):
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS precos(
+    cursor.execute(f"""
+    CREATE TABLE IF NOT EXISTS {nome}(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo TEXT,
+    nome TEXT,
+    quantidade REAL,
+    preco REAL,
+    uso REAL,
+    rendimento REAL,
+    custo REAL
+    )
+    """)
+
+criar_tabela("precos_bebidas")
+criar_tabela("precos_insumos")
+criar_tabela("precos_artesanais")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS estoque(
 produto TEXT,
 marca TEXT,
-volume REAL,
-preco REAL,
-custo_unit REAL
-)""")
+quantidade REAL
+)
+""")
 
-cursor.execute("""CREATE TABLE IF NOT EXISTS receitas(
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS movimentacoes(
+data TEXT,
+produto TEXT,
+marca TEXT,
+tipo TEXT,
+quantidade REAL,
+status TEXT
+)
+""")
+
+# Nova tabela para Receitas
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS receitas(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
 drink TEXT,
 ingrediente TEXT,
 quantidade REAL,
 unidade TEXT
-)""")
-
-cursor.execute("""CREATE TABLE IF NOT EXISTS vendas(
-evento TEXT,
-valor REAL,
-data TEXT
-)""")
+)
+""")
 
 conn.commit()
 
@@ -51,8 +73,8 @@ menu = st.sidebar.radio(
 "Menu",
 [
 "Relatórios",
-"Estoque",
 "Precificação",
+"Estoque",
 "Receitas",
 "Orçamentos",
 "Vendas"
@@ -60,48 +82,104 @@ menu = st.sidebar.radio(
 )
 
 # -------------------------
-# RELATÓRIOS
+# FUNÇÃO DE PRECIFICAÇÃO
 # -------------------------
 
-if menu == "Relatórios":
+def tela_precificacao(nome_tabela):
 
-    st.title("Relatórios")
+    tab1,tab2 = st.tabs(["Cadastrar","Lista"])
 
-    vendas = pd.read_sql("SELECT * FROM vendas", conn)
+    with tab1:
 
-    if not vendas.empty:
+        with st.form(f"form_{nome_tabela}",clear_on_submit=True):
 
-        vendas["data"] = pd.to_datetime(vendas["data"])
-        vendas["mes"] = vendas["data"].dt.to_period("M")
+            tipo = st.text_input(
+                "Tipo do item",
+                key=f"tipo_{nome_tabela}"
+            )
 
-        vendas_mes = vendas.groupby("mes")["valor"].sum()
+            nome = st.text_input(
+                "Nome / Marca",
+                key=f"nome_{nome_tabela}"
+            )
 
-        media = vendas_mes.mean()
+            quantidade = st.number_input(
+                "Quantidade total (ml, g, un)",
+                min_value=0.0,
+                key=f"quant_{nome_tabela}"
+            )
 
-        mes_atual = datetime.now().strftime("%Y-%m")
+            preco = st.number_input(
+                "Preço",
+                min_value=0.0,
+                key=f"preco_{nome_tabela}"
+            )
 
-        vendas_mes_atual = vendas[vendas["mes"] == mes_atual]["valor"].sum()
+            uso = st.number_input(
+                "Quantidade usada no drink",
+                min_value=0.0,
+                key=f"uso_{nome_tabela}"
+            )
 
-        eventos_mes = len(vendas[vendas["mes"] == mes_atual])
+            if st.form_submit_button("Cadastrar"):
 
-        meta = media
+                if uso == 0:
+                    st.error("Uso não pode ser zero")
+                else:
 
-        perc = (vendas_mes_atual / meta) * 100 if meta > 0 else 0
+                    rendimento = quantidade / uso
+                    custo = preco / rendimento
 
-        c1,c2,c3,c4 = st.columns(4)
+                    cursor.execute(f"""
+                    INSERT INTO {nome_tabela}
+                    VALUES(NULL,?,?,?,?,?,?,?)
+                    """,(tipo,nome,quantidade,preco,uso,rendimento,custo))
 
-        c1.metric("Vendas no mês", f"R$ {round(vendas_mes_atual,2)}")
-        c2.metric("Eventos no mês", eventos_mes)
-        c3.metric("Meta média", f"R$ {round(meta,2)}")
-        c4.metric("% meta atingida", f"{round(perc,1)}%")
+                    conn.commit()
 
-        st.subheader("Comparativo mês a mês")
+                    st.success("Item cadastrado!")
 
-        st.line_chart(vendas_mes)
+    with tab2:
 
-    else:
+        df = pd.read_sql(f"SELECT * FROM {nome_tabela}",conn)
 
-        st.info("Sem dados de vendas ainda.")
+        busca = st.text_input(
+            "Pesquisar",
+            key=f"busca_{nome_tabela}"
+        )
+
+        if busca:
+
+            df = df[
+                df["nome"].str.contains(busca,case=False) |
+                df["tipo"].str.contains(busca,case=False)
+            ]
+
+        st.dataframe(df,use_container_width=True)
+
+# -------------------------
+# PRECIFICAÇÃO
+# -------------------------
+
+if menu == "Precificação":
+
+    st.title("Precificação")
+
+    aba1,aba2,aba3 = st.tabs(
+        ["Bebidas","Frutas e Insumos","Artesanais"]
+    )
+
+    with aba1:
+
+        tela_precificacao("precos_bebidas")
+
+    with aba2:
+
+        tela_precificacao("precos_insumos")
+
+    with aba3:
+
+        tela_precificacao("precos_artesanais")
 
 # -------------------------
 # ESTOQUE
@@ -109,215 +187,256 @@ if menu == "Relatórios":
 
 elif menu == "Estoque":
 
-    st.title("Estoque")
+    st.title("Controle de Estoque")
 
-    tab1,tab2 = st.tabs(["Cadastro de produtos","Lista"])
+    bebidas = pd.read_sql(
+        "SELECT tipo FROM precos_bebidas",
+        conn
+    )
+
+    tab1,tab2,tab3,tab4 = st.tabs(
+        ["Entrada","Saída","Estoque físico","Registros"]
+    )
+
+# -------------------------
+# ENTRADA
+# -------------------------
 
     with tab1:
 
-        nome = st.text_input("Produto")
-        tipo = st.text_input("Tipo")
-        unidade = st.selectbox("Unidade",["ml","g","kg","un"])
+        with st.form("entrada_estoque",clear_on_submit=True):
 
-        if st.button("Cadastrar"):
-
-            cursor.execute(
-            "INSERT INTO produtos VALUES (?,?,?)",
-            (nome,tipo,unidade)
+            produto = st.selectbox(
+                "Tipo",
+                bebidas["tipo"].unique()
             )
 
-            conn.commit()
+            marca = st.text_input("Marca")
 
-            st.success("Produto cadastrado")
+            qtd = st.number_input(
+                "Quantidade",
+                min_value=0.0
+            )
+
+            status = st.selectbox(
+                "Status",
+                ["Compra","Volta evento"]
+            )
+
+            if st.form_submit_button("Registrar entrada"):
+
+                atual = pd.read_sql(
+                "SELECT * FROM estoque WHERE produto=? AND marca=?",
+                conn,
+                params=(produto,marca)
+                )
+
+                if atual.empty:
+
+                    cursor.execute(
+                    "INSERT INTO estoque VALUES(?,?,?)",
+                    (produto,marca,qtd)
+                    )
+
+                else:
+
+                    nova = atual.iloc[0]["quantidade"] + qtd
+
+                    cursor.execute("""
+                    UPDATE estoque
+                    SET quantidade=?
+                    WHERE produto=? AND marca=?
+                    """,(nova,produto,marca))
+
+                cursor.execute("""
+                INSERT INTO movimentacoes
+                VALUES(?,?,?,?,?,?)
+                """,
+                (
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                produto,
+                marca,
+                "Entrada",
+                qtd,
+                status
+                )
+                )
+
+                conn.commit()
+
+                st.success("Entrada registrada!")
+
+# -------------------------
+# SAÍDA
+# -------------------------
 
     with tab2:
 
-        df = pd.read_sql("SELECT * FROM produtos", conn)
+        estoque = pd.read_sql("SELECT * FROM estoque",conn)
 
-        st.dataframe(df)
+        if estoque.empty:
+
+            st.info("Estoque vazio")
+
+        else:
+
+            with st.form("saida_estoque",clear_on_submit=True):
+
+                produto = st.selectbox(
+                    "Produto",
+                    estoque["produto"].unique()
+                )
+
+                marca = st.text_input("Marca")
+
+                qtd = st.number_input(
+                    "Quantidade",
+                    min_value=0.0
+                )
+
+                if st.form_submit_button("Registrar saída"):
+
+                    atual = pd.read_sql(
+                    "SELECT * FROM estoque WHERE produto=? AND marca=?",
+                    conn,
+                    params=(produto,marca)
+                    )
+
+                    if atual.empty:
+
+                        st.error("Item não encontrado no estoque")
+
+                    else:
+
+                        nova = atual.iloc[0]["quantidade"] - qtd
+
+                        if nova < 0:
+
+                            st.error("Estoque insuficiente")
+
+                        else:
+
+                            cursor.execute("""
+                            UPDATE estoque
+                            SET quantidade=?
+                            WHERE produto=? AND marca=?
+                            """,(nova,produto,marca))
+
+                            cursor.execute("""
+                            INSERT INTO movimentacoes
+                            VALUES(?,?,?,?,?,?)
+                            """,
+                            (
+                            datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            produto,
+                            marca,
+                            "Saída",
+                            qtd,
+                            "Evento"
+                            )
+                            )
+
+                            conn.commit()
+
+                            st.success("Saída registrada!")
 
 # -------------------------
-# PRECIFICAÇÃO
+# ESTOQUE FÍSICO
 # -------------------------
 
-elif menu == "Precificação":
+    with tab3:
 
-    st.title("Precificação")
+        df = pd.read_sql(
+        "SELECT * FROM estoque ORDER BY produto",
+        conn
+        )
 
-    produtos = pd.read_sql("SELECT * FROM produtos", conn)
+        busca = st.text_input("Pesquisar item")
 
-    if produtos.empty:
+        if busca:
 
-        st.warning("Cadastre produtos primeiro.")
+            df = df[
+            df["marca"].str.contains(busca,case=False)
+            ]
 
-    else:
-
-        produto = st.selectbox("Produto", produtos["nome"])
-
-        marca = st.text_input("Marca")
-
-        volume = st.number_input("Volume")
-
-        preco = st.number_input("Preço de compra")
-
-        if st.button("Cadastrar preço"):
-
-            custo = preco / volume if volume > 0 else 0
-
-            cursor.execute(
-            "INSERT INTO precos VALUES (?,?,?,?,?)",
-            (produto,marca,volume,preco,custo)
-            )
-
-            conn.commit()
-
-            st.success("Preço cadastrado")
-
-        st.subheader("Lista")
-
-        df = pd.read_sql("SELECT * FROM precos", conn)
-
-        if not df.empty:
-
-            for categoria in df["produto"].unique():
-
-                st.subheader(categoria)
-
-                st.dataframe(df[df["produto"]==categoria])
+        st.dataframe(df,use_container_width=True)
 
 # -------------------------
-# RECEITAS
+# REGISTROS
 # -------------------------
+
+    with tab4:
+
+        df = pd.read_sql(
+        "SELECT * FROM movimentacoes ORDER BY data DESC",
+        conn
+        )
+
+        st.dataframe(df,use_container_width=True)
+
+# -------------------------
+# OUTRAS ABAS
+# -------------------------
+
+elif menu == "Relatórios":
+
+    st.title("Relatórios")
+    st.info("Indicadores virão na próxima etapa")
 
 elif menu == "Receitas":
 
-    tab1,tab2 = st.tabs(["Criar receita","Visualizar"])
+    st.title("Receitas")
 
-    with tab1:
+    # -------------------------
+    # ABA DE RECEITAS
+    # -------------------------
+    aba1, aba2 = st.tabs(["Cadastro de Drinks", "Lista de Drinks"])
 
-        st.title("Nova receita")
+    with aba1:
 
-        drink = st.text_input("Nome do drink")
+        with st.form("form_receitas", clear_on_submit=True):
 
-        produtos = pd.read_sql("SELECT nome FROM produtos", conn)
+            drink = st.text_input("Nome do drink", key="nome_drink")
+            ingrediente = st.text_input("Ingrediente", key="ingrediente")
+            quantidade = st.number_input("Quantidade", min_value=0.0, key="qtd_ingrediente")
+            unidade = st.selectbox("Unidade", ["ml","g","un","gota","fatia","guarnição"], key="unidade_ingrediente")
 
-        ingrediente = st.selectbox("Ingrediente", produtos)
+            if st.form_submit_button("Adicionar ingrediente"):
 
-        qtd = st.number_input("Quantidade")
+                if not drink or not ingrediente or quantidade <= 0:
+                    st.error("Preencha todos os campos corretamente")
+                else:
+                    cursor.execute("""
+                    INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
+                    VALUES(?,?,?,?)
+                    """, (drink, ingrediente, quantidade, unidade))
+                    conn.commit()
+                    st.success("Ingrediente adicionado ao drink!")
 
-        unidade = st.selectbox("Unidade",["ml","g","un","fatia","gota"])
-
-        if st.button("Adicionar ingrediente"):
-
-            cursor.execute(
-            "INSERT INTO receitas VALUES (?,?,?,?)",
-            (drink,ingrediente,qtd,unidade)
-            )
-
-            conn.commit()
-
-            st.success("Ingrediente adicionado")
-
-    with tab2:
+    with aba2:
 
         df = pd.read_sql("SELECT * FROM receitas", conn)
 
-        for drink in df["drink"].unique():
+        busca = st.text_input("Pesquisar drink", key="busca_drink")
+        if busca:
+            df = df[df["drink"].str.contains(busca, case=False)]
 
-            with st.expander(drink):
-
-                st.dataframe(df[df["drink"]==drink])
-
-# -------------------------
-# ORÇAMENTOS
-# -------------------------
+        # Botão de exclusão
+        for index, row in df.iterrows():
+            cols = st.columns([3,3,2,2,1])
+            cols[0].write(row["drink"])
+            cols[1].write(f"{row['ingrediente']} - {row['quantidade']} {row['unidade']}")
+            if cols[4].button("🗑️", key=f"del_{row['id']}"):
+                cursor.execute("DELETE FROM receitas WHERE id=?", (row["id"],))
+                conn.commit()
+                st.experimental_rerun()  # Atualiza a lista
 
 elif menu == "Orçamentos":
 
-    st.title("Orçamento de Evento")
-
-    pessoas = st.number_input("Número de pessoas")
-
-    horas = st.number_input("Horas de evento")
-
-    drinks_pessoa = st.number_input("Drinks por pessoa",value=6)
-
-    total_drinks = pessoas * drinks_pessoa
-
-    st.metric("Total estimado de drinks", total_drinks)
-
-    receitas = pd.read_sql("SELECT * FROM receitas", conn)
-
-    drinks = receitas["drink"].unique()
-
-    selecionados = st.multiselect("Selecionar drinks",drinks)
-
-    if st.button("Calcular"):
-
-        ingredientes = {}
-
-        precos = pd.read_sql("SELECT * FROM precos", conn)
-
-        custo_total = 0
-
-        for drink in selecionados:
-
-            receita = receitas[receitas["drink"]==drink]
-
-            for _,row in receita.iterrows():
-
-                ing = row["ingrediente"]
-
-                qtd = row["quantidade"] * total_drinks
-
-                ingredientes[ing] = ingredientes.get(ing,0)+qtd
-
-                preco = precos[precos["produto"]==ing]
-
-                if not preco.empty:
-
-                    custo = preco.iloc[0]["custo_unit"]
-
-                    custo_total += qtd * custo
-
-        df = pd.DataFrame(
-        ingredientes.items(),
-        columns=["Ingrediente","Quantidade"]
-        )
-
-        st.subheader("Checklist")
-
-        st.dataframe(df)
-
-        st.metric("Custo total", f"R$ {round(custo_total,2)}")
-
-# -------------------------
-# VENDAS
-# -------------------------
+    st.title("Orçamentos")
+    st.info("Criação de eventos em breve")
 
 elif menu == "Vendas":
 
-    tab1,tab2 = st.tabs(["Novo evento","Eventos realizados"])
-
-    with tab1:
-
-        evento = st.text_input("Nome do evento")
-
-        valor = st.number_input("Valor de venda")
-
-        if st.button("Registrar venda"):
-
-            cursor.execute(
-            "INSERT INTO vendas VALUES (?,?,?)",
-            (evento,valor,str(datetime.now()))
-            )
-
-            conn.commit()
-
-            st.success("Venda registrada")
-
-    with tab2:
-
-        df = pd.read_sql("SELECT * FROM vendas", conn)
-
-        st.dataframe(df)
+    st.title("Vendas")
+    st.info("Histórico de eventos em breve")
