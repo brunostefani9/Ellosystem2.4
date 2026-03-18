@@ -387,49 +387,143 @@ elif menu == "Receitas":
 
     st.title("Receitas")
 
-    # -------------------------
-    # ABA DE RECEITAS
-    # -------------------------
+    # controle de estado
+    if "ingredientes_temp" not in st.session_state:
+        st.session_state["ingredientes_temp"] = []
+
+    if "drink_nome" not in st.session_state:
+        st.session_state["drink_nome"] = ""
+
+    if "msg" not in st.session_state:
+        st.session_state["msg"] = ""
+
+    # mostra mensagem (se existir)
+    if st.session_state["msg"]:
+        st.success(st.session_state["msg"])
+        st.session_state["msg"] = ""
+
     aba1, aba2 = st.tabs(["Cadastro de Drinks", "Lista de Drinks"])
 
+    # =========================
+    # ABA 1 - CADASTRO
+    # =========================
     with aba1:
 
-        with st.form("form_receitas", clear_on_submit=True):
+        drink = st.text_input("Nome do drink", value=st.session_state["drink_nome"])
 
-            drink = st.text_input("Nome do drink", key="nome_drink")
-            ingrediente = st.text_input("Ingrediente", key="ingrediente")
-            quantidade = st.number_input("Quantidade", min_value=0.0, key="qtd_ingrediente")
-            unidade = st.selectbox("Unidade", ["ml","g","un","gota","fatia","guarnição"], key="unidade_ingrediente")
+        col1, col2, col3, col4 = st.columns(4)
 
-            if st.form_submit_button("Adicionar ingrediente"):
+        ingrediente = col1.text_input("Ingrediente")
+        quantidade = col2.number_input("Quantidade", min_value=0.0)
+        unidade = col3.selectbox("Unidade", ["ml","g","un","gota","fatia","guarnição"])
 
-                if not drink or not ingrediente or quantidade <= 0:
-                    st.error("Preencha todos os campos corretamente")
-                else:
+        if col4.button("➕ Adicionar"):
+
+            if drink and ingrediente and quantidade > 0:
+
+                st.session_state["drink_nome"] = drink
+
+                st.session_state["ingredientes_temp"].append({
+                    "ingrediente": ingrediente,
+                    "quantidade": quantidade,
+                    "unidade": unidade
+                })
+
+                st.session_state["msg"] = "Ingrediente adicionado!"
+
+                st.rerun()
+
+            else:
+                st.warning("Preencha tudo corretamente")
+
+        if st.button("💾 Salvar Drink"):
+
+            if not st.session_state["drink_nome"]:
+                st.error("Digite o nome do drink")
+
+            elif not st.session_state["ingredientes_temp"]:
+                st.error("Adicione pelo menos um ingrediente")
+
+            else:
+
+                for item in st.session_state["ingredientes_temp"]:
                     cursor.execute("""
                     INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
                     VALUES(?,?,?,?)
-                    """, (drink, ingrediente, quantidade, unidade))
-                    conn.commit()
-                    st.success("Ingrediente adicionado ao drink!")
+                    """, (
+                        st.session_state["drink_nome"],
+                        item["ingrediente"],
+                        item["quantidade"],
+                        item["unidade"]
+                    ))
 
+                conn.commit()
+
+                st.session_state["msg"] = "🍹 Drink cadastrado com sucesso!"
+
+                # limpa tudo
+                st.session_state["ingredientes_temp"] = []
+                st.session_state["drink_nome"] = ""
+
+                st.rerun()
+
+    # =========================
+    # ABA 2 - LISTA
+    # =========================
     with aba2:
 
         df = pd.read_sql("SELECT * FROM receitas", conn)
 
-        busca = st.text_input("Pesquisar drink", key="busca_drink")
-        if busca:
-            df = df[df["drink"].str.contains(busca, case=False)]
+        if df.empty:
+            st.info("Nenhum drink cadastrado")
 
-        # Botão de exclusão
-        for index, row in df.iterrows():
-            cols = st.columns([3,3,2,2,1])
-            cols[0].write(row["drink"])
-            cols[1].write(f"{row['ingrediente']} - {row['quantidade']} {row['unidade']}")
-            if cols[4].button("🗑️", key=f"del_{row['id']}"):
-                cursor.execute("DELETE FROM receitas WHERE id=?", (row["id"],))
-                conn.commit()
-                st.experimental_rerun()  # Atualiza a lista
+        else:
+
+            drinks = df["drink"].unique()
+
+            for drink in drinks:
+
+                receita = df[df["drink"] == drink]
+
+                custo_total = 0
+
+                col1, col2 = st.columns([5,1])
+
+                with col1:
+                    st.markdown(f"### 🍹 {drink}")
+
+                    for _, row in receita.iterrows():
+
+                        ingrediente = row["ingrediente"]
+                        quantidade = row["quantidade"]
+                        unidade = row["unidade"]
+
+                        custo_unitario = 0
+
+                        for tabela in ["precos_bebidas","precos_insumos","precos_artesanais"]:
+
+                            result = pd.read_sql(f"""
+                            SELECT custo FROM {tabela}
+                            WHERE nome=?
+                            """, conn, params=(ingrediente,))
+
+                            if not result.empty:
+                                custo_unitario = result.iloc[0]["custo"]
+                                break
+
+                        custo_total += custo_unitario * quantidade
+
+                        st.write(f"- {ingrediente} ({quantidade} {unidade})")
+
+                with col2:
+                    st.markdown(f"### 💰\nR$ {custo_total:.2f}")
+
+                    if st.button("🗑️", key=f"del_{drink}"):
+                        cursor.execute("DELETE FROM receitas WHERE drink=?", (drink,))
+                        conn.commit()
+                        st.rerun()
+
+                st.divider()
 
 elif menu == "Orçamentos":
 
