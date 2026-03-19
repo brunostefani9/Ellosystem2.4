@@ -657,7 +657,6 @@ elif menu == "Orçamentos":
     else:
 
         drinks = df_receitas["drink"].unique()
-
         selecao = st.multiselect("Selecione os drinks", drinks)
 
         if selecao:
@@ -709,7 +708,7 @@ elif menu == "Orçamentos":
                         ingredientes_totais[ingrediente] = total_ingrediente
 
             # -------------------------
-            # ESCOLHA DE MARCAS (LIGADO AO BANCO)
+            # ESCOLHA DE MARCAS (ROBUSTO)
             # -------------------------
             st.subheader("Escolha das Marcas (Bebidas)")
 
@@ -719,19 +718,23 @@ elif menu == "Orçamentos":
 
             for item in ingredientes_totais:
 
+                item_lower = item.lower().strip()
+
                 opcoes = df_bebidas[
-                    df_bebidas["tipo"].str.lower() == item.lower()
+                    df_bebidas["tipo"].str.lower().str.strip().apply(lambda x: x in item_lower)
                 ]
 
-                if not opcoes.empty:
+                # fallback (se não achar nada)
+                if opcoes.empty:
+                    opcoes = df_bebidas
 
-                    escolha = st.selectbox(
-                        f"{item}",
-                        opcoes["nome"],
-                        key=f"marca_{item}"
-                    )
+                escolha = st.selectbox(
+                    f"{item}",
+                    opcoes["nome"],
+                    key=f"marca_{item}"
+                )
 
-                    escolhas_marcas[item] = escolha
+                escolhas_marcas[item] = escolha
 
             # -------------------------
             # CHECKLIST FINAL
@@ -745,7 +748,7 @@ elif menu == "Orçamentos":
                 qtd = round(qtd, 2)
                 custo_unitario = 0
 
-                # unidade
+                # unidade inteligente
                 if qtd >= 1000:
                     qtd_exibicao = round(qtd / 1000, 2)
 
@@ -761,7 +764,7 @@ elif menu == "Orçamentos":
 
                 nome_exibicao = item
 
-                # bebidas
+                # bebidas (usa marca escolhida)
                 if item in escolhas_marcas:
 
                     result = pd.read_sql("""
