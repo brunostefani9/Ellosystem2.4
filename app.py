@@ -629,8 +629,160 @@ elif menu == "Receitas":
 
 elif menu == "Orçamentos":
 
-    st.title("Orçamentos")
-    st.info("Criação de eventos em breve")
+    st.title("Orçamento de Evento")
+
+    # -------------------------
+    # CONFIG EVENTO
+    # -------------------------
+
+    st.subheader("Configuração do Evento")
+
+    col1, col2, col3 = st.columns(3)
+
+    convidados = col1.number_input("Convidados", min_value=1, value=50)
+    horas = col2.number_input("Horas de evento", min_value=1, value=4)
+    drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
+
+    total_drinks = convidados * horas * drinks_por_hora
+
+    st.info(f"Total estimado de drinks: {int(total_drinks)}")
+
+    # -------------------------
+    # RECEITAS
+    # -------------------------
+
+    df_receitas = pd.read_sql("SELECT * FROM receitas", conn)
+
+    if df_receitas.empty:
+        st.warning("Cadastre receitas primeiro")
+    else:
+
+        drinks = df_receitas["drink"].unique()
+
+        selecao = st.multiselect("Selecione os drinks", drinks)
+
+        if selecao:
+
+            # -------------------------
+            # PESO
+            # -------------------------
+
+            st.subheader("Peso de Consumo")
+
+            pesos = {}
+            total_peso = 0
+
+            for drink in selecao:
+                peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+                pesos[drink] = peso
+                total_peso += peso
+
+            # -------------------------
+            # % AUTOMÁTICA
+            # -------------------------
+
+            st.subheader("Distribuição (%)")
+
+            for drink in selecao:
+                pct = (pesos[drink] / total_peso) * 100
+                st.write(f"{drink}: {pct:.1f}%")
+
+            # -------------------------
+            # CALCULO INGREDIENTES
+            # -------------------------
+
+            ingredientes_totais = {}
+
+            for drink in selecao:
+
+                proporcao = pesos[drink] / total_peso
+                qtd_drinks = total_drinks * proporcao
+
+                receita = df_receitas[df_receitas["drink"] == drink]
+
+                for _, row in receita.iterrows():
+
+                    ingrediente = row["ingrediente"]
+                    qtd = row["quantidade"]
+
+                    total_ingrediente = qtd * qtd_drinks
+
+                    if ingrediente in ingredientes_totais:
+                        ingredientes_totais[ingrediente] += total_ingrediente
+                    else:
+                        ingredientes_totais[ingrediente] = total_ingrediente
+
+            # -------------------------
+            # ESCOLHA DE MARCAS (BEBIDAS)
+            # -------------------------
+
+            st.subheader("Escolha das Marcas (Bebidas)")
+
+            df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
+
+            escolhas_marcas = {}
+
+            for item in ingredientes_totais:
+
+                opcoes = df_bebidas[df_bebidas["tipo"].str.contains(item, case=False, na=False)]
+
+                if not opcoes.empty:
+
+                    escolha = st.selectbox(
+                        f"{item}",
+                        opcoes["nome"],
+                        key=f"marca_{item}"
+                    )
+
+                    escolhas_marcas[item] = escolha
+
+            # -------------------------
+            # RESULTADO FINAL
+            # -------------------------
+
+            st.subheader("Checklist de Compras")
+
+            custo_total = 0
+
+            for item, qtd in ingredientes_totais.items():
+
+                custo_unitario = 0
+
+                # verifica se tem marca escolhida
+                if item in escolhas_marcas:
+
+                    result = pd.read_sql("""
+                    SELECT custo FROM precos_bebidas
+                    WHERE nome = ?
+                    """, conn, params=(escolhas_marcas[item],))
+
+                    if not result.empty:
+                        custo_unitario = result.iloc[0]["custo"]
+
+                    nome_exibicao = escolhas_marcas[item]
+
+                else:
+
+                    for tabela in ["precos_insumos","precos_artesanais"]:
+                        result = pd.read_sql(f"""
+                        SELECT custo FROM {tabela}
+                        WHERE nome LIKE ?
+                        """, conn, params=(f"%{item}%",))
+
+                        if not result.empty:
+                            custo_unitario = result.iloc[0]["custo"]
+                            break
+
+                    nome_exibicao = item
+
+                custo_item = custo_unitario * qtd
+                custo_total += custo_item
+
+                st.write(f"✔ {nome_exibicao} → {round(qtd,2)} | R$ {round(custo_item,2)}")
+
+            st.divider()
+
+            st.subheader(f"💰 Custo Total: R$ {round(custo_total,2)}")
 
 elif menu == "Vendas":
 
