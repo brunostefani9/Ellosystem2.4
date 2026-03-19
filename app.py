@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
+from datetime import datetime
 
 st.set_page_config(page_title="Ellosystem", layout="wide")
 
@@ -12,7 +13,6 @@ conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
 cursor = conn.cursor()
 
 def criar_tabela(nome):
-
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS {nome}(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,6 +30,36 @@ criar_tabela("precos_bebidas")
 criar_tabela("precos_insumos")
 criar_tabela("precos_artesanais")
 
+# OUTRAS TABELAS (mantidas)
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS estoque(
+produto TEXT,
+marca TEXT,
+quantidade REAL
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS movimentacoes(
+data TEXT,
+produto TEXT,
+marca TEXT,
+tipo TEXT,
+quantidade REAL,
+status TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS receitas(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+drink TEXT,
+ingrediente TEXT,
+quantidade REAL,
+unidade TEXT
+)
+""")
+
 conn.commit()
 
 # -------------------------
@@ -40,7 +70,14 @@ st.sidebar.title("🍸 Ellosystem")
 
 menu = st.sidebar.radio(
     "Menu",
-    ["Precificação"]
+    [
+        "Relatórios",
+        "Precificação",
+        "Estoque",
+        "Receitas",
+        "Orçamentos",
+        "Vendas"
+    ]
 )
 
 # -------------------------
@@ -58,33 +95,15 @@ def tela_precificacao(nome_tabela):
             tipo = st.text_input("Tipo do item", key=f"tipo_{nome_tabela}")
             nome = st.text_input("Nome / Marca", key=f"nome_{nome_tabela}")
 
-            quantidade = st.number_input(
-                "Quantidade total (ml, g, un)",
-                min_value=0.0,
-                format="%.2f",
-                key=f"quant_{nome_tabela}"
-            )
-
-            preco = st.number_input(
-                "Preço (R$)",
-                min_value=0.0,
-                format="%.2f",
-                key=f"preco_{nome_tabela}"
-            )
-
-            uso = st.number_input(
-                "Quantidade usada no drink",
-                min_value=0.0,
-                format="%.2f",
-                key=f"uso_{nome_tabela}"
-            )
+            quantidade = st.number_input("Quantidade total (ml, g, un)", min_value=0.0, format="%.2f", key=f"quant_{nome_tabela}")
+            preco = st.number_input("Preço (R$)", min_value=0.0, format="%.2f", key=f"preco_{nome_tabela}")
+            uso = st.number_input("Quantidade usada no drink", min_value=0.0, format="%.2f", key=f"uso_{nome_tabela}")
 
             if st.form_submit_button("Cadastrar"):
 
                 if uso == 0:
                     st.error("Uso não pode ser zero")
                 else:
-
                     rendimento = quantidade / uso
                     custo = preco / rendimento
 
@@ -94,7 +113,6 @@ def tela_precificacao(nome_tabela):
                     """,(tipo,nome,quantidade,preco,uso,rendimento,custo))
 
                     conn.commit()
-
                     st.success("Item cadastrado!")
 
     with tab2:
@@ -114,7 +132,6 @@ def tela_precificacao(nome_tabela):
 
         st.dataframe(df, use_container_width=True)
 
-        # 🗑 EXCLUIR
         if not df.empty:
             item = st.selectbox("Excluir item", df["id"], key=f"del_{nome_tabela}")
 
@@ -138,39 +155,19 @@ def tela_insumos():
             tipo = st.text_input("Tipo do item", key="tipo_insumos")
             nome = st.text_input("Nome / Marca", key="nome_insumos")
 
-            quantidade = st.number_input(
-                "Quantidade total",
-                min_value=0.0,
-                format="%.2f",
-                key="quant_insumos"
-            )
+            quantidade = st.number_input("Quantidade total", min_value=0.0, format="%.2f", key="quant_insumos")
 
-            unidade = st.selectbox(
-                "Unidade de compra",
-                ["kg","g","un","maço"],
-                key="unidade_insumos"
-            )
+            unidade = st.selectbox("Unidade de compra", ["kg","g","un","maço"], key="unidade_insumos")
 
-            # mensagens inteligentes
             if unidade == "kg":
                 st.info("Cálculo feito automaticamente por gramas (g)")
 
             elif unidade == "maço":
                 st.info("Maço será tratado como unidade (cálculo simples)")
 
-            preco = st.number_input(
-                "Preço (R$)",
-                min_value=0.0,
-                format="%.2f",
-                key="preco_insumos"
-            )
+            preco = st.number_input("Preço (R$)", min_value=0.0, format="%.2f", key="preco_insumos")
 
-            uso = st.number_input(
-                "Quantidade usada no drink",
-                min_value=0.0,
-                format="%.2f",
-                key="uso_insumos"
-            )
+            uso = st.number_input("Quantidade usada no drink", min_value=0.0, format="%.2f", key="uso_insumos")
 
             if st.form_submit_button("Cadastrar"):
 
@@ -181,10 +178,6 @@ def tela_insumos():
                     if unidade == "kg":
                         quantidade_g = quantidade * 1000
                         custo_unitario = preco / quantidade_g
-                        custo = round(custo_unitario * uso, 2)
-
-                    elif unidade == "maço":
-                        custo_unitario = preco / quantidade
                         custo = round(custo_unitario * uso, 2)
 
                     else:
@@ -221,7 +214,6 @@ def tela_insumos():
 
         st.dataframe(df, use_container_width=True)
 
-        # 🗑 EXCLUIR
         if not df.empty:
             item = st.selectbox("Excluir item", df["id"], key="del_insumos")
 
@@ -250,6 +242,21 @@ if menu == "Precificação":
 
     with aba3:
         tela_precificacao("precos_artesanais")
+
+elif menu == "Relatórios":
+    st.title("Relatórios")
+
+elif menu == "Estoque":
+    st.title("Estoque")
+
+elif menu == "Receitas":
+    st.title("Receitas")
+
+elif menu == "Orçamentos":
+    st.title("Orçamentos")
+
+elif menu == "Vendas":
+    st.title("Vendas")
 
 # -------------------------
 # ESTOQUE
