@@ -13,6 +13,7 @@ conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
 cursor = conn.cursor()
 
 def criar_tabela(nome):
+
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS {nome}(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +31,6 @@ criar_tabela("precos_bebidas")
 criar_tabela("precos_insumos")
 criar_tabela("precos_artesanais")
 
-# OUTRAS TABELAS (mantidas)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS estoque(
 produto TEXT,
@@ -50,6 +50,7 @@ status TEXT
 )
 """)
 
+# Nova tabela para Receitas
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS receitas(
 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,41 +70,63 @@ conn.commit()
 st.sidebar.title("🍸 Ellosystem")
 
 menu = st.sidebar.radio(
-    "Menu",
-    [
-        "Relatórios",
-        "Precificação",
-        "Estoque",
-        "Receitas",
-        "Orçamentos",
-        "Vendas"
-    ]
+"Menu",
+[
+"Relatórios",
+"Precificação",
+"Estoque",
+"Receitas",
+"Orçamentos",
+"Vendas"
+]
 )
 
 # -------------------------
-# FUNÇÃO PADRÃO
+# FUNÇÃO DE PRECIFICAÇÃO
 # -------------------------
 
 def tela_precificacao(nome_tabela):
 
-    tab1, tab2 = st.tabs(["Cadastrar","Lista"])
+    tab1,tab2 = st.tabs(["Cadastrar","Lista"])
 
     with tab1:
 
-        with st.form(f"form_{nome_tabela}", clear_on_submit=True):
+        with st.form(f"form_{nome_tabela}",clear_on_submit=True):
 
-            tipo = st.text_input("Tipo do item", key=f"tipo_{nome_tabela}")
-            nome = st.text_input("Nome / Marca", key=f"nome_{nome_tabela}")
+            tipo = st.text_input(
+                "Tipo do item",
+                key=f"tipo_{nome_tabela}"
+            )
 
-            quantidade = st.number_input("Quantidade total (ml, g, un)", min_value=0.0, format="%.2f", key=f"quant_{nome_tabela}")
-            preco = st.number_input("Preço (R$)", min_value=0.0, format="%.2f", key=f"preco_{nome_tabela}")
-            uso = st.number_input("Quantidade usada no drink", min_value=0.0, format="%.2f", key=f"uso_{nome_tabela}")
+            nome = st.text_input(
+                "Nome / Marca",
+                key=f"nome_{nome_tabela}"
+            )
+
+            quantidade = st.number_input(
+                "Quantidade total (ml, g, un)",
+                min_value=0.0,
+                key=f"quant_{nome_tabela}"
+            )
+
+            preco = st.number_input(
+                "Preço",
+                min_value=0.0,
+                key=f"preco_{nome_tabela}"
+            )
+
+            uso = st.number_input(
+                "Quantidade usada no drink",
+                min_value=0.0,
+                key=f"uso_{nome_tabela}"
+            )
 
             if st.form_submit_button("Cadastrar"):
 
                 if uso == 0:
                     st.error("Uso não pode ser zero")
                 else:
+
                     rendimento = quantidade / uso
                     custo = preco / rendimento
 
@@ -113,150 +136,50 @@ def tela_precificacao(nome_tabela):
                     """,(tipo,nome,quantidade,preco,uso,rendimento,custo))
 
                     conn.commit()
+
                     st.success("Item cadastrado!")
 
     with tab2:
 
-        df = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
+        df = pd.read_sql(f"SELECT * FROM {nome_tabela}",conn)
 
-        busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
-
-        if busca:
-            df = df[
-                df["nome"].str.contains(busca, case=False) |
-                df["tipo"].str.contains(busca, case=False)
-            ]
-
-        df["preco"] = df["preco"].map(lambda x: f"R$ {x:.2f}")
-        df["custo"] = df["custo"].map(lambda x: f"R$ {x:.2f}")
-
-        st.dataframe(df, use_container_width=True)
-
-        if not df.empty:
-            item = st.selectbox("Excluir item", df["id"], key=f"del_{nome_tabela}")
-
-            if st.button("🗑 Excluir selecionado", key=f"btn_{nome_tabela}"):
-                cursor.execute(f"DELETE FROM {nome_tabela} WHERE id = ?", (item,))
-                conn.commit()
-                st.rerun()
-
-# -------------------------
-# INSUMOS (FRUTAS)
-# -------------------------
-
-def tela_insumos():
-
-    tab1, tab2 = st.tabs(["Cadastrar","Lista"])
-
-    with tab1:
-
-        with st.form("form_insumos", clear_on_submit=True):
-
-            tipo = st.text_input("Tipo do item", key="tipo_insumos")
-            nome = st.text_input("Nome / Marca", key="nome_insumos")
-
-            quantidade = st.number_input("Quantidade total", min_value=0.0, format="%.2f", key="quant_insumos")
-
-            unidade = st.selectbox("Unidade de compra", ["kg","g","un","maço"], key="unidade_insumos")
-
-            if unidade == "kg":
-                st.info("Cálculo feito automaticamente por gramas (g)")
-
-            elif unidade == "maço":
-                st.info("Maço será tratado como unidade (cálculo simples)")
-
-            preco = st.number_input("Preço (R$)", min_value=0.0, format="%.2f", key="preco_insumos")
-
-            uso = st.number_input("Quantidade usada no drink", min_value=0.0, format="%.2f", key="uso_insumos")
-
-            if st.form_submit_button("Cadastrar"):
-
-                if quantidade <= 0 or preco <= 0 or uso <= 0:
-                    st.error("Preencha valores válidos")
-                else:
-
-                    if unidade == "kg":
-                        quantidade_g = quantidade * 1000
-                        custo_unitario = preco / quantidade_g
-                        custo = round(custo_unitario * uso, 2)
-
-                    else:
-                        custo_unitario = preco / quantidade
-                        custo = round(custo_unitario * uso, 2)
-
-                    rendimento = round(quantidade / uso, 2)
-
-                    nome_final = f"{nome} ({unidade})"
-
-                    cursor.execute("""
-                    INSERT INTO precos_insumos
-                    VALUES(NULL,?,?,?,?,?,?,?)
-                    """,(tipo,nome_final,quantidade,preco,uso,rendimento,custo))
-
-                    conn.commit()
-
-                    st.success(f"{nome} cadastrado! Custo: R$ {custo:.2f}")
-
-    with tab2:
-
-        df = pd.read_sql("SELECT * FROM precos_insumos", conn)
-
-        busca = st.text_input("Pesquisar", key="busca_insumos")
+        busca = st.text_input(
+            "Pesquisar",
+            key=f"busca_{nome_tabela}"
+        )
 
         if busca:
+
             df = df[
-                df["nome"].fillna("").str.contains(busca, case=False) |
-                df["tipo"].fillna("").str.contains(busca, case=False)
+                df["nome"].str.contains(busca,case=False) |
+                df["tipo"].str.contains(busca,case=False)
             ]
 
-        df["preco"] = df["preco"].map(lambda x: f"R$ {x:.2f}")
-        df["custo"] = df["custo"].map(lambda x: f"R$ {x:.2f}")
-
-        st.dataframe(df, use_container_width=True)
-
-        if not df.empty:
-            item = st.selectbox("Excluir item", df["id"], key="del_insumos")
-
-            if st.button("🗑 Excluir selecionado", key="btn_insumos"):
-                cursor.execute("DELETE FROM precos_insumos WHERE id = ?", (item,))
-                conn.commit()
-                st.rerun()
+        st.dataframe(df,use_container_width=True)
 
 # -------------------------
-# TELA PRINCIPAL
+# PRECIFICAÇÃO
 # -------------------------
 
 if menu == "Precificação":
 
     st.title("Precificação")
 
-    aba1, aba2, aba3 = st.tabs(
+    aba1,aba2,aba3 = st.tabs(
         ["Bebidas","Frutas e Insumos","Artesanais"]
     )
 
     with aba1:
+
         tela_precificacao("precos_bebidas")
 
     with aba2:
-        tela_insumos()
+
+        tela_precificacao("precos_insumos")
 
     with aba3:
+
         tela_precificacao("precos_artesanais")
-
-elif menu == "Relatórios":
-    st.title("Relatórios")
-
-elif menu == "Estoque":
-    st.title("Estoque")
-
-elif menu == "Receitas":
-    st.title("Receitas")
-
-elif menu == "Orçamentos":
-    st.title("Orçamentos")
-
-elif menu == "Vendas":
-    st.title("Vendas")
 
 # -------------------------
 # ESTOQUE
