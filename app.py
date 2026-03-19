@@ -634,7 +634,6 @@ elif menu == "Orçamentos":
     # -------------------------
     # CONFIG EVENTO
     # -------------------------
-
     st.subheader("Configuração do Evento")
 
     col1, col2, col3 = st.columns(3)
@@ -650,11 +649,11 @@ elif menu == "Orçamentos":
     # -------------------------
     # RECEITAS
     # -------------------------
-
     df_receitas = pd.read_sql("SELECT * FROM receitas", conn)
 
     if df_receitas.empty:
         st.warning("Cadastre receitas primeiro")
+
     else:
 
         drinks = df_receitas["drink"].unique()
@@ -664,9 +663,8 @@ elif menu == "Orçamentos":
         if selecao:
 
             # -------------------------
-            # PESO
+            # PESO DE CONSUMO
             # -------------------------
-
             st.subheader("Peso de Consumo")
 
             pesos = {}
@@ -678,9 +676,8 @@ elif menu == "Orçamentos":
                 total_peso += peso
 
             # -------------------------
-            # % AUTOMÁTICA
+            # DISTRIBUIÇÃO
             # -------------------------
-
             st.subheader("Distribuição (%)")
 
             for drink in selecao:
@@ -690,7 +687,6 @@ elif menu == "Orçamentos":
             # -------------------------
             # CALCULO INGREDIENTES
             # -------------------------
-
             ingredientes_totais = {}
 
             for drink in selecao:
@@ -713,9 +709,8 @@ elif menu == "Orçamentos":
                         ingredientes_totais[ingrediente] = total_ingrediente
 
             # -------------------------
-            # ESCOLHA DE MARCAS (BEBIDAS)
+            # ESCOLHA DE MARCAS (LIGADO AO BANCO)
             # -------------------------
-
             st.subheader("Escolha das Marcas (Bebidas)")
 
             df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
@@ -724,7 +719,9 @@ elif menu == "Orçamentos":
 
             for item in ingredientes_totais:
 
-                opcoes = df_bebidas[df_bebidas["tipo"].str.contains(item, case=False, na=False)]
+                opcoes = df_bebidas[
+                    df_bebidas["tipo"].str.lower() == item.lower()
+                ]
 
                 if not opcoes.empty:
 
@@ -737,23 +734,39 @@ elif menu == "Orçamentos":
                     escolhas_marcas[item] = escolha
 
             # -------------------------
-            # RESULTADO FINAL
+            # CHECKLIST FINAL
             # -------------------------
-
             st.subheader("Checklist de Compras")
 
             custo_total = 0
 
             for item, qtd in ingredientes_totais.items():
 
+                qtd = round(qtd, 2)
                 custo_unitario = 0
 
-                # verifica se tem marca escolhida
+                # unidade
+                if qtd >= 1000:
+                    qtd_exibicao = round(qtd / 1000, 2)
+
+                    if any(x in item.lower() for x in ["suco", "xarope", "agua", "limão", "limao"]):
+                        unidade = "L"
+                    elif any(x in item.lower() for x in ["açucar", "acucar"]):
+                        unidade = "kg"
+                    else:
+                        unidade = "un"
+                else:
+                    qtd_exibicao = qtd
+                    unidade = "ml/g"
+
+                nome_exibicao = item
+
+                # bebidas
                 if item in escolhas_marcas:
 
                     result = pd.read_sql("""
-                    SELECT custo FROM precos_bebidas
-                    WHERE nome = ?
+                        SELECT custo FROM precos_bebidas
+                        WHERE nome = ?
                     """, conn, params=(escolhas_marcas[item],))
 
                     if not result.empty:
@@ -763,22 +776,20 @@ elif menu == "Orçamentos":
 
                 else:
 
-                    for tabela in ["precos_insumos","precos_artesanais"]:
+                    for tabela in ["precos_insumos", "precos_artesanais"]:
                         result = pd.read_sql(f"""
-                        SELECT custo FROM {tabela}
-                        WHERE nome LIKE ?
+                            SELECT custo FROM {tabela}
+                            WHERE nome LIKE ?
                         """, conn, params=(f"%{item}%",))
 
                         if not result.empty:
                             custo_unitario = result.iloc[0]["custo"]
                             break
 
-                    nome_exibicao = item
-
-                custo_item = custo_unitario * qtd
+                custo_item = round(custo_unitario * qtd, 2)
                 custo_total += custo_item
 
-                st.write(f"✔ {nome_exibicao} → {round(qtd,2)} | R$ {round(custo_item,2)}")
+                st.write(f"✔ {nome_exibicao} → {qtd_exibicao} {unidade} | R$ {custo_item}")
 
             st.divider()
 
