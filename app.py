@@ -739,43 +739,32 @@ elif menu == "Orçamentos":
             # -------------------------
             # CHECKLIST FINAL
             # -------------------------
+                        # -------------------------
+            # CHECKLIST FINAL (CORRIGIDO)
+            # -------------------------
             st.subheader("Checklist de Compras")
 
             custo_total = 0
 
+            itens_agrupados = {}
+
             for item, qtd in ingredientes_totais.items():
 
-                qtd = round(qtd, 2)
+                nome_exibicao = item
                 custo_unitario = 0
 
-                # unidade inteligente
-                if qtd >= 1000:
-                    qtd_exibicao = round(qtd / 1000, 2)
-
-                    if any(x in item.lower() for x in ["suco", "xarope", "agua", "limão", "limao"]):
-                        unidade = "L"
-                    elif any(x in item.lower() for x in ["açucar", "acucar"]):
-                        unidade = "kg"
-                    else:
-                        unidade = "un"
-                else:
-                    qtd_exibicao = qtd
-                    unidade = "ml/g"
-
-                nome_exibicao = item
-
-                # bebidas (usa marca escolhida)
+                # bebidas
                 if item in escolhas_marcas:
+
+                    nome_exibicao = escolhas_marcas[item]
 
                     result = pd.read_sql("""
                         SELECT custo FROM precos_bebidas
                         WHERE nome = ?
-                    """, conn, params=(escolhas_marcas[item],))
+                    """, conn, params=(nome_exibicao,))
 
                     if not result.empty:
                         custo_unitario = result.iloc[0]["custo"]
-
-                    nome_exibicao = escolhas_marcas[item]
 
                 else:
 
@@ -789,14 +778,45 @@ elif menu == "Orçamentos":
                             custo_unitario = result.iloc[0]["custo"]
                             break
 
+                # agrupar itens
+                if nome_exibicao in itens_agrupados:
+                    itens_agrupados[nome_exibicao]["qtd"] += qtd
+                else:
+                    itens_agrupados[nome_exibicao] = {
+                        "qtd": qtd,
+                        "custo_unitario": custo_unitario
+                    }
+
+            # exibição
+            for nome, dados in itens_agrupados.items():
+
+                qtd = round(dados["qtd"], 2)
+                custo_unitario = dados["custo_unitario"]
+
+                if qtd >= 1000:
+                    qtd_exibicao = round(qtd / 1000, 2)
+
+                    if any(x in nome.lower() for x in ["suco", "xarope", "agua", "limão", "limao"]):
+                        unidade = "L"
+                    elif any(x in nome.lower() for x in ["açucar", "acucar"]):
+                        unidade = "kg"
+                    else:
+                        unidade = "un"
+                else:
+                    qtd_exibicao = qtd
+                    unidade = "ml/g"
+
                 custo_item = round(custo_unitario * qtd, 2)
                 custo_total += custo_item
 
-                st.write(f"✔ {nome_exibicao} → {qtd_exibicao} {unidade} | R$ {custo_item}")
+                valor_formatado = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+                st.write(f"✔ {nome} → {qtd_exibicao} {unidade} | {valor_formatado}")
 
             st.divider()
 
-            st.subheader(f"💰 Custo Total: R$ {round(custo_total,2)}")
+            total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            st.subheader(f"💰 Custo Total: {total_formatado}")
 
 elif menu == "Vendas":
 
