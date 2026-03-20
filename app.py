@@ -632,6 +632,44 @@ elif menu == "Orçamentos":
     st.title("Orçamento de Evento")
 
     # -------------------------
+    # MAPA DE BEBIDAS (ESSENCIAL)
+    # -------------------------
+    mapa_bebidas = {
+        "rum": "rum",
+        "vodka": "vodka",
+        "gin": "gin",
+        "whisky": "whisky",
+        "whiskey": "whisky",
+        "cachaça": "cachaça",
+        "tequila": "tequila",
+        "aperol": "aperol",
+        "campari": "campari",
+        "espumante": "espumante",
+        "vinho": "vinho"
+    }
+
+    # -------------------------
+    # FUNÇÃO DE UNIDADE
+    # -------------------------
+    def definir_unidade(item, qtd):
+        item_lower = item.lower()
+
+        if any(x in item_lower for x in ["suco", "agua", "xarope"]):
+            if qtd >= 1000:
+                return round(qtd / 1000, 2), "L"
+            else:
+                return round(qtd, 2), "ml"
+
+        elif any(x in item_lower for x in ["açucar", "acucar", "hortela", "limao", "limão"]):
+            if qtd >= 1000:
+                return round(qtd / 1000, 2), "kg"
+            else:
+                return round(qtd, 2), "g"
+
+        else:
+            return round(qtd, 2), "un"
+
+    # -------------------------
     # CONFIG EVENTO
     # -------------------------
     st.subheader("Configuração do Evento")
@@ -643,7 +681,6 @@ elif menu == "Orçamentos":
     drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
     total_drinks = convidados * horas * drinks_por_hora
-
     st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
     # -------------------------
@@ -675,15 +712,6 @@ elif menu == "Orçamentos":
                 total_peso += peso
 
             # -------------------------
-            # DISTRIBUIÇÃO
-            # -------------------------
-            st.subheader("Distribuição (%)")
-
-            for drink in selecao:
-                pct = (pesos[drink] / total_peso) * 100
-                st.write(f"{drink}: {pct:.1f}%")
-
-            # -------------------------
             # CALCULO INGREDIENTES
             # -------------------------
             ingredientes_totais = {}
@@ -708,23 +736,49 @@ elif menu == "Orçamentos":
                         ingredientes_totais[ingrediente] = total_ingrediente
 
             # -------------------------
-            # ESCOLHA DE MARCAS (ROBUSTO)
+            # CARREGAR BEBIDAS
             # -------------------------
-            st.subheader("Escolha das Marcas (Bebidas)")
-
             df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
+
+            # -------------------------
+            # SEPARAÇÃO CORRETA
+            # -------------------------
+            ingredientes_bebidas = {}
+            ingredientes_insumos = {}
+
+            for item, qtd in ingredientes_totais.items():
+
+                item_lower = item.lower()
+                tipo_encontrado = None
+
+                for chave in mapa_bebidas:
+                    if chave in item_lower:
+                        tipo_encontrado = mapa_bebidas[chave]
+                        break
+
+                if tipo_encontrado:
+                    ingredientes_bebidas[item] = {
+                        "qtd": qtd,
+                        "tipo": tipo_encontrado
+                    }
+                else:
+                    ingredientes_insumos[item] = qtd
+
+            # -------------------------
+            # ESCOLHA DE MARCAS
+            # -------------------------
+            st.subheader("🍸 Escolha das Bebidas")
 
             escolhas_marcas = {}
 
-            for item in ingredientes_totais:
+            for item, dados in ingredientes_bebidas.items():
 
-                item_lower = item.lower().strip()
+                tipo = dados["tipo"]
 
                 opcoes = df_bebidas[
-                    df_bebidas["tipo"].str.lower().str.strip().apply(lambda x: x in item_lower)
+                    df_bebidas["tipo"].str.lower().str.contains(tipo)
                 ]
 
-                # fallback (se não achar nada)
                 if opcoes.empty:
                     opcoes = df_bebidas
 
@@ -737,87 +791,56 @@ elif menu == "Orçamentos":
                 escolhas_marcas[item] = escolha
 
             # -------------------------
+            # INSUMOS
+            # -------------------------
+            st.subheader("🍋 Insumos")
+
+            for item, qtd in ingredientes_insumos.items():
+
+                qtd_exibicao, unidade = definir_unidade(item, qtd)
+                st.write(f"✔ {item} → {qtd_exibicao} {unidade}")
+
+            # -------------------------
             # CHECKLIST FINAL
             # -------------------------
-                        # -------------------------
-            # CHECKLIST FINAL (CORRIGIDO)
-            # -------------------------
-            st.subheader("Checklist de Compras")
+            st.subheader("🛒 Checklist Final")
 
             custo_total = 0
 
-            itens_agrupados = {}
+            # BEBIDAS
+            for item, dados in ingredientes_bebidas.items():
 
-            for item, qtd in ingredientes_totais.items():
+                qtd = dados["qtd"]
+                marca = escolhas_marcas[item]
 
-                nome_exibicao = item
-                custo_unitario = 0
+                result = pd.read_sql("""
+                    SELECT custo FROM precos_bebidas
+                    WHERE nome = ?
+                """, conn, params=(marca,))
 
-                # bebidas
-                if item in escolhas_marcas:
+                if not result.empty:
 
-                    nome_exibicao = escolhas_marcas[item]
+                    custo_unitario = result.iloc[0]["custo"]
 
-                    result = pd.read_sql("""
-                        SELECT custo FROM precos_bebidas
-                        WHERE nome = ?
-                    """, conn, params=(nome_exibicao,))
+                    qtd_garrafas = qtd / 1000
+                    custo_item = qtd_garrafas * custo_unitario
 
-                    if not result.empty:
-                        custo_unitario = result.iloc[0]["custo"]
+                    custo_total += custo_item
 
-                else:
+                    valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-                    for tabela in ["precos_insumos", "precos_artesanais"]:
-                        result = pd.read_sql(f"""
-                            SELECT custo FROM {tabela}
-                            WHERE nome LIKE ?
-                        """, conn, params=(f"%{item}%",))
+                    st.write(f"✔ {marca} → {round(qtd_garrafas,2)} garrafas | {valor}")
 
-                        if not result.empty:
-                            custo_unitario = result.iloc[0]["custo"]
-                            break
+            # INSUMOS
+            for item, qtd in ingredientes_insumos.items():
 
-                # agrupar itens
-                if nome_exibicao in itens_agrupados:
-                    itens_agrupados[nome_exibicao]["qtd"] += qtd
-                else:
-                    itens_agrupados[nome_exibicao] = {
-                        "qtd": qtd,
-                        "custo_unitario": custo_unitario
-                    }
-
-            # exibição
-            for nome, dados in itens_agrupados.items():
-
-                qtd = round(dados["qtd"], 2)
-                custo_unitario = dados["custo_unitario"]
-
-                if qtd >= 1000:
-                    qtd_exibicao = round(qtd / 1000, 2)
-
-                    if any(x in nome.lower() for x in ["suco", "xarope", "agua", "limão", "limao"]):
-                        unidade = "L"
-                    elif any(x in nome.lower() for x in ["açucar", "acucar"]):
-                        unidade = "kg"
-                    else:
-                        unidade = "un"
-                else:
-                    qtd_exibicao = qtd
-                    unidade = "ml/g"
-
-                custo_item = round(custo_unitario * qtd, 2)
-                custo_total += custo_item
-
-                valor_formatado = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-                st.write(f"✔ {nome} → {qtd_exibicao} {unidade} | {valor_formatado}")
+                qtd_exibicao, unidade = definir_unidade(item, qtd)
+                st.write(f"✔ {item} → {qtd_exibicao} {unidade}")
 
             st.divider()
 
             total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.subheader(f"💰 Custo Total: {total_formatado}")
-
+            st.metric("💰 Custo Total", total_formatado)
 elif menu == "Vendas":
 
     st.title("Vendas")
