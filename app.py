@@ -1061,6 +1061,8 @@ elif menu == "Orçamentos":
 elif menu == "Vendas":
 
     import json
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
 
     st.title("📋 Eventos / Vendas")
 
@@ -1092,7 +1094,6 @@ elif menu == "Vendas":
                         st.rerun()
 
                 elif row["status"] == "Aprovado":
-
                     valor_final = row["valor"] * 1.10
                     st.success(f"💰 Valor com proteção: R$ {valor_final:.2f}")
 
@@ -1109,63 +1110,58 @@ elif menu == "Vendas":
                 # -------------------------
                 st.subheader("📦 Checklist do Evento")
 
-            if row["dados"]:
+                if row["dados"]:
+                    dados = json.loads(row["dados"])
 
-                dados = json.loads(row["dados"])
+                    st.markdown("### 🍸 Bebidas:")
+                    for item, d in dados["bebidas"].items():
+                        st.write(f"- {item}: {round(d['qtd']/1000,2)} L")
 
-                elements.append(Spacer(1, 10))
-                elements.append(Paragraph("🍸 Bebidas:", styles["Heading3"]))
-            
-                for item, d in dados["bebidas"].items():
-                    elements.append(Paragraph(f"- {item}: {round(d['qtd']/1000,2)}L", styles["Normal"]))
-            
-                elements.append(Spacer(1, 10))
-                elements.append(Paragraph("🍋 Insumos:", styles["Heading3"]))
-            
-                for item, qtd in dados["insumos"].items():
-                    elements.append(Paragraph(f"- {item}: {round(qtd,2)}", styles["Normal"]))
-            
-                elements.append(Spacer(1, 10))
-                elements.append(Paragraph("🛠 Estrutura:", styles["Heading3"]))
-            
-                for item, qtd in dados["estrutura"].items():
-                    elements.append(Paragraph(f"- {item}: {qtd} un", styles["Normal"]))
-            
-                elements.append(Spacer(1, 10))
-                elements.append(Paragraph(f"👨‍🍳 Bartenders: {dados['equipe']}", styles["Normal"]))
+                    st.markdown("### 🍋 Insumos:")
+                    for item, qtd in dados["insumos"].items():
+                        st.write(f"- {item}: {round(qtd,2)}")
+
+                    st.markdown("### 🛠 Estrutura:")
+                    for item, qtd in dados["estrutura"].items():
+                        st.write(f"- {item}: {qtd} un")
+
+                    st.write(f"👨‍🍳 Bartenders: {dados['equipe']}")
 
                 # -------------------------
-                # PDF
+                # GERAR PDF
                 # -------------------------
                 if st.button(f"📄 Gerar PDF {row['id']}"):
 
-                    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-                    from reportlab.lib.styles import getSampleStyleSheet
-
                     doc = SimpleDocTemplate(f"evento_{row['id']}.pdf")
                     styles = getSampleStyleSheet()
-
                     elements = []
 
                     elements.append(Paragraph(f"Evento - {row['cliente']}", styles["Title"]))
                     elements.append(Spacer(1, 10))
-
                     elements.append(Paragraph("Checklist:", styles["Heading2"]))
 
                     if row["dados"]:
                         dados = json.loads(row["dados"])
 
-                        for item in dados["bebidas"]:
-                            elements.append(Paragraph(f"[ ] {item}", styles["Normal"]))
+                        elements.append(Spacer(1, 10))
+                        elements.append(Paragraph("🍸 Bebidas:", styles["Heading3"]))
+                        for item, d in dados["bebidas"].items():
+                            elements.append(Paragraph(f"- {item}: {round(d['qtd']/1000,2)} L", styles["Normal"]))
 
-                        for item in dados["insumos"]:
-                            elements.append(Paragraph(f"[ ] {item}", styles["Normal"]))
+                        elements.append(Spacer(1, 10))
+                        elements.append(Paragraph("🍋 Insumos:", styles["Heading3"]))
+                        for item, qtd in dados["insumos"].items():
+                            elements.append(Paragraph(f"- {item}: {round(qtd,2)}", styles["Normal"]))
 
-                        for item in dados["estrutura"]:
-                            elements.append(Paragraph(f"[ ] {item}", styles["Normal"]))
+                        elements.append(Spacer(1, 10))
+                        elements.append(Paragraph("🛠 Estrutura:", styles["Heading3"]))
+                        for item, qtd in dados["estrutura"].items():
+                            elements.append(Paragraph(f"- {item}: {qtd} un", styles["Normal"]))
+
+                        elements.append(Spacer(1, 10))
+                        elements.append(Paragraph(f"👨‍🍳 Bartenders: {dados['equipe']}", styles["Normal"]))
 
                     doc.build(elements)
-
                     st.success("PDF gerado na pasta do projeto!")
 elif menu == "Pacotes":
 
