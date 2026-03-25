@@ -1109,7 +1109,7 @@ elif menu == "Vendas":
                 # -------------------------
                 st.subheader("📦 Checklist do Evento")
 
-                if row["dados"]:
+            if row["dados"]:
 
                 dados = json.loads(row["dados"])
 
