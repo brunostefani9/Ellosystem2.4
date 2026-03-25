@@ -1031,9 +1031,9 @@ elif menu == "Orçamentos":
         )
 
         if df.empty:
-        st.info("Nenhum orçamento pendente")
-        else:
-        for _, row in df.iterrows():
+            st.info("Nenhum orçamento pendente")
+            else:
+            for _, row in df.iterrows():
 
             with st.expander(f"📋 {row['cliente']} | {row['data']}"):
 
