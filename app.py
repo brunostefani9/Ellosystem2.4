@@ -1,8 +1,20 @@
+# -------------------------
+# IMPORTS PRINCIPAIS
+# -------------------------
 import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
+import json
+import math
 
+# 📄 Bibliotecas para gerar PDF
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+
+# -------------------------
+# CONFIGURAÇÃO DA PÁGINA
+# -------------------------
 st.set_page_config(page_title="Ellosystem", layout="wide")
 
 # -------------------------
