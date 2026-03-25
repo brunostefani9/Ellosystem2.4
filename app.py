@@ -1111,28 +1111,28 @@ elif menu == "Vendas":
 
                 if row["dados"]:
 
-    dados = json.loads(row["dados"])
+                dados = json.loads(row["dados"])
 
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph("🍸 Bebidas:", styles["Heading3"]))
-
-    for item, d in dados["bebidas"].items():
-        elements.append(Paragraph(f"- {item}: {round(d['qtd']/1000,2)}L", styles["Normal"]))
-
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph("🍋 Insumos:", styles["Heading3"]))
-
-    for item, qtd in dados["insumos"].items():
-        elements.append(Paragraph(f"- {item}: {round(qtd,2)}", styles["Normal"]))
-
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph("🛠 Estrutura:", styles["Heading3"]))
-
-    for item, qtd in dados["estrutura"].items():
-        elements.append(Paragraph(f"- {item}: {qtd} un", styles["Normal"]))
-
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph(f"👨‍🍳 Bartenders: {dados['equipe']}", styles["Normal"]))
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph("🍸 Bebidas:", styles["Heading3"]))
+            
+                for item, d in dados["bebidas"].items():
+                    elements.append(Paragraph(f"- {item}: {round(d['qtd']/1000,2)}L", styles["Normal"]))
+            
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph("🍋 Insumos:", styles["Heading3"]))
+            
+                for item, qtd in dados["insumos"].items():
+                    elements.append(Paragraph(f"- {item}: {round(qtd,2)}", styles["Normal"]))
+            
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph("🛠 Estrutura:", styles["Heading3"]))
+            
+                for item, qtd in dados["estrutura"].items():
+                    elements.append(Paragraph(f"- {item}: {qtd} un", styles["Normal"]))
+            
+                elements.append(Spacer(1, 10))
+                elements.append(Paragraph(f"👨‍🍳 Bartenders: {dados['equipe']}", styles["Normal"]))
 
                 # -------------------------
                 # PDF
