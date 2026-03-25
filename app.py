@@ -1030,17 +1030,43 @@ elif menu == "Orçamentos":
         conn
         )
 
-        if df.empty:
-            st.info("Nenhum orçamento pendente")
-        else:
+    if df.empty:
+        st.info("Nenhum orçamento pendente")
+    else:
         for _, row in df.iterrows():
 
-    with st.expander(f"📋 {row['cliente']} | {row['data']}"):
+            with st.expander(f"📋 {row['cliente']} | {row['data']}"):
 
                 st.write(f"👥 Convidados: {row['convidados']}")
                 st.write(f"⏱ Horas: {row['horas']}")
                 st.write(f"💰 Venda: R$ {row['valor']:.2f}")
                 st.write(f"📉 Custo: R$ {row['custo']:.2f}")
+
+                if row["dados"]:
+                    dados = json.loads(row["dados"])
+
+                    st.markdown("### 🍸 Bebidas:")
+                    for item, d in dados["bebidas"].items():
+                        st.write(f"- {item}: {round(d['qtd']/1000,2)} L")
+
+                    st.markdown("### 🍋 Insumos:")
+                    for item, qtd in dados["insumos"].items():
+                        st.write(f"- {item}: {round(qtd,2)}")
+
+                    st.markdown("### 🛠 Estrutura:")
+                    for item, qtd in dados["estrutura"].items():
+                        st.write(f"- {item}: {qtd} un")
+
+                    st.write(f"👨‍🍳 Bartenders: {dados['equipe']}")
+
+                if st.button(f"✅ Aprovar orçamento {row['id']}", key=f"aprov_{row['id']}"):
+                    cursor.execute(
+                        "UPDATE orcamentos SET status='Aprovado' WHERE id=?",
+                        (row["id"],)
+                    )
+                    conn.commit()
+                    st.success("Orçamento aprovado!")
+                    st.rerun()
 
                 # -------------------------
                 # CHECKLIST
