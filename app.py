@@ -1023,16 +1023,16 @@ elif menu == "Orçamentos":
     # ABA 2: Orçamentos Salvos
     # =========================
     with aba_salvos:
-    st.subheader("Orçamentos Pendentes")
+        st.subheader("Orçamentos Pendentes")
 
-    df = pd.read_sql(
+        df = pd.read_sql(
         "SELECT * FROM orcamentos WHERE status='Pendente' ORDER BY data DESC",
         conn
-    )
+        )
 
-    if df.empty:
+        if df.empty:
         st.info("Nenhum orçamento pendente")
-    else:
+        else:
         for _, row in df.iterrows():
 
             with st.expander(f"📋 {row['cliente']} | {row['data']}"):
