@@ -861,7 +861,7 @@ elif menu == "Orçamentos":
     st.title("📋 Orçamentos de Eventos")
 
     # =========================
-    # GARANTE COLUNAS NOVAS
+    # GARANTE COLUNAS
     # =========================
     try:
         cursor.execute("ALTER TABLE orcamentos ADD COLUMN data_evento TEXT")
@@ -883,7 +883,7 @@ elif menu == "Orçamentos":
     )
 
     # =========================
-    # ABA 1 - NOVO ORÇAMENTO
+    # ABA 1 - NOVO
     # =========================
     with aba_novo:
 
@@ -897,14 +897,35 @@ elif menu == "Orçamentos":
 
         st.divider()
 
+        # -------------------------
+        # MODO DE CÁLCULO
+        # -------------------------
+        modo_calculo = st.radio(
+            "Modo de cálculo",
+            ["Drinks por pessoa no evento", "Drinks por pessoa por hora"]
+        )
+
         col1, col2, col3 = st.columns(3)
+
         convidados = col1.number_input("Convidados", min_value=1, value=50)
-        horas = col2.number_input("Horas", min_value=1, value=4)
-        drinks_por_hora = col3.number_input("Drinks/pessoa/hora", min_value=0.5, value=2.0)
 
-        total_drinks = convidados * horas * drinks_por_hora
-        st.info(f"Total estimado de drinks: {int(total_drinks)}")
+        if modo_calculo == "Drinks por pessoa por hora":
+            horas = col2.number_input("Horas", min_value=1, value=4)
+            drinks_por_pessoa = col3.number_input("Drinks/pessoa/hora", min_value=0.5, value=2.0)
 
+            total_drinks = convidados * horas * drinks_por_pessoa
+
+        else:
+            horas = col2.number_input("Horas (referência)", min_value=1, value=4)
+            drinks_por_pessoa = col3.number_input("Drinks por pessoa no evento", min_value=1.0, value=6.0)
+
+            total_drinks = convidados * drinks_por_pessoa
+
+        st.info(f"🍸 Total estimado de drinks: {int(total_drinks)}")
+
+        # -------------------------
+        # RECEITAS
+        # -------------------------
         df_receitas = pd.read_sql("SELECT * FROM receitas", conn)
 
         if df_receitas.empty:
@@ -939,13 +960,15 @@ elif menu == "Orçamentos":
                         else:
                             ingredientes_totais[ingrediente] = qtd
 
-                # SIMPLIFICADO (sem separar bebida/insumo agora)
                 custo_total = sum(ingredientes_totais.values()) * 0.05
                 valor_venda = custo_total * 1.3
 
                 st.metric("💰 Custo", f"R$ {custo_total:,.2f}")
                 st.metric("💵 Venda", f"R$ {valor_venda:,.2f}")
 
+                # -------------------------
+                # SALVAR
+                # -------------------------
                 if st.button("💾 Salvar orçamento"):
 
                     if not cliente:
