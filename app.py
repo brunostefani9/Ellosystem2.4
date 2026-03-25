@@ -8,15 +8,10 @@ from datetime import datetime
 import json
 import math
 
-# 📄 Bibliotecas para gerar PDF
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-
 # -------------------------
 # CONFIGURAÇÃO DA PÁGINA
 # -------------------------
 st.set_page_config(page_title="Ellosystem", layout="wide")
-
 # -------------------------
 # DATABASE
 # -------------------------
@@ -1073,8 +1068,6 @@ elif menu == "Orçamentos":
 elif menu == "Vendas":
 
     import json
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
 
     st.title("📋 Eventos / Vendas")
 
@@ -1118,7 +1111,7 @@ elif menu == "Vendas":
                         st.rerun()
 
                 # -------------------------
-                # CHECKLIST
+                # CHECKLIST SIMPLES
                 # -------------------------
                 st.subheader("📦 Checklist do Evento")
 
@@ -1138,43 +1131,6 @@ elif menu == "Vendas":
                         st.write(f"- {item}: {qtd} un")
 
                     st.write(f"👨‍🍳 Bartenders: {dados['equipe']}")
-
-                # -------------------------
-                # GERAR PDF
-                # -------------------------
-                if st.button(f"📄 Gerar PDF {row['id']}"):
-
-                    doc = SimpleDocTemplate(f"evento_{row['id']}.pdf")
-                    styles = getSampleStyleSheet()
-                    elements = []
-
-                    elements.append(Paragraph(f"Evento - {row['cliente']}", styles["Title"]))
-                    elements.append(Spacer(1, 10))
-                    elements.append(Paragraph("Checklist:", styles["Heading2"]))
-
-                    if row["dados"]:
-                        dados = json.loads(row["dados"])
-
-                        elements.append(Spacer(1, 10))
-                        elements.append(Paragraph("🍸 Bebidas:", styles["Heading3"]))
-                        for item, d in dados["bebidas"].items():
-                            elements.append(Paragraph(f"- {item}: {round(d['qtd']/1000,2)} L", styles["Normal"]))
-
-                        elements.append(Spacer(1, 10))
-                        elements.append(Paragraph("🍋 Insumos:", styles["Heading3"]))
-                        for item, qtd in dados["insumos"].items():
-                            elements.append(Paragraph(f"- {item}: {round(qtd,2)}", styles["Normal"]))
-
-                        elements.append(Spacer(1, 10))
-                        elements.append(Paragraph("🛠 Estrutura:", styles["Heading3"]))
-                        for item, qtd in dados["estrutura"].items():
-                            elements.append(Paragraph(f"- {item}: {qtd} un", styles["Normal"]))
-
-                        elements.append(Spacer(1, 10))
-                        elements.append(Paragraph(f"👨‍🍳 Bartenders: {dados['equipe']}", styles["Normal"]))
-
-                    doc.build(elements)
-                    st.success("PDF gerado na pasta do projeto!")
 elif menu == "Pacotes":
 
         st.title("📦 Pacotes / Serviços")
