@@ -1032,10 +1032,10 @@ elif menu == "Orçamentos":
 
         if df.empty:
             st.info("Nenhum orçamento pendente")
-            else:
-            for _, row in df.iterrows():
+        else:
+        for _, row in df.iterrows():
 
-            with st.expander(f"📋 {row['cliente']} | {row['data']}"):
+    with st.expander(f"📋 {row['cliente']} | {row['data']}"):
 
                 st.write(f"👥 Convidados: {row['convidados']}")
                 st.write(f"⏱ Horas: {row['horas']}")
