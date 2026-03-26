@@ -77,7 +77,8 @@ menu = st.sidebar.radio(
 "Estoque",
 "Receitas",
 "Orçamentos",
-"Vendas"
+"Vendas",
+"Pacotes"
 ]
 )
 
@@ -85,17 +86,16 @@ menu = st.sidebar.radio(
 # FUNÇÃO DE PRECIFICAÇÃO
 # -------------------------
 
-# -------------------------
-# FUNÇÃO DE PRECIFICAÇÃO
-# -------------------------
-
 def tela_precificacao(nome_tabela):
 
-    tab1,tab2 = st.tabs(["Cadastrar","Lista"])
+    tab1, tab2 = st.tabs(["Cadastrar", "Lista"])
 
+    # =========================
+    # CADASTRO
+    # =========================
     with tab1:
 
-        with st.form(f"form_{nome_tabela}",clear_on_submit=True):
+        with st.form(f"form_{nome_tabela}", clear_on_submit=True):
 
             tipo = st.text_input("Tipo do item", key=f"tipo_{nome_tabela}")
 
@@ -134,57 +134,85 @@ def tela_precificacao(nome_tabela):
                     cursor.execute(f"""
                     INSERT INTO {nome_tabela}
                     VALUES(NULL,?,?,?,?,?,?,?)
-                    """,(tipo,nome,quantidade,preco,uso,rendimento,custo))
+                    """, (tipo, nome, quantidade, preco, uso, rendimento, custo))
 
                     conn.commit()
 
                     st.success("Item cadastrado!")
 
+    # =========================
+    # LISTA / EDIÇÃO
+    # =========================
     with tab2:
 
         df = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
 
-    busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
+        busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
 
-    if busca:
-        df = df[
-            df["nome"].str.contains(busca,case=False) |
-            df["tipo"].str.contains(busca,case=False)
-        ]
+        if busca:
+            df = df[
+                df["nome"].fillna("").str.contains(busca, case=False) |
+                df["tipo"].fillna("").str.contains(busca, case=False)
+            ]
 
-    if not df.empty:
+        if not df.empty:
 
-        # 💰 FORMATAR CUSTO EM REAL (SEM ALTERAR BANCO)
-        df["custo_formatado"] = df["custo"].apply(
-            lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        )
+            df_editado = st.data_editor(
+                df,
+                use_container_width=True,
+                column_config={
+                    "preco": st.column_config.NumberColumn(
+                        "💰 Preço",
+                        format="R$ %.2f"
+                    ),
+                    "custo": st.column_config.NumberColumn(
+                        "💰 Custo",
+                        format="R$ %.2f"
+                    ),
+                }
+            )
 
-    # ✏️ EDITÁVEL
-    df_editado = st.data_editor(df, use_container_width=True)
+            # =========================
+            # SALVAR ALTERAÇÕES (SEGURO)
+            # =========================
+            if st.button("💾 Salvar alterações", key=f"save_{nome_tabela}"):
 
-    # 💾 SALVAR ALTERAÇÕES
-    if st.button("💾 Salvar alterações", key=f"save_{nome_tabela}"):
+                try:
+                    for _, row in df_editado.iterrows():
+                        cursor.execute(f"""
+                        UPDATE {nome_tabela}
+                        SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
+                        WHERE id=?
+                        """, (
+                            row["tipo"],
+                            row["nome"],
+                            row["quantidade"],
+                            row["preco"],
+                            row["uso"],
+                            row["rendimento"],
+                            row["custo"],
+                            row["id"]
+                        ))
 
-        try:
-            # remove coluna visual antes de salvar
-            if "custo_formatado" in df_editado.columns:
-                df_editado = df_editado.drop(columns=["custo_formatado"])
+                    conn.commit()
+                    st.success("Alterações salvas!")
 
-            df_editado.to_sql(nome_tabela, conn, if_exists="replace", index=False)
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
 
-            st.success("Alterações salvas!")
+            # =========================
+            # EXCLUIR ITEM
+            # =========================
+            item = st.selectbox("Excluir item", df["id"], key=f"del_{nome_tabela}")
 
-        except:
-            st.error("Erro ao salvar alterações")
+            if st.button("🗑 Excluir selecionado", key=f"btn_{nome_tabela}"):
 
-    # 🗑 EXCLUIR
-    if not df.empty:
-        item = st.selectbox("Excluir item", df["id"], key=f"del_{nome_tabela}")
+                cursor.execute(f"DELETE FROM {nome_tabela} WHERE id = ?", (item,))
+                conn.commit()
+                st.rerun()
 
-        if st.button("🗑 Excluir selecionado", key=f"btn_{nome_tabela}"):
-            cursor.execute(f"DELETE FROM {nome_tabela} WHERE id = ?", (item,))
-            conn.commit()
-            st.rerun()
+        else:
+            st.info("Nenhum item cadastrado.")
 
 # -------------------------
 # FUNÇÃO INSUMOS (FRUTAS)
@@ -498,7 +526,7 @@ elif menu == "Receitas":
 
     st.title("Receitas")
 
-    # controle de estado
+    # Controle de estado
     if "ingredientes_temp" not in st.session_state:
         st.session_state["ingredientes_temp"] = []
 
@@ -508,17 +536,22 @@ elif menu == "Receitas":
     if "msg" not in st.session_state:
         st.session_state["msg"] = ""
 
-    # mostra mensagem (se existir)
+    # Mostra mensagem (se existir)
     if st.session_state["msg"]:
         st.success(st.session_state["msg"])
         st.session_state["msg"] = ""
 
-    aba1, aba2 = st.tabs(["Cadastro de Drinks", "Lista de Drinks"])
+    # ------------------------
+    # SUB-ABAS
+    # ------------------------
+    aba_cadastro, aba_lista, aba_edicao = st.tabs(
+        ["Cadastro de Drinks", "Lista de Drinks", "Edição de Receitas"]
+    )
 
     # =========================
     # ABA 1 - CADASTRO
     # =========================
-    with aba1:
+    with aba_cadastro:
 
         drink = st.text_input("Nome do drink", value=st.session_state["drink_nome"])
 
@@ -541,9 +574,7 @@ elif menu == "Receitas":
                 })
 
                 st.session_state["msg"] = "Ingrediente adicionado!"
-
                 st.rerun()
-
             else:
                 st.warning("Preencha tudo corretamente")
 
@@ -575,60 +606,45 @@ elif menu == "Receitas":
                 # limpa tudo
                 st.session_state["ingredientes_temp"] = []
                 st.session_state["drink_nome"] = ""
-
                 st.rerun()
 
     # =========================
     # ABA 2 - LISTA
     # =========================
-    with aba2:
+    with aba_lista:
 
         df = pd.read_sql("SELECT * FROM receitas", conn)
 
         if df.empty:
             st.info("Nenhum drink cadastrado")
-
         else:
-
             drinks = df["drink"].unique()
 
             for drink in drinks:
-
                 receita = df[df["drink"] == drink]
-
                 custo_total = 0
 
                 col1, col2 = st.columns([5,1])
-
                 with col1:
                     st.markdown(f"### 🍹 {drink}")
-
                     for _, row in receita.iterrows():
-
                         ingrediente = row["ingrediente"]
                         quantidade = row["quantidade"]
                         unidade = row["unidade"]
 
+                        # Busca custo nas tabelas
                         custo_unitario = 0
-
                         for tabela in ["precos_bebidas","precos_insumos","precos_artesanais"]:
-
-                            result = pd.read_sql(f"""
-                            SELECT custo FROM {tabela}
-                            WHERE nome=?
-                            """, conn, params=(ingrediente,))
-
+                            result = pd.read_sql(f"SELECT custo FROM {tabela} WHERE nome=?", conn, params=(ingrediente,))
                             if not result.empty:
                                 custo_unitario = result.iloc[0]["custo"]
                                 break
-
                         custo_total += custo_unitario * quantidade
 
                         st.write(f"- {ingrediente} ({quantidade} {unidade})")
 
                 with col2:
-                    st.markdown(f"### 💰\nR$ {custo_total:.2f}")
-
+                    st.markdown(f"### 💰\nR$ {custo_total:,.2f}")
                     if st.button("🗑️", key=f"del_{drink}"):
                         cursor.execute("DELETE FROM receitas WHERE drink=?", (drink,))
                         conn.commit()
@@ -636,9 +652,63 @@ elif menu == "Receitas":
 
                 st.divider()
 
+    # =========================
+    # ABA 3 - EDIÇÃO DE RECEITAS
+    # =========================
+    with aba_edicao:
+
+        df = pd.read_sql("SELECT * FROM receitas", conn)
+
+        if df.empty:
+            st.info("Nenhum drink cadastrado")
+        else:
+
+            drinks = df["drink"].unique()
+            drink_sel = st.selectbox("Selecione o drink para editar", drinks)
+
+            receita = df[df["drink"] == drink_sel].copy()
+
+            # Data editor para edição
+            df_editado = st.data_editor(
+                receita,
+                use_container_width=True,
+                column_config={
+                    "drink": st.column_config.TextColumn("Drink"),
+                    "ingrediente": st.column_config.TextColumn("Ingrediente"),
+                    "quantidade": st.column_config.NumberColumn("Quantidade"),
+                    "unidade": st.column_config.TextColumn("Unidade")
+                }
+            )
+
+            # Botão para salvar alterações
+            if st.button("💾 Salvar alterações da receita"):
+
+                try:
+                    # Deleta entradas antigas
+                    cursor.execute("DELETE FROM receitas WHERE drink=?", (drink_sel,))
+
+                    # Insere os dados editados
+                    for _, row in df_editado.iterrows():
+                        cursor.execute("""
+                        INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
+                        VALUES(?,?,?,?)
+                        """, (row["drink"], row["ingrediente"], row["quantidade"], row["unidade"]))
+
+                    conn.commit()
+                    st.success("Receita atualizada com sucesso!")
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
 elif menu == "Orçamentos":
 
     st.title("Orçamento de Evento")
+
+    modo_calculo = st.radio(
+        "Modo de cálculo",
+        ["Evento inteiro", "Por hora"]
+    )
 
     mapa_bebidas = {
         "rum": "rum",
@@ -686,12 +756,15 @@ elif menu == "Orçamentos":
     horas = col2.number_input("Horas de evento", min_value=1, value=4)
     drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
-    total_drinks = convidados * horas * drinks_por_hora
+    if modo_calculo == "Evento inteiro":
+        total_drinks = convidados * drinks_por_hora
+        st.caption("Ex: 5 drinks por pessoa no evento todo")
+    else:
+        total_drinks = convidados * horas * drinks_por_hora
+        st.caption("Ex: 2 drinks por pessoa por hora")
+
     st.info(f"Total estimado de drinks: {int(total_drinks)}")
-if modo_calculo == "Evento inteiro":
-    st.caption("Ex: 5 drinks por pessoa no evento todo")
-else:
-    st.caption("Ex: 2 drinks por pessoa por hora")
+
     # =========================
     # RECEITAS
     # =========================
@@ -716,6 +789,27 @@ else:
                 peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
                 pesos[drink] = peso
                 total_peso += peso
+
+            ingredientes_totais = {}
+
+            for drink in selecao:
+
+                proporcao = pesos[drink] / total_peso
+                qtd_drinks = total_drinks * proporcao
+
+                receita = df_receitas[df_receitas["drink"] == drink]
+
+                for _, row in receita.iterrows():
+
+                    ingrediente = normalizar_nome(row["ingrediente"])
+                    qtd = row["quantidade"]
+
+                    total_ingrediente = qtd * qtd_drinks
+
+                    if ingrediente in ingredientes_totais:
+                        ingredientes_totais[ingrediente] += total_ingrediente
+                    else:
+                        ingredientes_totais[ingrediente] = total_ingrediente
 
             # =========================
             # CALCULO INGREDIENTES
@@ -888,6 +982,7 @@ elif menu == "Vendas":
 
     st.title("Vendas")
     st.info("Histórico de eventos em breve")
+
 elif menu == "Pacotes":
 
     st.title("📦 Pacotes / Serviços")
@@ -964,6 +1059,6 @@ elif menu == "Pacotes":
                     st.write(f"+ {e}")
 
             if st.button("🗑 Excluir pacote"):
-                cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,)
+                cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,))
                 conn.commit()
                 st.rerun()
