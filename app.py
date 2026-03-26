@@ -127,8 +127,8 @@ def tela_precificacao(nome_tabela):
                 if uso == 0:
                     st.error("Uso não pode ser zero")
                 else:
-
-                    rendimento = quantidade / uso
+                
+                    rendimento = (quantidade * 1000) / uso
                     custo = preco / rendimento
 
                     cursor.execute(f"""
