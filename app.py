@@ -888,3 +888,82 @@ elif menu == "Vendas":
 
     st.title("Vendas")
     st.info("Histórico de eventos em breve")
+elif menu == "Pacotes":
+
+    st.title("📦 Pacotes / Serviços")
+
+    import json
+
+    tab1, tab2 = st.tabs(["Cadastrar","Lista"])
+
+    # -------------------------
+    # CADASTRAR PACOTE
+    # -------------------------
+    with tab1:
+
+        nome = st.text_input("Nome do pacote")
+
+        tipo = st.selectbox(
+            "Tipo do serviço",
+            ["Bar Principal","Whisky","Gin","Spritz","Shots","Outro"]
+        )
+
+        itens = st.text_area(
+            "Itens (um por linha)",
+            placeholder="jack daniels\nred label\ngelo"
+        )
+
+        extras = st.text_area(
+            "Extras opcionais",
+            placeholder="gelo saborizado\ncopo especial"
+        )
+
+        if st.button("💾 Salvar pacote"):
+
+            dados = json.dumps({
+                "itens": itens.split("\n"),
+                "extras": extras.split("\n")
+            })
+
+            cursor.execute("""
+            INSERT INTO pacotes (nome, tipo, dados)
+            VALUES (?,?,?)
+            """,(nome, tipo, dados))
+
+            conn.commit()
+
+            st.success("Pacote salvo!")
+
+    # -------------------------
+    # LISTA
+    # -------------------------
+    with tab2:
+
+        df = pd.read_sql("SELECT * FROM pacotes", conn)
+
+        if df.empty:
+            st.info("Nenhum pacote cadastrado")
+        else:
+
+            id_sel = st.selectbox("Selecionar pacote", df["id"])
+
+            pacote = df[df["id"] == id_sel].iloc[0]
+
+            dados = json.loads(pacote["dados"])
+
+            st.subheader(pacote["nome"])
+
+            st.write("📦 Itens:")
+            for i in dados["itens"]:
+                if i:
+                    st.write(f"✔ {i}")
+
+            st.write("✨ Extras:")
+            for e in dados["extras"]:
+                if e:
+                    st.write(f"+ {e}")
+
+            if st.button("🗑 Excluir pacote"):
+                cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,)
+                conn.commit()
+                st.rerun()
