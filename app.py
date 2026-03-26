@@ -243,6 +243,13 @@ def tela_insumos():
                 format="%.2f"
             )
 
+            uso = st.number_input(
+                "Uso por receita (g ou ml)",
+                min_value=1.0,
+                value=25.0,
+                format="%.2f"
+            )
+            
             if st.form_submit_button("Cadastrar"):
 
                 if quantidade == 0:
