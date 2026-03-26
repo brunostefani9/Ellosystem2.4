@@ -251,9 +251,9 @@ def tela_insumos():
                     custo = preco / quantidade
 
                     cursor.execute("""
-                    INSERT INTO precos_insumos
-                    VALUES(NULL,?,?,?,?)
-                    """,(nome.lower(), quantidade, preco, custo))
+INSERT INTO precos_insumos (nome, quantidade_base, preco, uso)
+VALUES (?, ?, ?, ?)
+""",(nome.lower(), quantidade, preco, uso))
 
                     conn.commit()
                     st.success("Insumo cadastrado!")
