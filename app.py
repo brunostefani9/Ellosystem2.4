@@ -955,7 +955,7 @@ elif menu == "Orçamentos":
 
     for item, qtd in ingredientes_insumos.items():
 
-    qtd_exibicao, unidade = definir_unidade(item, qtd)
+        qtd_exibicao, unidade = definir_unidade(item, qtd)
 
     encontrado = None
 
