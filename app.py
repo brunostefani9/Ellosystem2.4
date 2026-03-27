@@ -952,7 +952,10 @@ elif menu == "Orçamentos":
             # =========================
             # INSUMOS (100% CORRIGIDO)
             # =========================
-           st.subheader("🍋 Insumos")
+           # =========================
+# INSUMOS
+# =========================
+st.subheader("🍋 Insumos")
 
 custo_insumos = 0
 
@@ -982,7 +985,6 @@ for _, row in df_insumos.iterrows():
         valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
         st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
-               
 
             # =========================
             # TOTAL FINAL
