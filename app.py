@@ -953,47 +953,47 @@ elif menu == "Orçamentos":
 
             custo_insumos = 0
 
-    for item, qtd in ingredientes_insumos.items():
+            for item, qtd in ingredientes_insumos.items():
 
-        qtd_exibicao, unidade = definir_unidade(item, qtd)
+                qtd_exibicao, unidade = definir_unidade(item, qtd)
 
-    encontrado = None
+                encontrado = None
 
-    for _, row in df_insumos.iterrows():
-        if row["nome"] and item in row["nome"].strip().lower():
-            encontrado = row
-            break
+                for _, row in df_insumos.iterrows():
+                    if row["nome"] and item in row["nome"].strip().lower():
+                        encontrado = row
+                        break
 
-    if encontrado is not None:
+                if encontrado is not None:
 
-        preco = encontrado["preco"]              # preço do KG
-        quantidade_kg = encontrado["quantidade"] # ex: 1 (kg)
+                    preco = encontrado["preco"]              # preço do KG
+                    quantidade_kg = encontrado["quantidade"] # ex: 1 (kg)
 
-        # 🔥 CONVERSÃO FIXA (PADRÃO FRUTAS)
-        quantidade_gramas = quantidade_kg * 1000
+                    # 🔥 CONVERSÃO FIXA (PADRÃO FRUTAS)
+                    quantidade_gramas = quantidade_kg * 1000
 
-        if quantidade_gramas > 0:
+                    if quantidade_gramas > 0:
 
-            custo_por_grama = preco / quantidade_gramas
-            custo_item = qtd * custo_por_grama
-            custo_insumos += custo_item
+                        custo_por_grama = preco / quantidade_gramas
+                        custo_item = qtd * custo_por_grama
+                        custo_insumos += custo_item
 
-            valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
+                        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
-        else:
-            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
+                    else:
+                        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
 
-# =========================
-# TOTAL FINAL
-# =========================
-    st.divider()
+            # =========================
+            # TOTAL FINAL
+            # =========================
+            st.divider()
 
-    custo_total = custo_bebidas + custo_insumos
+            custo_total = custo_bebidas + custo_insumos
 
-    total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    st.metric("💰 Custo Total do Evento", total_formatado)
+            total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            st.metric("💰 Custo Total do Evento", total_formatado)
 
 elif menu == "Vendas":
 
