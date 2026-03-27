@@ -955,6 +955,9 @@ elif menu == "Orçamentos":
            # =========================
 # INSUMOS
 # =========================
+# =========================
+# INSUMOS
+# =========================
 st.subheader("🍋 Insumos")
 
 custo_insumos = 0
@@ -966,7 +969,7 @@ for _, row in df_insumos.iterrows():
     item = row["nome"]
     qtd = row["uso"] if "uso" in row else 0
 
-if qtd == 0:
+    if qtd == 0:
         continue
 
     qtd_exibicao, unidade = definir_unidade(item, qtd)
@@ -976,15 +979,15 @@ if qtd == 0:
 
     quantidade_gramas = quantidade_kg * 1000
 
-if quantidade_gramas > 0:
+    if quantidade_gramas > 0:
 
-    custo_por_grama = preco / quantidade_gramas
-    custo_item = qtd * custo_por_grama
-    custo_insumos += custo_item
+        custo_por_grama = preco / quantidade_gramas
+        custo_item = qtd * custo_por_grama
+        custo_insumos += custo_item
 
-    valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
+        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
             # =========================
             # TOTAL FINAL
