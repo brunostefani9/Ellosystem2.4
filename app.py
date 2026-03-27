@@ -260,25 +260,28 @@ def tela_insumos():
             if st.form_submit_button("Cadastrar"):
 
                 if quantidade == 0:
-                    st.error("Quantidade não pode ser zero")
-                else:
-                    custo = preco / quantidade
+    st.error("Quantidade não pode ser zero")
+else:
 
-                    cursor.execute("""
-INSERT INTO precos_insumos
-VALUES(NULL,?,?,?,?,?,?,?)
-""",(
-    "insumo",
-    nome.lower(),
-    quantidade,
-    preco,
-    uso,
-    quantidade / uso if uso != 0 else 0,
-    preco / quantidade if quantidade != 0 else 0
-))
+    quantidade_gramas = quantidade * 1000
+    custo_por_grama = preco / quantidade_gramas
+    custo = uso * custo_por_grama
 
-                    conn.commit()
-                    st.success("Insumo cadastrado!")
+    cursor.execute("""
+    INSERT INTO precos_insumos
+    VALUES(NULL,?,?,?,?,?,?,?)
+    """,(
+        "insumo",
+        nome.lower(),
+        quantidade,
+        preco,
+        uso,
+        quantidade_gramas / uso if uso != 0 else 0,
+        custo
+    ))
+
+    conn.commit()
+    st.success("Insumo cadastrado!")
 
     # -------------------------
     # LISTA / EDIÇÃO
@@ -950,47 +953,37 @@ elif menu == "Orçamentos":
 
             custo_insumos = 0
 
-            for item, qtd in ingredientes_insumos.items():
+for item, qtd in ingredientes_insumos.items():
 
-                qtd_exibicao, unidade = definir_unidade(item, qtd)
+    qtd_exibicao, unidade = definir_unidade(item, qtd)
 
-                encontrado = None
+    encontrado = None
 
-                for _, row in df_insumos.iterrows():
-                    if item in row["nome"].strip().lower():
-                        encontrado = row
-                        break
+    for _, row in df_insumos.iterrows():
+        if row["nome"] and item in row["nome"].strip().lower():
+            encontrado = row
+            break
 
-                if encontrado is not None:
+    if encontrado is not None:
 
-                    preco = encontrado["preco"]
-                    quantidade_base = encontrado["quantidade"]
+        preco = encontrado["preco"]              # preço do KG
+        quantidade_kg = encontrado["quantidade"] # ex: 1 (kg)
 
-                    # 🔥 CONVERSÃO AUTOMÁTICA
-                    if any(x in item for x in ["limao", "limão", "acucar", "hortela"]):
-                        if quantidade_base <= 10:
-                            quantidade_base *= 1000
+        # 🔥 CONVERSÃO FIXA (PADRÃO FRUTAS)
+        quantidade_gramas = quantidade_kg * 1000
 
-                    if any(x in item for x in ["agua", "xarope"]):
-                        if quantidade_base <= 10:
-                            quantidade_base *= 1000
+        if quantidade_gramas > 0:
 
-                    if quantidade_base > 0:
+            custo_por_grama = preco / quantidade_gramas
+            custo_item = qtd * custo_por_grama
+            custo_insumos += custo_item
 
-                        custo_unitario = preco / quantidade_base
-                        custo_item = qtd * custo_unitario
-                        custo_insumos += custo_item
+            valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-                        valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
-                        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
-
-                else:
-                    st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
-
-            subtotal_insumos = f"R$ {custo_insumos:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.markdown(f"### 💰 Subtotal Insumos: {subtotal_insumos}")
-
+    else:
+        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
             # =========================
             # TOTAL FINAL
             # =========================
