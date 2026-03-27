@@ -288,9 +288,9 @@ def tela_insumos():
     # -------------------------
     with tab2:
 
-      if aba == "Frutas e insumos":
+        if aba == "Frutas e insumos":
 
-    if subaba == "Lista":
+        if subaba == "Lista":
 
         df = pd.read_sql("SELECT * FROM precos_insumos", conn)
 
