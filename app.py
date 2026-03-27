@@ -293,26 +293,26 @@ def tela_insumos():
        df["custo"] = df["custo"].round(2)  # 🔥 AQUI
 
        df_editado = st.data_editor(
-           df,
-            use_container_width=True,
-            column_config={
-                "preco": st.column_config.NumberColumn(
-                    "💰 Preço",
-                    format="R$ %.2f"
-                ),
-                "custo": st.column_config.NumberColumn(
-                    "💰 Custo (por unidade)",
-                    format="R$ %.2f"
-                ),
-            }
-        )
+    df,
+    use_container_width=True,
+    column_config={
+        "preco": st.column_config.NumberColumn(
+            "💰 Preço",
+            format="R$ %.2f"
+        ),
+        "custo": st.column_config.NumberColumn(
+            "💰 Custo (por unidade)",
+            format="R$ %.2f"
+        ),
+    }
+)
 
-        # 💾 SALVAR ALTERAÇÕES
-           if st.button("💾 Salvar alterações insumos"):
+# 💾 SALVAR ALTERAÇÕES
+if st.button("💾 Salvar alterações insumos"):
 
-            try:
-                df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
-                st.success("Alterações salvas!")
+    try:
+        df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
+        st.success("Alterações salvas!")
             except:
                 st.error("Erro ao salvar alterações")
 
