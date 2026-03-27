@@ -122,30 +122,30 @@ def tela_precificacao(nome_tabela):
                 key=f"uso_{nome_tabela}"
             )
             
-    if st.form_submit_button("Cadastrar"):
-
-        if uso == 0:
-            st.error("Uso não pode ser zero")
-        else:
-            rendimento = (quantidade * 1000) / uso
-            custo = preco / rendimento
-
-            cursor.execute(f"""
-            INSERT INTO {nome_tabela}
-            (tipo, nome, quantidade, preco, uso, rendimento, custo)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-            tipo,
-            nome.lower(),
-            quantidade,
-            preco,
-            uso,
-            rendimento,
-            custo
-            ))
-
-            conn.commit()
-            st.success("Item cadastrado!")
+            if st.form_submit_button("Cadastrar"):
+        
+                if uso == 0:
+                    st.error("Uso não pode ser zero")
+                else:
+                    rendimento = (quantidade * 1000) / uso
+                    custo = preco / rendimento
+        
+                    cursor.execute(f"""
+                    INSERT INTO {nome_tabela}
+                    (tipo, nome, quantidade, preco, uso, rendimento, custo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                    tipo,
+                    nome.lower(),
+                    quantidade,
+                    preco,
+                    uso,
+                    rendimento,
+                    custo
+                    ))
+        
+                    conn.commit()
+                    st.success("Item cadastrado!")
 
     # =========================
     # LISTA / EDIÇÃO
