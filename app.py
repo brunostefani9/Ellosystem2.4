@@ -288,11 +288,12 @@ def tela_insumos():
     # -------------------------
     with tab2:
 
-        df = pd.read_sql("SELECT * FROM precos_insumos", conn)
+       df = pd.read_sql("SELECT * FROM precos_insumos", conn)
 
-        # ✏️ EDITÁVEL + FORMATADO EM R$
-        df_editado = st.data_editor(
-            df,
+       df["custo"] = df["custo"].round(2)  # 🔥 AQUI
+
+       df_editado = st.data_editor(
+           df,
             use_container_width=True,
             column_config={
                 "preco": st.column_config.NumberColumn(
@@ -964,26 +965,7 @@ elif menu == "Orçamentos":
                         encontrado = row
                         break
 
-                if encontrado is not None:
-
-                    preco = encontrado["preco"]              # preço do KG
-                    quantidade_kg = encontrado["quantidade"] # ex: 1 (kg)
-
-                    # 🔥 CONVERSÃO FIXA (PADRÃO FRUTAS)
-                    quantidade_gramas = quantidade_kg * 1000
-
-                    if quantidade_gramas > 0:
-
-                        custo_por_grama = preco / quantidade_gramas
-                        custo_item = round(qtd * custo_por_grama, 2)
-                        custo_insumos += custo_item
-                    
-                        valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                    
-                        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
-
-                    else:
-                        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
+               
 
             # =========================
             # TOTAL FINAL
