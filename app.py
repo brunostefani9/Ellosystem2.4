@@ -302,7 +302,7 @@ def tela_insumos():
                 ),
                 "custo": st.column_config.NumberColumn(
                     "💰 Custo (por unidade)",
-                    format="R$ %.4f"
+                    format="R$ %.2f"
                 ),
             }
         )
