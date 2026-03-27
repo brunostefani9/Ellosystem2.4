@@ -965,12 +965,12 @@ for _, row in df_insumos.iterrows():
 
 if qtd == 0:
     continue
-        qtd_exibicao, unidade = definir_unidade(item, qtd)
-    
-        preco = row["preco"]
-        quantidade_kg = row["quantidade"]
-    
-        quantidade_gramas = quantidade_kg * 1000
+    qtd_exibicao, unidade = definir_unidade(item, qtd)
+
+    preco = row["preco"]
+    quantidade_kg = row["quantidade"]
+
+    quantidade_gramas = quantidade_kg * 1000
 
     if quantidade_gramas > 0:
 
