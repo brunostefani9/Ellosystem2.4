@@ -311,10 +311,12 @@ def tela_insumos():
 if st.button("💾 Salvar alterações insumos"):
 
     try:
-        df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
+        conn.execute("DELETE FROM precos_insumos")
+        df_editado.to_sql("precos_insumos", conn, if_exists="append", index=False)
         st.success("Alterações salvas!")
+    
     except:
-                st.error("Erro ao salvar alterações")
+        st.error("Erro ao salvar alterações")
 
         # 🗑 EXCLUIR
     if not df.empty:
