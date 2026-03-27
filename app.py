@@ -969,8 +969,8 @@ for _, row in df_insumos.iterrows():
     item = row["nome"]
     qtd = row["uso"] if "uso" in row else 0
 
-    if qtd == 0:
-        continue
+if qtd == 0:
+    continue
 
     qtd_exibicao, unidade = definir_unidade(item, qtd)
 
