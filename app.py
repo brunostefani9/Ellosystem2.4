@@ -982,17 +982,18 @@ for item, qtd in ingredientes_insumos.items():
 
             st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
-    else:
-        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
-            # =========================
-            # TOTAL FINAL
-            # =========================
-            st.divider()
+   else:
+    st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
 
-            custo_total = custo_bebidas + custo_insumos
+# =========================
+# TOTAL FINAL
+# =========================
+st.divider()
 
-            total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.metric("💰 Custo Total do Evento", total_formatado)
+custo_total = custo_bebidas + custo_insumos
+
+total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+st.metric("💰 Custo Total do Evento", total_formatado)
 elif menu == "Vendas":
 
     st.title("Vendas")
