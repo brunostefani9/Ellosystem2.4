@@ -290,8 +290,7 @@ def tela_insumos():
 
         df = pd.read_sql("SELECT * FROM precos_insumos", conn)
 
-        df["custo"] = df["custo"].round(2)
-
+        # ✏️ EDITÁVEL + FORMATADO EM R$
         df_editado = st.data_editor(
             df,
             use_container_width=True,
@@ -302,24 +301,22 @@ def tela_insumos():
                 ),
                 "custo": st.column_config.NumberColumn(
                     "💰 Custo (por unidade)",
-                    format="R$ %.2f"
+                    format="R$ %.4f"
                 ),
             }
         )
 
-        # ✅ BOTÃO FICA AQUI DENTRO
+        # 💾 SALVAR ALTERAÇÕES
         if st.button("💾 Salvar alterações insumos"):
 
             try:
-                conn.execute("DELETE FROM precos_insumos")
-                df_editado.to_sql("precos_insumos", conn, if_exists="append", index=False)
+                df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
                 st.success("Alterações salvas!")
-            
             except:
                 st.error("Erro ao salvar alterações")
 
         # 🗑 EXCLUIR
-    if not df.empty:
+        if not df.empty:
             item = st.selectbox("Excluir item", df["id"])
 
             if st.button("🗑 Excluir"):
@@ -948,43 +945,49 @@ elif menu == "Orçamentos":
 
             subtotal_bebidas = f"R$ {custo_bebidas:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             st.markdown(f"### 💰 Subtotal Bebidas: {subtotal_bebidas}")
-            
-# =========================
-# INSUMOS
-# =========================
-st.subheader("🍋 Insumos")
-
-custo_insumos = 0
-
-df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
-
-for _, row in df_insumos.iterrows():
-
-    item = row["nome"]
-    qtd = row["uso"] if "uso" in row else 0
-
-if qtd == 0:
-    continue
-    qtd_exibicao, unidade = definir_unidade(item, qtd)
-
-    preco = row["preco"]
-    quantidade_kg = row["quantidade"]
-
-    quantidade_gramas = quantidade_kg * 1000
-
-    if quantidade_gramas > 0:
-
-        custo_por_grama = preco / quantidade_gramas
-        custo_item = qtd * custo_por_grama
-        custo_insumos += custo_item
-
-        valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
             # =========================
-            # TOTAL FINAL
+            # INSUMOS (100% CORRIGIDO)
             # =========================
+            st.subheader("🍋 Insumos")
+
+            custo_insumos = 0
+
+    for item, qtd in ingredientes_insumos.items():
+
+        qtd_exibicao, unidade = definir_unidade(item, qtd)
+
+    encontrado = None
+
+    for _, row in df_insumos.iterrows():
+        if row["nome"] and item in row["nome"].strip().lower():
+            encontrado = row
+            break
+
+    if encontrado is not None:
+
+        preco = encontrado["preco"]              # preço do KG
+        quantidade_kg = encontrado["quantidade"] # ex: 1 (kg)
+
+        # 🔥 CONVERSÃO FIXA (PADRÃO FRUTAS)
+        quantidade_gramas = quantidade_kg * 1000
+
+        if quantidade_gramas > 0:
+
+            custo_por_grama = preco / quantidade_gramas
+            custo_item = qtd * custo_por_grama
+            custo_insumos += custo_item
+
+            valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
+
+        else:
+            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
+
+# =========================
+# TOTAL FINAL
+# =========================
     st.divider()
 
     custo_total = custo_bebidas + custo_insumos
