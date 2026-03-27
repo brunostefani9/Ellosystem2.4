@@ -260,28 +260,28 @@ def tela_insumos():
             if st.form_submit_button("Cadastrar"):
 
                 if quantidade == 0:
-    st.error("Quantidade não pode ser zero")
-else:
+                    st.error("Quantidade não pode ser zero")
+                else:
 
-    quantidade_gramas = quantidade * 1000
-    custo_por_grama = preco / quantidade_gramas
-    custo = uso * custo_por_grama
-
-    cursor.execute("""
-    INSERT INTO precos_insumos
-    VALUES(NULL,?,?,?,?,?,?,?)
-    """,(
-        "insumo",
-        nome.lower(),
-        quantidade,
-        preco,
-        uso,
-        quantidade_gramas / uso if uso != 0 else 0,
-        custo
-    ))
-
-    conn.commit()
-    st.success("Insumo cadastrado!")
+                    quantidade_gramas = quantidade * 1000
+                    custo_por_grama = preco / quantidade_gramas
+                    custo = uso * custo_por_grama
+                
+                    cursor.execute("""
+                    INSERT INTO precos_insumos
+                    VALUES(NULL,?,?,?,?,?,?,?)
+                    """,(
+                        "insumo",
+                        nome.lower(),
+                        quantidade,
+                        preco,
+                        uso,
+                        quantidade_gramas / uso if uso != 0 else 0,
+                        custo
+                    ))
+                
+                    conn.commit()
+                    st.success("Insumo cadastrado!")
 
     # -------------------------
     # LISTA / EDIÇÃO
