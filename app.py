@@ -952,7 +952,11 @@ elif menu == "Orçamentos":
             # =========================
             # INSUMOS (100% CORRIGIDO)
             # =========================
-           df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
+           st.subheader("🍋 Insumos")
+
+custo_insumos = 0
+
+df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
 
 for _, row in df_insumos.iterrows():
 
@@ -978,7 +982,6 @@ for _, row in df_insumos.iterrows():
         valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
         st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
-
                
 
             # =========================
