@@ -308,7 +308,7 @@ def tela_insumos():
         )
 
         # 💾 SALVAR ALTERAÇÕES
-        if st.button("💾 Salvar alterações insumos"):
+           if st.button("💾 Salvar alterações insumos"):
 
             try:
                 df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
