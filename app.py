@@ -288,35 +288,39 @@ def tela_insumos():
     # -------------------------
     with tab2:
 
-       df = pd.read_sql("SELECT * FROM precos_insumos", conn)
+      if aba == "Frutas e insumos":
 
-       df["custo"] = df["custo"].round(2)  # 🔥 AQUI
+    if subaba == "Lista":
 
-       df_editado = st.data_editor(
-    df,
-    use_container_width=True,
-    column_config={
-        "preco": st.column_config.NumberColumn(
-            "💰 Preço",
-            format="R$ %.2f"
-        ),
-        "custo": st.column_config.NumberColumn(
-            "💰 Custo (por unidade)",
-            format="R$ %.2f"
-        ),
-    }
-)
+        df = pd.read_sql("SELECT * FROM precos_insumos", conn)
 
-# 💾 SALVAR ALTERAÇÕES
-if st.button("💾 Salvar alterações insumos"):
+        df["custo"] = df["custo"].round(2)
 
-    try:
-        conn.execute("DELETE FROM precos_insumos")
-        df_editado.to_sql("precos_insumos", conn, if_exists="append", index=False)
-        st.success("Alterações salvas!")
-    
-    except:
-        st.error("Erro ao salvar alterações")
+        df_editado = st.data_editor(
+            df,
+            use_container_width=True,
+            column_config={
+                "preco": st.column_config.NumberColumn(
+                    "💰 Preço",
+                    format="R$ %.2f"
+                ),
+                "custo": st.column_config.NumberColumn(
+                    "💰 Custo (por unidade)",
+                    format="R$ %.2f"
+                ),
+            }
+        )
+
+        # ✅ BOTÃO FICA AQUI DENTRO
+        if st.button("💾 Salvar alterações insumos"):
+
+            try:
+                conn.execute("DELETE FROM precos_insumos")
+                df_editado.to_sql("precos_insumos", conn, if_exists="append", index=False)
+                st.success("Alterações salvas!")
+            
+            except:
+                st.error("Erro ao salvar alterações")
 
         # 🗑 EXCLUIR
     if not df.empty:
