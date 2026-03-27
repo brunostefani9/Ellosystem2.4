@@ -982,7 +982,7 @@ for item, qtd in ingredientes_insumos.items():
 
             st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
-                else:
+        else:
             st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
 
 # =========================
