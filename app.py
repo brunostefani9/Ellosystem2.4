@@ -988,12 +988,12 @@ for item, qtd in ingredientes_insumos.items():
 # =========================
 # TOTAL FINAL
 # =========================
-            st.divider()
+        st.divider()
         
-            custo_total = custo_bebidas + custo_insumos
+        custo_total = custo_bebidas + custo_insumos
         
-            total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.metric("💰 Custo Total do Evento", total_formatado)
+        total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        st.metric("💰 Custo Total do Evento", total_formatado)
 
 elif menu == "Vendas":
 
