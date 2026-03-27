@@ -313,7 +313,7 @@ if st.button("💾 Salvar alterações insumos"):
     try:
         df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
         st.success("Alterações salvas!")
-            except:
+    except:
                 st.error("Erro ao salvar alterações")
 
         # 🗑 EXCLUIR
