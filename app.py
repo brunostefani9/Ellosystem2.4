@@ -1000,6 +1000,10 @@ elif menu == "Vendas":
 
     st.title("Vendas")
     st.info("Histórico de eventos em breve")
+elif menu == "Vendas":
+
+    st.title("Vendas")
+    st.info("Histórico de eventos em breve")
 
 elif menu == "Pacotes":
 
