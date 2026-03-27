@@ -953,7 +953,7 @@ elif menu == "Orçamentos":
 
             custo_insumos = 0
 
-for item, qtd in ingredientes_insumos.items():
+    for item, qtd in ingredientes_insumos.items():
 
     qtd_exibicao, unidade = definir_unidade(item, qtd)
 
@@ -995,11 +995,6 @@ custo_total = custo_bebidas + custo_insumos
 total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 st.metric("💰 Custo Total do Evento", total_formatado)
 
-
-elif menu == "Vendas":
-
-    st.title("Vendas")
-    st.info("Histórico de eventos em breve")
 elif menu == "Vendas":
 
     st.title("Vendas")
