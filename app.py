@@ -975,11 +975,11 @@ elif menu == "Orçamentos":
                     if quantidade_gramas > 0:
 
                         custo_por_grama = preco / quantidade_gramas
-                        custo_item = qtd * custo_por_grama
+                        custo_item = round(qtd * custo_por_grama, 2)
                         custo_insumos += custo_item
-
+                    
                         valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
+                    
                         st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
 
                     else:
