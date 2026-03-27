@@ -948,13 +948,7 @@ elif menu == "Orçamentos":
 
             subtotal_bebidas = f"R$ {custo_bebidas:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             st.markdown(f"### 💰 Subtotal Bebidas: {subtotal_bebidas}")
-
-            # =========================
-            # INSUMOS (100% CORRIGIDO)
-            # =========================
-           # =========================
-# INSUMOS
-# =========================
+            
 # =========================
 # INSUMOS
 # =========================
