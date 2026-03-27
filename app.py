@@ -317,7 +317,7 @@ if st.button("💾 Salvar alterações insumos"):
                 st.error("Erro ao salvar alterações")
 
         # 🗑 EXCLUIR
-        if not df.empty:
+    if not df.empty:
             item = st.selectbox("Excluir item", df["id"])
 
             if st.button("🗑 Excluir"):
