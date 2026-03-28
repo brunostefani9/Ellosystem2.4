@@ -693,12 +693,12 @@ elif menu == "Orçamentos":
             custo_frutas = 0
             custo_insumos = 0
             for fruta, qtd_gramas in ingredientes_insumos.items():
-                encontrado is not None:
+                encontrado None
                 for _, row in df_insumos.iterrows():
                     if row["nome"] and fruta == row["nome"].strip().lower():
                         encontrado = row
                         break
-                if encontrado:
+                if encontradois not None:
                     preco_kg = encontrado["preco"]
                     quantidade_kg = encontrado["quantidade"]
                     custo_por_grama = preco_kg / (quantidade_kg * 1000)
