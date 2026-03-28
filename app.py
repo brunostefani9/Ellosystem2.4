@@ -269,20 +269,30 @@ def tela_insumos():
     # LISTA / EDIÇÃO
     # -------------------------
     with tab2:
-        df = pd.read_sql("SELECT * FROM precos_insumos", conn)
+        df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
+        
+        if not df.empty:
+            # Recálculo para garantir que o ID 12 e outros fiquem certinhos
+            df['rendimento'] = (df['quantidade'] / df['uso'])
+            df['custo'] = (df['preco'] / df['rendimento'])
 
-        # ✏️ EDITÁVEL + FORMATADO EM R$
-        df_editado = st.data_editor(
-            df,
-            use_container_width=True,
-            column_config={
-                "preco": st.column_config.NumberColumn(
-                    "💰 Preço",
-                    format="R$ %.2f"
-                ),
-                "custo": st.column_config.NumberColumn(
-                    "💰 Custo (por unidade)",
-                    format="R$ %.4f"
+            st.write("### Itens Cadastrados")
+            
+            # Formatação com unidades de medida (ml) e moeda (R$)
+            st.dataframe(
+                df[['id', 'nome', 'quantidade', 'preco', 'uso', 'rendimento', 'custo']].style.format({
+                    "quantidade": "{:.0f} ml",   # Ex: 750 ml
+                    "uso": "{:.0f} ml",          # Ex: 50 ml
+                    "preco": "R$ {:.2f}",        # Ex: R$ 89.90
+                    "rendimento": "{:.2f} doses", # Ex: 15.00 doses
+                    "custo": "R$ {:.2f}"         # Ex: R$ 4.50
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Nenhuma bebida encontrada.")
+            
                 ),
             }
         )
