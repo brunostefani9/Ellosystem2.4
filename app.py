@@ -270,7 +270,7 @@ def tela_insumos():
     # -------------------------
     with tab2:
         
-    df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
+        df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
     
     if not df.empty:
         # Recálculo para garantir que o ID 12 e outros fiquem certinhos
