@@ -928,8 +928,8 @@ elif menu == "Orçamentos":
 # =========================
 # FUNÇÃO AUXILIAR
 # =========================
-def normalizar_nome(nome):
-    return nome.strip().lower()
+    def normalizar_nome(nome):
+        return nome.strip().lower()
 
 # =========================
 # FRUTAS - ABA ORÇAMENTOS
