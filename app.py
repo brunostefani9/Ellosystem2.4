@@ -693,7 +693,7 @@ elif menu == "Orçamentos":
             custo_frutas = 0
             custo_insumos = 0
             for fruta, qtd_gramas in ingredientes_insumos.items():
-                encontrado = None
+                encontrado is not None:
                 for _, row in df_insumos.iterrows():
                     if row["nome"] and fruta == row["nome"].strip().lower():
                         encontrado = row
