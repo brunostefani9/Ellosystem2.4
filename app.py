@@ -270,33 +270,30 @@ def tela_insumos():
     # -------------------------
     with tab2:
         
-df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
-        
-        if not df.empty:
-            # Recálculo para garantir que o ID 12 e outros fiquem certinhos
-            df['rendimento'] = (df['quantidade'] / df['uso'])
-            df['custo'] = (df['preco'] / df['rendimento'])
+    df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
+    
+    if not df.empty:
+        # Recálculo para garantir que o ID 12 e outros fiquem certinhos
+        df['rendimento'] = (df['quantidade'] / df['uso'])
+        df['custo'] = (df['preco'] / df['rendimento'])
 
-            st.write("### Itens Cadastrados")
-            
-            # Formatação com unidades de medida (ml) e moeda (R$)
-            st.dataframe(
-                df[['id', 'nome', 'quantidade', 'preco', 'uso', 'rendimento', 'custo']].style.format({
-                    "quantidade": "{:.0f} ml",   # Ex: 750 ml
-                    "uso": "{:.0f} ml",          # Ex: 50 ml
-                    "preco": "R$ {:.2f}",        # Ex: R$ 89.90
-                    "rendimento": "{:.2f} doses", # Ex: 15.00 doses
-                    "custo": "R$ {:.2f}"         # Ex: R$ 4.50
-                }),
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("Nenhuma bebida encontrada.")
-            
-                )
-            }
+        st.write("### Itens Cadastrados")
+        
+        # Formatação com unidades de medida (ml) e moeda (R$)
+        st.dataframe(
+            df[['id', 'nome', 'quantidade', 'preco', 'uso', 'rendimento', 'custo']].style.format({
+                "quantidade": "{:.0f} ml",   # Ex: 750 ml
+                "uso": "{:.0f} ml",          # Ex: 50 ml
+                "preco": "R$ {:.2f}",        # Ex: R$ 89.90
+                "rendimento": "{:.2f} doses", # Ex: 15.00 doses
+                "custo": "R$ {:.2f}"         # Ex: R$ 4.50
+            }),
+            use_container_width=True,
+            hide_index=True
         )
+    else:
+        st.info("Nenhuma bebida encontrada.")
+        
         # 💾 SALVAR ALTERAÇÕES
         if st.button("💾 Salvar alterações insumos"):
             try:
