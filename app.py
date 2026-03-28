@@ -155,7 +155,6 @@ def tela_precificacao(nome_tabela):
     # =========================
     with tab2:
         df = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
-                df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
         
         if not df.empty:
             # Força o recálculo matemático ignorando o que foi salvo errado
