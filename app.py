@@ -210,10 +210,10 @@ def tela_precificacao(nome_tabela):
                 cursor.execute(f"DELETE FROM {nome_tabela} WHERE id = ?", (item,))
                 conn.commit()
                 st.rerun()
-        else:
-            st.info("Nenhum item cadastrado.")
+            else:
+                st.info("Nenhum item cadastrado.")
 
-            # -------------------------
+# -------------------------
 # FUNÇÃO INSUMOS (FRUTAS)
 # -------------------------
 def tela_insumos():
