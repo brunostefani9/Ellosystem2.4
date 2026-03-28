@@ -966,16 +966,6 @@ custo_total = custo_bebidas + custo_frutas + custo_insumos
 total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 st.metric("💰 Custo Total do Evento", total_formatado)
 
-# =========================
-# TOTAL FINAL
-# =========================
-    st.divider()
-
-    custo_total = custo_bebidas + custo_insumos
-
-    total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    st.metric("💰 Custo Total do Evento", total_formatado)
-
 elif menu == "Vendas":
 
     st.title("Vendas")
