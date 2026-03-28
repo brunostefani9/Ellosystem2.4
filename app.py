@@ -932,7 +932,7 @@ def normalizar_nome(nome):
     return nome.strip().lower()
 
 # =========================
-# FRUTAS
+# FRUTAS - ABA ORÇAMENTOS
 # =========================
 st.subheader("🍋 Frutas")
 
@@ -941,6 +941,7 @@ custo_insumos = 0  # Mantido para cálculo final, mesmo que zero
 
 # Itera apenas pelos ingredientes cadastrados como frutas
 for fruta, qtd_gramas in ingredientes_insumos.items():
+    # Busca fruta no cadastro de insumos
     encontrado = None
     for _, row in df_insumos.iterrows():
         if row["nome"] and fruta == row["nome"].strip().lower():  # somente frutas exatas
@@ -955,16 +956,16 @@ for fruta, qtd_gramas in ingredientes_insumos.items():
         custo_frutas += custo_item
 
         # Exibe quantidade em gramas e custo formatado com 2 casas decimais
-        st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:.2f}")
+        st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
 # =========================
 # TOTAL FINAL
 # =========================
-    st.divider()
+st.divider()
 
-        custo_total = custo_bebidas + custo_frutas + custo_insumos
-        total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        st.metric("💰 Custo Total do Evento", total_formatado)
+custo_total = custo_bebidas + custo_frutas + custo_insumos
+total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+st.metric("💰 Custo Total do Evento", total_formatado)
 
 elif menu == "Vendas":
 
