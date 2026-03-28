@@ -155,30 +155,28 @@ def tela_precificacao(nome_tabela):
     # =========================
     with tab2:
         df = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
-        busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
-
-        if busca:
-            df = df[
-                df["nome"].fillna("").str.contains(busca, case=False) |
-                df["tipo"].fillna("").str.contains(busca, case=False)
-            ]
-
+                df = pd.read_sql_query(f"SELECT * FROM {nome_tabela}", conn)
+        
         if not df.empty:
-            df_editado = st.data_editor(
-                df,
-                use_container_width=True,
-                column_config={
-                    "preco": st.column_config.NumberColumn(
-                        "💰 Preço",
-                        format="R$ %.2f"
-                    ),
-                    "custo": st.column_config.NumberColumn(
-                        "💰 Custo",
-                        format="R$ %.2f"
-                    ),
-                }
-            )
+            # Força o recálculo matemático ignorando o que foi salvo errado
+            # Isso resolve o problema do ID 12 e do rendimento 25.000
+            df['rendimento'] = (df['quantidade'] / df['uso']).round(2)
+            df['custo'] = (df['preco'] / df['rendimento']).round(2)
 
+            # Exibe a tabela organizada e formatada com 2 casas decimais
+            st.write(f"### Itens Cadastrados")
+            st.dataframe(
+                df[['id', 'tipo', 'nome', 'quantidade', 'preco', 'uso', 'rendimento', 'custo']].style.format({
+                    "preco": "R$ {:.2f}", 
+                    "custo": "R$ {:.2f}",
+                    "rendimento": "{:.2f}"
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Nenhum item cadastrado.")
+            
             # =========================
             # SALVAR ALTERAÇÕES
             # =========================
