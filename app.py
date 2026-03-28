@@ -293,7 +293,7 @@ def tela_insumos():
         else:
             st.info("Nenhuma bebida encontrada.")
             
-                ),
+                )
             }
         )
 
