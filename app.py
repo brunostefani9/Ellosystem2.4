@@ -925,31 +925,31 @@ elif menu == "Orçamentos":
             subtotal_bebidas = f"R$ {custo_bebidas:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
             st.markdown(f"### 💰 Subtotal Bebidas: {subtotal_bebidas}")
 
-            # =========================
-            # INSUMOS (FRUTAS APENAS)
-            # =========================
-                st.subheader("🍋 Frutas")
-        
-                custo_frutas = 0
-        
-        # Itera apenas pelos ingredientes cadastrados como frutas
-        for fruta, qtd_gramas in ingredientes_insumos.items():
-            # Busca fruta no cadastro de insumos
-            encontrado = None
-            for _, row in df_insumos.iterrows():
-                if row["nome"] and fruta == row["nome"].strip().lower():  # somente frutas exatas
-                    encontrado = row
-                    break
-        
-            if encontrado:
-                preco_kg = encontrado["preco"]              # preço do kg cadastrado
-                quantidade_kg = encontrado["quantidade"]    # normalmente 1 kg
-                custo_por_grama = preco_kg / (quantidade_kg * 1000)
-                custo_item = qtd_gramas * custo_por_grama
-                custo_frutas += custo_item
-        
-                # Exibe quantidade em gramas e custo formatado com 2 casas decimais
-                st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:.2f}")
+# =========================
+# INSUMOS (FRUTAS APENAS) - ABA ORÇAMENTOS
+# =========================
+st.subheader("🍋 Frutas")
+
+custo_frutas = 0
+
+# Itera apenas pelos ingredientes cadastrados como frutas
+for fruta, qtd_gramas in ingredientes_insumos.items():
+    # Busca fruta no cadastro de insumos
+    encontrado = None
+    for _, row in df_insumos.iterrows():
+        if row["nome"] and fruta == row["nome"].strip().lower():  # somente frutas exatas
+            encontrado = row
+            break
+
+    if encontrado:
+        preco_kg = encontrado["preco"]              # preço do kg cadastrado
+        quantidade_kg = encontrado["quantidade"]    # normalmente 1 kg
+        custo_por_grama = preco_kg / (quantidade_kg * 1000)
+        custo_item = qtd_gramas * custo_por_grama
+        custo_frutas += custo_item
+
+        # Exibe quantidade em gramas e custo formatado com 2 casas decimais
+        st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:.2f}")
 
 # =========================
 # TOTAL FINAL
