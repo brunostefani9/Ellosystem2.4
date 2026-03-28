@@ -749,27 +749,6 @@ elif menu == "Orçamentos":
         "vinho": "vinho"
     }
 
-    def definir_unidade(item, qtd):
-        item_lower = item.lower()
-
-        if any(x in item_lower for x in ["suco", "agua", "xarope"]):
-            if qtd >= 1000:
-                return round(qtd / 1000, 2), "L"
-            else:
-                return round(qtd, 2), "ml"
-
-        elif any(x in item_lower for x in ["acucar", "hortela", "limao", "limão"]):
-            if qtd >= 1000:
-                return round(qtd / 1000, 2), "kg"
-            else:
-                return round(qtd, 2), "g"
-
-        else:
-            return round(qtd, 2), "un"
-
-    def normalizar_nome(nome):
-        return nome.strip().lower()
-
     # =========================
     # CONFIG EVENTO
     # =========================
@@ -947,43 +926,30 @@ elif menu == "Orçamentos":
             st.markdown(f"### 💰 Subtotal Bebidas: {subtotal_bebidas}")
 
             # =========================
-            # INSUMOS (100% CORRIGIDO)
+            # INSUMOS (FRUTAS APENAS)
             # =========================
-            st.subheader("🍋 Insumos")
-
-            custo_insumos = 0
-
-    for item, qtd in ingredientes_insumos.items():
-
-        qtd_exibicao, unidade = definir_unidade(item, qtd)
-
-    encontrado = None
-
-    for _, row in df_insumos.iterrows():
-        if row["nome"] and item in row["nome"].strip().lower():
-            encontrado = row
-            break
-
-    if encontrado is not None:
-
-        preco = encontrado["preco"]              # preço do KG
-        quantidade_kg = encontrado["quantidade"] # ex: 1 (kg)
-
-        # 🔥 CONVERSÃO FIXA (PADRÃO FRUTAS)
-        quantidade_gramas = quantidade_kg * 1000
-
-        if quantidade_gramas > 0:
-
-            custo_por_grama = preco / quantidade_gramas
-            custo_item = qtd * custo_por_grama
-            custo_insumos += custo_item
-
-            valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade} | 💰 {valor}")
-
-        else:
-            st.write(f"✔ {item.capitalize()} → {qtd_exibicao} {unidade}")
+                st.subheader("🍋 Frutas")
+        
+                custo_frutas = 0
+        
+        # Itera apenas pelos ingredientes cadastrados como frutas
+        for fruta, qtd_gramas in ingredientes_insumos.items():
+            # Busca fruta no cadastro de insumos
+            encontrado = None
+            for _, row in df_insumos.iterrows():
+                if row["nome"] and fruta == row["nome"].strip().lower():  # somente frutas exatas
+                    encontrado = row
+                    break
+        
+            if encontrado:
+                preco_kg = encontrado["preco"]              # preço do kg cadastrado
+                quantidade_kg = encontrado["quantidade"]    # normalmente 1 kg
+                custo_por_grama = preco_kg / (quantidade_kg * 1000)
+                custo_item = qtd_gramas * custo_por_grama
+                custo_frutas += custo_item
+        
+                # Exibe quantidade em gramas e custo formatado com 2 casas decimais
+                st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:.2f}")
 
 # =========================
 # TOTAL FINAL
