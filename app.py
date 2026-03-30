@@ -392,17 +392,9 @@ elif menu == "Estoque":
 
             st.subheader("Tipo do Produto")
 
-            tipos_existentes = bebidas["tipo"].dropna().unique().tolist()
+            st.subheader("Tipo do Produto")
 
-            produto = st.text_input("Tipo do Produto")
-
-            if not produto:
-                produto = st.selectbox(
-                    "Ou selecione um tipo existente",
-                    tipos_existentes
-                )
-
-            novo_tipo = st.text_input("Ou digite um novo tipo")
+            produto = st.text_input("Tipo do Produto").lower().strip()
 
             produto = novo_tipo.lower().strip() if novo_tipo else produto_existente
 
