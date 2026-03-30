@@ -629,7 +629,7 @@ elif menu == "Receitas":
     # SUB-ABAS
     # ------------------------
     aba_cadastro, aba_lista, aba_edicao = st.tabs(
-        ["Cadastro de Drinks", "Lista de Drinks", "Edição de Receitas"]
+        ["Cadastro de Drinks", "Lista de Drinks"]
     )
 
     # =========================
@@ -738,55 +738,6 @@ elif menu == "Receitas":
                         st.rerun()
 
                 st.divider()
-
-    # =========================
-    # ABA 3 - EDIÇÃO DE RECEITAS
-    # =========================
-    with aba_edicao:
-
-        df = pd.read_sql("SELECT * FROM receitas", conn)
-
-        if df.empty:
-            st.info("Nenhum drink cadastrado")
-        else:
-
-            drinks = df["drink"].unique()
-            drink_sel = st.selectbox("Selecione o drink para editar", drinks)
-
-            receita = df[df["drink"] == drink_sel].copy()
-
-            # Data editor para edição
-            df_editado = st.data_editor(
-                receita,
-                use_container_width=True,
-                column_config={
-                    "drink": st.column_config.TextColumn("Drink"),
-                    "ingrediente": st.column_config.TextColumn("Ingrediente"),
-                    "quantidade": st.column_config.NumberColumn("Quantidade"),
-                    "unidade": st.column_config.TextColumn("Unidade")
-                }
-            )
-
-            # Botão para salvar alterações
-            if st.button("💾 Salvar alterações da receita"):
-
-                try:
-                    # Deleta entradas antigas
-                    cursor.execute("DELETE FROM receitas WHERE drink=?", (drink_sel,))
-
-                    # Insere os dados editados
-                    for _, row in df_editado.iterrows():
-                        cursor.execute("""
-                        INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
-                        VALUES(?,?,?,?)
-                        """, (row["drink"], row["ingrediente"], row["quantidade"], row["unidade"]))
-
-                    conn.commit()
-                    st.success("Receita atualizada com sucesso!")
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
 
 elif menu == "Orçamentos":
 
