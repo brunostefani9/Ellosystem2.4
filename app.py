@@ -628,7 +628,7 @@ elif menu == "Receitas":
     # ------------------------
     # SUB-ABAS
     # ------------------------
-    aba_cadastro, aba_lista, aba_edicao = st.tabs(
+    aba_cadastro, aba_lista = st.tabs(
         ["Cadastro de Drinks", "Lista de Drinks"]
     )
 
