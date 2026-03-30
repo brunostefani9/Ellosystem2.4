@@ -283,9 +283,7 @@ def tela_insumos():
                     st.error("Quantidade não pode ser zero")
                 else:
 
-                    quantidade_gramas = quantidade * 1000
-                    custo_por_grama = preco / quantidade_gramas
-                    custo = uso * custo_por_grama
+                    custo = (preco / quantidade) * uso
                 
                     cursor.execute("""
                     INSERT INTO precos_insumos
@@ -643,7 +641,7 @@ elif menu == "Receitas":
 
         col1, col2, col3, col4 = st.columns(4)
 
-        ingrediente = col1.text_input("Ingrediente")
+        ingrediente = normalizar_nome(col1.text_input("Ingrediente"))
         quantidade = col2.number_input("Quantidade", min_value=0.0)
         unidade = col3.selectbox("Unidade", ["ml","g","un","gota","fatia","guarnição"])
 
@@ -675,15 +673,18 @@ elif menu == "Receitas":
             else:
 
                 for item in st.session_state["ingredientes_temp"]:
-                    cursor.execute("""
-                    INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
-                    VALUES(?,?,?,?)
-                    """, (
-                        st.session_state["drink_nome"],
-                        item["ingrediente"],
-                        item["quantidade"],
-                        item["unidade"]
-                    ))
+                    cursor.execute("DELETE FROM receitas WHERE drink=?", (st.session_state["drink_nome"],))
+
+                    for item in st.session_state["ingredientes_temp"]:
+                        cursor.execute("""
+                        INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
+                        VALUES(?,?,?,?)
+                        """, (
+                            st.session_state["drink_nome"],
+                            item["ingrediente"],
+                            item["quantidade"],
+                            item["unidade"]
+                        ))
 
                 conn.commit()
 
@@ -725,7 +726,7 @@ elif menu == "Receitas":
                             if not result.empty:
                                 custo_unitario = result.iloc[0]["custo"]
                                 break
-                        custo_total += custo_unitario * quantidade
+                        custo_total += custo_unitario
 
                         st.write(f"- {ingrediente} ({quantidade} {unidade})")
 
