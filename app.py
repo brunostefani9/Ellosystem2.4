@@ -64,6 +64,14 @@ unidade TEXT
 conn.commit()
 
 # -------------------------
+# FUNÇÃO AUXILIAR
+# -------------------------
+def normalizar_nome(nome):
+    if not nome:
+        return ""
+    return nome.strip().lower()
+
+# -------------------------
 # SIDEBAR
 # -------------------------
 
@@ -136,7 +144,7 @@ def tela_precificacao(nome_tabela):
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
                     tipo,
-                    nome.lower(),
+                    normalizar_nome(nome),
                     quantidade,
                     preco,
                     uso,
@@ -272,7 +280,7 @@ def tela_insumos():
                     VALUES(NULL,?,?,?,?,?,?,?)
                     """,(
                         "insumo",
-                        nome.lower(),
+                        normalizar_nome(nome),
                         quantidade,
                         preco,
                         uso,
@@ -961,11 +969,12 @@ for fruta, qtd_gramas in ingredientes_insumos.items():
 # =========================
 # TOTAL FINAL
 # =========================
-st.divider()
+        st.divider()
 
-custo_total = custo_bebidas + custo_frutas + custo_insumos
-total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-st.metric("💰 Custo Total do Evento", total_formatado)
+        custo_total = custo_bebidas + custo_frutas + custo_insumos
+        total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        st.metric("💰 Custo Total do Evento", total_formatado)
 
 elif menu == "Vendas":
 
