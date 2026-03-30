@@ -1013,9 +1013,9 @@ elif menu == "Orçamentos":
     # =========================
     with tab2:
 
-    st.subheader("📋 Orçamentos Pendentes")
-
-    df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+        st.subheader("📋 Orçamentos Pendentes")
+    
+        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
 
     if df_eventos.empty:
         st.info("Nenhum orçamento pendente")
