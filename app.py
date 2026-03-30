@@ -533,7 +533,7 @@ elif menu == "Estoque":
 
     with tab3:
 
-    df = pd.read_sql(
+        df = pd.read_sql(
         "SELECT * FROM estoque ORDER BY produto",
         conn
     )
