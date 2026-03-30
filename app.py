@@ -884,16 +884,16 @@ elif menu == "Orçamentos":
                 # =========================
                 df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
                 df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
-
+                
                 ingredientes_bebidas = {}
                 ingredientes_insumos = {}
-
+                
                 for item, qtd in ingredientes_totais.items():
-
+                    # Busca exata pelo nome do ingrediente na tabela de bebidas
                     resultado = df_bebidas[
-                        df_bebidas["tipo"].str.lower().str.contains(item.lower(), na=False)
+                        df_bebidas["nome"].str.lower().str.strip() == item.lower()
                     ]
-
+                
                     if not resultado.empty:
                         ingredientes_bebidas[item] = {
                             "qtd": qtd,
@@ -901,56 +901,54 @@ elif menu == "Orçamentos":
                         }
                     else:
                         ingredientes_insumos[item] = qtd
-
+                
                 # =========================
                 # BEBIDAS
                 # =========================
                 st.subheader("🍸 Bebidas")
-
+                
                 custo_bebidas = 0
                 escolhas_marcas = {}
-
+                
                 for item, dados in ingredientes_bebidas.items():
-
                     tipo = dados["tipo"]
-
-                    opcoes = df_bebidas[
-                        df_bebidas["tipo"].str.lower().str.contains(tipo)
-                    ]
-
+                
+                    # Mostra todas as bebidas do mesmo tipo para escolha de marca
+                    opcoes = df_bebidas[df_bebidas["tipo"].str.lower() == tipo.lower()]
+                
+                    # Caso não encontre, mostra todas as bebidas
                     if opcoes.empty:
                         opcoes = df_bebidas
-
+                
                     escolha = st.selectbox(
-                        f"{item}",
+                        f"{item} - Escolha a marca",
                         opcoes["nome"],
                         key=f"marca_{item}"
                     )
-
                     escolhas_marcas[item] = escolha
-
+                
+                # =========================
+                # Cálculo do custo das bebidas
+                # =========================
                 for item, dados in ingredientes_bebidas.items():
-
                     qtd_ml = dados["qtd"]
                     marca = escolhas_marcas[item]
-
+                
                     result = df_bebidas[df_bebidas["nome"] == marca]
-
+                
                     if not result.empty:
-
                         preco = result.iloc[0]["preco"]
                         volume = result.iloc[0]["quantidade"]
-
+                
                         if volume > 0:
-
                             qtd_real = qtd_ml / volume
                             qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
-
+                
                             custo_item = qtd_garrafas * preco
                             custo_bebidas += custo_item
-
+                
                             st.write(f"✔ {marca} → {qtd_garrafas} garrafas | 💰 R$ {custo_item:,.2f}")
-
+                
                 st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
 
                 # =========================
