@@ -849,7 +849,7 @@ elif menu == "Orçamentos":
                 for item, qtd in ingredientes_totais.items():
 
                     resultado = df_bebidas[
-                        df_bebidas["nome"].str.lower() == item
+                        df_bebidas["tipo"].str.lower().str.contains(item.lower(), na=False)
                     ]
 
                     if not resultado.empty:
