@@ -914,65 +914,65 @@ elif menu == "Orçamentos":
 
                     st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
-# =========================
-# TOTAL
-# =========================
-st.divider()
-
-custo_total = custo_bebidas + custo_frutas
-
-st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
-
-if st.button("💾 Salvar orçamento"):
-
-    cursor.execute("""
-        INSERT INTO eventos (cliente, data, cidade, custo, venda, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        nome_cliente,
-        str(data_evento),
-        cidade_evento,
-        custo_total,
-        preco_venda,
-        "pendente"
-    ))
-
-    conn.commit()
-
-    st.success("Orçamento salvo com sucesso!")
-
-
-# =========================
-# PENDENTES
-# =========================
-st.divider()
-st.subheader("📋 Orçamentos Pendentes")
-
-df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
-
-if df_eventos.empty:
-    st.info("Nenhum orçamento pendente")
-else:
-    for _, row in df_eventos.iterrows():
-
-        st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-        st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
-
-        col1, col2 = st.columns(2)
-
-        # ✅ APROVAR
-        if col1.button(f"✅ Aprovar {row['id']}"):
-            cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
-            conn.commit()
-            st.rerun()
-
-        # ❌ EXCLUIR
-        if col2.button(f"🗑 Excluir {row['id']}"):
-            cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
-            conn.commit()
-            st.rerun()
-
-        st.divider()
+            # =========================
+            # TOTAL
+            # =========================
+            st.divider()
+            
+            custo_total = custo_bebidas + custo_frutas
+            
+            st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
+            
+            if st.button("💾 Salvar orçamento"):
+            
+                cursor.execute("""
+                    INSERT INTO eventos (cliente, data, cidade, custo, venda, status)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    nome_cliente,
+                    str(data_evento),
+                    cidade_evento,
+                    custo_total,
+                    preco_venda,
+                    "pendente"
+                ))
+            
+                conn.commit()
+            
+                st.success("Orçamento salvo com sucesso!")
+            
+            
+            # =========================
+            # PENDENTES
+            # =========================
+            st.divider()
+            st.subheader("📋 Orçamentos Pendentes")
+            
+            df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+            
+            if df_eventos.empty:
+                st.info("Nenhum orçamento pendente")
+            else:
+                for _, row in df_eventos.iterrows():
+            
+                    st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+                    st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+            
+                    col1, col2 = st.columns(2)
+            
+                    # ✅ APROVAR
+                    if col1.button(f"✅ Aprovar {row['id']}"):
+                        cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
+                        conn.commit()
+                        st.rerun()
+            
+                    # ❌ EXCLUIR
+                    if col2.button(f"🗑 Excluir {row['id']}"):
+                        cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
+                        conn.commit()
+                        st.rerun()
+            
+                    st.divider()
         
 elif menu == "Vendas":
 
