@@ -889,10 +889,16 @@ elif menu == "Orçamentos":
                 ingredientes_insumos = {}
                 
                 for item, qtd in ingredientes_totais.items():
-                    # Busca exata pelo nome do ingrediente na tabela de bebidas
+                    # Primeiro, busca exata pelo nome
                     resultado = df_bebidas[
                         df_bebidas["nome"].str.lower().str.strip() == item.lower()
                     ]
+                
+                    # Se não encontrar pelo nome, busca pelo tipo
+                    if resultado.empty:
+                        resultado = df_bebidas[
+                            df_bebidas["tipo"].str.lower().str.contains(item.lower())
+                        ]
                 
                     if not resultado.empty:
                         ingredientes_bebidas[item] = {
