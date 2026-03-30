@@ -1013,31 +1013,47 @@ elif menu == "Orçamentos":
     # =========================
     with tab2:
 
-        st.subheader("📋 Orçamentos Pendentes")
+    st.subheader("📋 Orçamentos Pendentes")
 
-        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+    df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
 
-        if df_eventos.empty:
-            st.info("Nenhum orçamento pendente")
-        else:
-            for _, row in df_eventos.iterrows():
+    if df_eventos.empty:
+        st.info("Nenhum orçamento pendente")
+    else:
+        for _, row in df_eventos.iterrows():
 
-                st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-                st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+            st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
 
-                col1, col2 = st.columns(2)
+            # 👁 CHECKLIST
+            if st.button(f"👁 Ver checklist {row['id']}"):
 
-                if col1.button(f"✅ Aprovar {row['id']}"):
-                    cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
-                    conn.commit()
-                    st.rerun()
+                ingredientes = pd.read_sql("""
+                    SELECT * FROM evento_ingredientes WHERE evento_id=?
+                """, conn, params=(row["id"],))
 
-                if col2.button(f"🗑 Excluir {row['id']}"):
-                    cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
-                    conn.commit()
-                    st.rerun()
+                if ingredientes.empty:
+                    st.warning("Nenhum item encontrado para este evento")
+                else:
+                    st.subheader("📋 Checklist do Evento")
 
-                st.divider()
+                    for _, ing in ingredientes.iterrows():
+                        st.write(f"✔ {ing['produto']} → {ing['quantidade']:.0f}")
+
+            st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+
+            col1, col2 = st.columns(2)
+
+            if col1.button(f"✅ Aprovar {row['id']}"):
+                cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
+                conn.commit()
+                st.rerun()
+
+            if col2.button(f"🗑 Excluir {row['id']}"):
+                cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
+                conn.commit()
+                st.rerun()
+
+            st.divider()
 
     # =========================
     # ABA 3 - APROVADOS
