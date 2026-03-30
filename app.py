@@ -390,9 +390,18 @@ elif menu == "Estoque":
 
         with st.form("entrada_estoque",clear_on_submit=True):
 
-            produto = st.selectbox(
-                "Tipo",
-                bebidas["tipo"].unique()
+            st.subheader("Tipo do Produto")
+
+            tipos_existentes = bebidas["tipo"].dropna().unique().tolist()
+            
+            produto_existente = st.selectbox(
+                "Selecionar tipo existente",
+                tipos_existentes
+            )
+            
+            novo_tipo = st.text_input("Ou digite um novo tipo")
+            
+            produto = novo_tipo.lower().strip() if novo_tipo else produto_existente
             )
 
             marca = st.text_input("Marca")
@@ -530,20 +539,54 @@ elif menu == "Estoque":
 
     with tab3:
 
-        df = pd.read_sql(
+    df = pd.read_sql(
         "SELECT * FROM estoque ORDER BY produto",
         conn
-        )
+    )
 
-        busca = st.text_input("Pesquisar item")
+    busca = st.text_input("Pesquisar item")
 
-        if busca:
+    if busca:
+        df = df[
+            df["marca"].str.contains(busca, case=False)
+        ]
 
-            df = df[
-            df["marca"].str.contains(busca,case=False)
-            ]
+    if df.empty:
+        st.info("Estoque vazio")
+    else:
+        for _, row in df.iterrows():
 
-        st.dataframe(df,use_container_width=True)
+            col1, col2 = st.columns([4,1])
+
+            col1.write(f"{row['produto']} | {row['marca']} | {row['quantidade']}")
+
+            if col2.button(f"🗑 {row['produto']}_{row['marca']}"):
+
+                # registra exclusão
+                cursor.execute("""
+                    INSERT INTO movimentacoes
+                    VALUES(?,?,?,?,?,?)
+                """,
+                (
+                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    row["produto"],
+                    row["marca"],
+                    "Exclusão",
+                    row["quantidade"],
+                    "Manual"
+                )
+                )
+
+                # remove do estoque
+                cursor.execute(
+                    "DELETE FROM estoque WHERE produto=? AND marca=?",
+                    (row["produto"], row["marca"])
+                )
+
+                conn.commit()
+
+                st.success("Item removido do estoque")
+                st.rerun()
 
 # -------------------------
 # REGISTROS
