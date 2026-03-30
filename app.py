@@ -770,10 +770,8 @@ elif menu == "Orçamentos":
 
     if modo_calculo == "Evento inteiro":
         total_drinks = convidados * drinks_por_hora
-        st.caption("Ex: 5 drinks por pessoa no evento todo")
     else:
         total_drinks = convidados * horas * drinks_por_hora
-        st.caption("Ex: 2 drinks por pessoa por hora")
 
     st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
@@ -791,8 +789,6 @@ elif menu == "Orçamentos":
         selecao = st.multiselect("Selecione os drinks", drinks)
 
         if selecao:
-
-            st.subheader("Peso de Consumo")
 
             pesos = {}
             total_peso = 0
@@ -824,31 +820,7 @@ elif menu == "Orçamentos":
                         ingredientes_totais[ingrediente] = total_ingrediente
 
             # =========================
-            # CALCULO INGREDIENTES
-            # =========================
-            ingredientes_totais = {}
-
-            for drink in selecao:
-
-                proporcao = pesos[drink] / total_peso
-                qtd_drinks = total_drinks * proporcao
-
-                receita = df_receitas[df_receitas["drink"] == drink]
-
-                for _, row in receita.iterrows():
-
-                    ingrediente = normalizar_nome(row["ingrediente"])
-                    qtd = row["quantidade"]
-
-                    total_ingrediente = qtd * qtd_drinks
-
-                    if ingrediente in ingredientes_totais:
-                        ingredientes_totais[ingrediente] += total_ingrediente
-                    else:
-                        ingredientes_totais[ingrediente] = total_ingrediente
-
-            # =========================
-            # CARREGAR DADOS
+            # DADOS
             # =========================
             df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
             df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
@@ -871,10 +843,11 @@ elif menu == "Orçamentos":
                     ingredientes_insumos[item] = qtd
 
             # =========================
-            # ESCOLHA BEBIDAS
+            # BEBIDAS
             # =========================
-            st.subheader("🍸 Escolha das Bebidas")
+            st.subheader("🍸 Bebidas")
 
+            custo_bebidas = 0
             escolhas_marcas = {}
 
             for item, dados in ingredientes_bebidas.items():
@@ -896,13 +869,6 @@ elif menu == "Orçamentos":
 
                 escolhas_marcas[item] = escolha
 
-            # =========================
-            # BEBIDAS
-            # =========================
-            st.subheader("🛒 Bebidas")
-
-            custo_bebidas = 0
-
             for item, dados in ingredientes_bebidas.items():
 
                 qtd_ml = dados["qtd"]
@@ -918,64 +884,46 @@ elif menu == "Orçamentos":
                     if volume > 0:
 
                         qtd_real = qtd_ml / volume
-
-                        qtd_garrafas = int(qtd_real)
-                        if qtd_real > qtd_garrafas:
-                            qtd_garrafas += 1
+                        qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
 
                         custo_item = qtd_garrafas * preco
                         custo_bebidas += custo_item
 
-                        valor = f"R$ {custo_item:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        st.write(f"✔ {marca} → {qtd_garrafas} garrafas | 💰 R$ {custo_item:,.2f}")
 
-                        st.write(f"✔ {marca} → {qtd_garrafas} garrafas | 💰 {valor}")
+            st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
 
-            subtotal_bebidas = f"R$ {custo_bebidas:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.markdown(f"### 💰 Subtotal Bebidas: {subtotal_bebidas}")
+            # =========================
+            # FRUTAS
+            # =========================
+            st.subheader("🍋 Frutas")
 
-# =========================
-# FUNÇÃO AUXILIAR
-# =========================
-    def normalizar_nome(nome):
-        return nome.strip().lower()
+            custo_frutas = 0
 
-# =========================
-# FRUTAS - ABA ORÇAMENTOS
-# =========================
-st.subheader("🍋 Frutas")
+            for fruta, qtd_gramas in ingredientes_insumos.items():
 
-custo_frutas = 0
-custo_insumos = 0  # Mantido para cálculo final, mesmo que zero
+                encontrado = df_insumos[
+                    df_insumos["nome"].str.lower() == fruta
+                ]
 
-# Itera apenas pelos ingredientes cadastrados como frutas
-for fruta, qtd_gramas in ingredientes_insumos.items():
-    # Busca fruta no cadastro de insumos
-    encontrado = None
-    for _, row in df_insumos.iterrows():
-        if row["nome"] and fruta == row["nome"].strip().lower():  # somente frutas exatas
-            encontrado = row
-            break
+                if not encontrado.empty:
 
-    if encontrado:
-        preco_kg = encontrado["preco"]              # preço do kg cadastrado
-        quantidade_kg = encontrado["quantidade"]    # normalmente 1 kg
-        custo_por_grama = preco_kg / (quantidade_kg * 1000)
-        custo_item = qtd_gramas * custo_por_grama
-        custo_frutas += custo_item
+                    preco_kg = encontrado.iloc[0]["preco"]
+                    custo_por_grama = preco_kg / 1000
 
-        # Exibe quantidade em gramas e custo formatado com 2 casas decimais
-        st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
+                    custo_item = qtd_gramas * custo_por_grama
+                    custo_frutas += custo_item
 
-# =========================
-# TOTAL FINAL
-# =========================
-        st.divider()
+                    st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
-        custo_total = custo_bebidas + custo_frutas + custo_insumos
-        total_formatado = f"R$ {custo_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            # =========================
+            # TOTAL
+            # =========================
+            st.divider()
 
-        st.metric("💰 Custo Total do Evento", total_formatado)
+            custo_total = custo_bebidas + custo_frutas
 
+            st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
 elif menu == "Vendas":
 
     st.title("Vendas")
