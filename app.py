@@ -748,231 +748,282 @@ elif menu == "Receitas":
 
 elif menu == "Orçamentos":
 
-    st.title("Orçamento de Evento")
+    st.title("Orçamentos")
 
-    modo_calculo = st.radio(
-        "Modo de cálculo",
-        ["Evento inteiro", "Por hora"]
-    )
-
-    # =========================
-    # CONFIG EVENTO
-    # =========================
-    st.subheader("Configuração do Evento")
-
-    col1, col2, col3 = st.columns(3)
-
-    convidados = col1.number_input("Convidados", min_value=1, value=50)
-    horas = col2.number_input("Horas de evento", min_value=1, value=4)
-    drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
-
-    if modo_calculo == "Evento inteiro":
-        total_drinks = convidados * drinks_por_hora
-    else:
-        total_drinks = convidados * horas * drinks_por_hora
-
-    st.info(f"Total estimado de drinks: {int(total_drinks)}")
+    tab1, tab2, tab3 = st.tabs([
+        "🧾 Novo Orçamento",
+        "⏳ Pendentes",
+        "✅ Aprovados"
+    ])
 
     # =========================
-    # RECEITAS
+    # ABA 1 - NOVO ORÇAMENTO
     # =========================
-    df_receitas = pd.read_sql("SELECT * FROM receitas", conn)
+    with tab1:
 
-    if df_receitas.empty:
-        st.warning("Cadastre receitas primeiro")
+        # ✅ DADOS CLIENTE
+        st.subheader("Dados do Cliente")
 
-    else:
+        col1, col2, col3 = st.columns(3)
 
-        drinks = df_receitas["drink"].unique()
-        selecao = st.multiselect("Selecione os drinks", drinks)
+        nome_cliente = col1.text_input("Nome do cliente")
+        data_evento = col2.date_input("Data do evento")
+        cidade_evento = col3.text_input("Cidade / Local")
 
-        if selecao:
+        modo_calculo = st.radio(
+            "Modo de cálculo",
+            ["Evento inteiro", "Por hora"]
+        )
 
-            pesos = {}
-            total_peso = 0
+        # =========================
+        # CONFIG EVENTO
+        # =========================
+        st.subheader("Configuração do Evento")
 
-            for drink in selecao:
-                peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
-                pesos[drink] = peso
-                total_peso += peso
+        col1, col2, col3 = st.columns(3)
 
-            ingredientes_totais = {}
+        convidados = col1.number_input("Convidados", min_value=1, value=50)
+        horas = col2.number_input("Horas de evento", min_value=1, value=4)
+        drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
-            for drink in selecao:
+        if modo_calculo == "Evento inteiro":
+            total_drinks = convidados * drinks_por_hora
+        else:
+            total_drinks = convidados * horas * drinks_por_hora
 
-                proporcao = pesos[drink] / total_peso
-                qtd_drinks = total_drinks * proporcao
+        st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
-                receita = df_receitas[df_receitas["drink"] == drink]
+        # =========================
+        # RECEITAS
+        # =========================
+        df_receitas = pd.read_sql("SELECT * FROM receitas", conn)
 
-                for _, row in receita.iterrows():
+        if df_receitas.empty:
+            st.warning("Cadastre receitas primeiro")
 
-                    ingrediente = normalizar_nome(row["ingrediente"])
-                    qtd = row["quantidade"]
+        else:
 
-                    total_ingrediente = qtd * qtd_drinks
+            drinks = df_receitas["drink"].unique()
+            selecao = st.multiselect("Selecione os drinks", drinks)
 
-                    if ingrediente in ingredientes_totais:
-                        ingredientes_totais[ingrediente] += total_ingrediente
+            if selecao:
+
+                pesos = {}
+                total_peso = 0
+
+                for drink in selecao:
+                    peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+                    pesos[drink] = peso
+                    total_peso += peso
+
+                ingredientes_totais = {}
+
+                for drink in selecao:
+
+                    proporcao = pesos[drink] / total_peso
+                    qtd_drinks = total_drinks * proporcao
+
+                    receita = df_receitas[df_receitas["drink"] == drink]
+
+                    for _, row in receita.iterrows():
+
+                        ingrediente = normalizar_nome(row["ingrediente"])
+                        qtd = row["quantidade"]
+
+                        total_ingrediente = qtd * qtd_drinks
+
+                        if ingrediente in ingredientes_totais:
+                            ingredientes_totais[ingrediente] += total_ingrediente
+                        else:
+                            ingredientes_totais[ingrediente] = total_ingrediente
+
+                # =========================
+                # DADOS
+                # =========================
+                df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
+                df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
+
+                ingredientes_bebidas = {}
+                ingredientes_insumos = {}
+
+                for item, qtd in ingredientes_totais.items():
+
+                    resultado = df_bebidas[
+                        df_bebidas["nome"].str.lower() == item
+                    ]
+
+                    if not resultado.empty:
+                        ingredientes_bebidas[item] = {
+                            "qtd": qtd,
+                            "tipo": resultado.iloc[0]["tipo"]
+                        }
                     else:
-                        ingredientes_totais[ingrediente] = total_ingrediente
+                        ingredientes_insumos[item] = qtd
 
-            # =========================
-            # DADOS
-            # =========================
-            df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
-            df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
+                # =========================
+                # BEBIDAS
+                # =========================
+                st.subheader("🍸 Bebidas")
 
-            ingredientes_bebidas = {}
-            ingredientes_insumos = {}
+                custo_bebidas = 0
+                escolhas_marcas = {}
 
-            for item, qtd in ingredientes_totais.items():
+                for item, dados in ingredientes_bebidas.items():
 
-                resultado = df_bebidas[
-                    df_bebidas["nome"].str.lower() == item
-                ]
+                    tipo = dados["tipo"]
 
-                if not resultado.empty:
-                    ingredientes_bebidas[item] = {
-                        "qtd": qtd,
-                        "tipo": resultado.iloc[0]["tipo"]
-                    }
-                else:
-                    ingredientes_insumos[item] = qtd
+                    opcoes = df_bebidas[
+                        df_bebidas["tipo"].str.lower().str.contains(tipo)
+                    ]
 
-            # =========================
-            # BEBIDAS
-            # =========================
-            st.subheader("🍸 Bebidas")
+                    if opcoes.empty:
+                        opcoes = df_bebidas
 
-            custo_bebidas = 0
-            escolhas_marcas = {}
+                    escolha = st.selectbox(
+                        f"{item}",
+                        opcoes["nome"],
+                        key=f"marca_{item}"
+                    )
 
-            for item, dados in ingredientes_bebidas.items():
+                    escolhas_marcas[item] = escolha
 
-                tipo = dados["tipo"]
+                for item, dados in ingredientes_bebidas.items():
 
-                opcoes = df_bebidas[
-                    df_bebidas["tipo"].str.lower().str.contains(tipo)
-                ]
+                    qtd_ml = dados["qtd"]
+                    marca = escolhas_marcas[item]
 
-                if opcoes.empty:
-                    opcoes = df_bebidas
+                    result = df_bebidas[df_bebidas["nome"] == marca]
 
-                escolha = st.selectbox(
-                    f"{item}",
-                    opcoes["nome"],
-                    key=f"marca_{item}"
-                )
+                    if not result.empty:
 
-                escolhas_marcas[item] = escolha
+                        preco = result.iloc[0]["preco"]
+                        volume = result.iloc[0]["quantidade"]
 
-            for item, dados in ingredientes_bebidas.items():
+                        if volume > 0:
 
-                qtd_ml = dados["qtd"]
-                marca = escolhas_marcas[item]
+                            qtd_real = qtd_ml / volume
+                            qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
 
-                result = df_bebidas[df_bebidas["nome"] == marca]
+                            custo_item = qtd_garrafas * preco
+                            custo_bebidas += custo_item
 
-                if not result.empty:
+                            st.write(f"✔ {marca} → {qtd_garrafas} garrafas | 💰 R$ {custo_item:,.2f}")
 
-                    preco = result.iloc[0]["preco"]
-                    volume = result.iloc[0]["quantidade"]
+                st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
 
-                    if volume > 0:
+                # =========================
+                # FRUTAS
+                # =========================
+                st.subheader("🍋 Frutas")
 
-                        qtd_real = qtd_ml / volume
-                        qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+                custo_frutas = 0
 
-                        custo_item = qtd_garrafas * preco
-                        custo_bebidas += custo_item
+                for fruta, qtd_gramas in ingredientes_insumos.items():
 
-                        st.write(f"✔ {marca} → {qtd_garrafas} garrafas | 💰 R$ {custo_item:,.2f}")
+                    encontrado = df_insumos[
+                        df_insumos["nome"].str.lower() == fruta
+                    ]
 
-            st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
+                    if not encontrado.empty:
 
-            # =========================
-            # FRUTAS
-            # =========================
-            st.subheader("🍋 Frutas")
+                        preco_kg = encontrado.iloc[0]["preco"]
+                        custo_por_grama = preco_kg / 1000
 
-            custo_frutas = 0
+                        custo_item = qtd_gramas * custo_por_grama
+                        custo_frutas += custo_item
 
-            for fruta, qtd_gramas in ingredientes_insumos.items():
+                        st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
-                encontrado = df_insumos[
-                    df_insumos["nome"].str.lower() == fruta
-                ]
+                # =========================
+                # TOTAL
+                # =========================
+                st.divider()
 
-                if not encontrado.empty:
+                custo_total = custo_bebidas + custo_frutas
 
-                    preco_kg = encontrado.iloc[0]["preco"]
-                    custo_por_grama = preco_kg / 1000
+                st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
 
-                    custo_item = qtd_gramas * custo_por_grama
-                    custo_frutas += custo_item
+                # ✅ PREÇO DE VENDA
+                margem = st.slider("Margem de lucro (%)", 0, 300, 100)
+                preco_venda = custo_total * (1 + margem / 100)
 
-                    st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
+                st.metric("💰 Preço sugerido", f"R$ {preco_venda:,.2f}")
 
-            # =========================
-            # TOTAL
-            # =========================
-            st.divider()
-            
-            custo_total = custo_bebidas + custo_frutas
-            
-            st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
-            
-            if st.button("💾 Salvar orçamento"):
-            
-                cursor.execute("""
-                    INSERT INTO eventos (cliente, data, cidade, custo, venda, status)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    nome_cliente,
-                    str(data_evento),
-                    cidade_evento,
-                    custo_total,
-                    preco_venda,
-                    "pendente"
-                ))
-            
-                conn.commit()
-            
-                st.success("Orçamento salvo com sucesso!")
-            
-            
-            # =========================
-            # PENDENTES
-            # =========================
-            st.divider()
-            st.subheader("📋 Orçamentos Pendentes")
-            
-            df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
-            
-            if df_eventos.empty:
-                st.info("Nenhum orçamento pendente")
-            else:
-                for _, row in df_eventos.iterrows():
-            
-                    st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-                    st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
-            
-                    col1, col2 = st.columns(2)
-            
-                    # ✅ APROVAR
-                    if col1.button(f"✅ Aprovar {row['id']}"):
-                        cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
-                        conn.commit()
-                        st.rerun()
-            
-                    # ❌ EXCLUIR
-                    if col2.button(f"🗑 Excluir {row['id']}"):
-                        cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
-                        conn.commit()
-                        st.rerun()
-            
-                    st.divider()
+                if st.button("💾 Salvar orçamento"):
+
+                    cursor.execute("""
+                        INSERT INTO eventos (cliente, data, cidade, custo, venda, status)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        nome_cliente,
+                        str(data_evento),
+                        cidade_evento,
+                        custo_total,
+                        preco_venda,
+                        "pendente"
+                    ))
+
+                    conn.commit()
+
+                    st.success("Orçamento salvo com sucesso!")
+
+    # =========================
+    # ABA 2 - PENDENTES
+    # =========================
+    with tab2:
+
+        st.subheader("📋 Orçamentos Pendentes")
+
+        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+
+        if df_eventos.empty:
+            st.info("Nenhum orçamento pendente")
+        else:
+            for _, row in df_eventos.iterrows():
+
+                st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+                st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+
+                col1, col2 = st.columns(2)
+
+                if col1.button(f"✅ Aprovar {row['id']}"):
+                    cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
+                    conn.commit()
+                    st.rerun()
+
+                if col2.button(f"🗑 Excluir {row['id']}"):
+                    cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
+                    conn.commit()
+                    st.rerun()
+
+                st.divider()
+
+    # =========================
+    # ABA 3 - APROVADOS
+    # =========================
+    with tab3:
+
+        st.subheader("✅ Eventos Aprovados")
+
+        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='aprovado'", conn)
+
+        if df_eventos.empty:
+            st.info("Nenhum evento aprovado")
+        else:
+            for _, row in df_eventos.iterrows():
+
+                st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+                st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+
+                if st.button(f"✔ Finalizar {row['id']}"):
+                    cursor.execute(
+                        "UPDATE eventos SET status='finalizado' WHERE id=?",
+                        (row["id"],)
+                    )
+                    conn.commit()
+                    st.rerun()
+
+                st.divider()
         
 elif menu == "Vendas":
 
