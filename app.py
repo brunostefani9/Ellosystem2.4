@@ -135,8 +135,8 @@ def tela_precificacao(nome_tabela):
                 if uso == 0:
                     st.error("Uso não pode ser zero")
                 else:
-                    rendimento = (quantidade * 1000) / uso
-                    custo = preco / rendimento
+                    rendimento = quantidade / uso if uso > 0 else 0
+                    custo = preco / rendimento if rendimento > 0 else 0
         
                     cursor.execute(f"""
                     INSERT INTO {nome_tabela}
@@ -743,20 +743,6 @@ elif menu == "Orçamentos":
         ["Evento inteiro", "Por hora"]
     )
 
-    mapa_bebidas = {
-        "rum": "rum",
-        "vodka": "vodka",
-        "gin": "gin",
-        "whisky": "whisky",
-        "whiskey": "whisky",
-        "cachaça": "cachaça",
-        "tequila": "tequila",
-        "aperol": "aperol",
-        "campari": "campari",
-        "espumante": "espumante",
-        "vinho": "vinho"
-    }
-
     # =========================
     # CONFIG EVENTO
     # =========================
@@ -830,15 +816,15 @@ elif menu == "Orçamentos":
 
             for item, qtd in ingredientes_totais.items():
 
-                tipo_encontrado = None
+                resultado = df_bebidas[
+                    df_bebidas["nome"].str.lower() == item
+                ]
 
-                for chave in mapa_bebidas:
-                    if chave in item:
-                        tipo_encontrado = mapa_bebidas[chave]
-                        break
-
-                if tipo_encontrado:
-                    ingredientes_bebidas[item] = {"qtd": qtd, "tipo": tipo_encontrado}
+                if not resultado.empty:
+                    ingredientes_bebidas[item] = {
+                        "qtd": qtd,
+                        "tipo": resultado.iloc[0]["tipo"]
+                    }
                 else:
                     ingredientes_insumos[item] = qtd
 
