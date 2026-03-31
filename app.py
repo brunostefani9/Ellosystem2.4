@@ -73,6 +73,16 @@ CREATE TABLE IF NOT EXISTS eventos (
 )
 """)
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS evento_itens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evento_id INTEGER,
+    produto TEXT,
+    quantidade REAL,
+    unidade TEXT
+)
+""")
+
 conn.commit()
 
 # -------------------------
@@ -124,8 +134,8 @@ def tela_precificacao(nome_tabela):
             quantidade = st.number_input(
                 "Quantidade total (ml, g, un)",
                 min_value=0.0,
-                format="%.2f",
-                key=f"quant_{nome_tabela}"
+                step=1.0,
+                format="%.0f"
             )
 
             preco = st.number_input(
@@ -138,8 +148,8 @@ def tela_precificacao(nome_tabela):
             uso = st.number_input(
                 "Quantidade usada no drink",
                 min_value=0.0,
-                format="%.2f",
-                key=f"uso_{nome_tabela}"
+                step=1.0,
+                format="%.0f"
             )
             
             if st.form_submit_button("Cadastrar"):
@@ -721,12 +731,21 @@ elif menu == "Receitas":
 
                         # Busca custo nas tabelas
                         custo_unitario = 0
+                        uso_padrao = 1  # valor padrão pra evitar erro
+
                         for tabela in ["precos_bebidas","precos_insumos","precos_artesanais"]:
-                            result = pd.read_sql(f"SELECT custo FROM {tabela} WHERE nome=?", conn, params=(ingrediente,))
+                            result = pd.read_sql(
+                                f"SELECT custo, uso FROM {tabela} WHERE nome=?",
+                                conn,
+                                params=(ingrediente,)
+                            )
+                        
                             if not result.empty:
                                 custo_unitario = result.iloc[0]["custo"]
+                                uso_padrao = result.iloc[0]["uso"] if result.iloc[0]["uso"] > 0 else 1
                                 break
-                        custo_total += custo_unitario
+                        
+                        custo_total += (quantidade / uso_padrao) * custo_unitario
 
                         st.write(f"- {ingrediente} ({quantidade} {unidade})")
 
@@ -961,7 +980,51 @@ elif menu == "Orçamentos":
                     ))
 
                     conn.commit()
+                    evento_id = cursor.lastrowid
 
+                    # =========================
+                    # SALVAR BEBIDAS
+                    # =========================
+                    for item, dados in ingredientes_bebidas.items():
+                        marca = escolhas_marcas[item]
+                        qtd_ml = dados["qtd"]
+                    
+                        result = df_bebidas[df_bebidas["nome"] == marca]
+                    
+                        if not result.empty:
+                            volume = result.iloc[0]["quantidade"]
+                    
+                            if volume > 0:
+                                qtd_real = qtd_ml / volume
+                                qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+                    
+                                cursor.execute("""
+                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade)
+                                    VALUES (?, ?, ?, ?)
+                                """, (
+                                    evento_id,
+                                    marca,
+                                    qtd_garrafas,
+                                    "garrafas"
+                                ))
+                    
+                    # =========================
+                    # SALVAR FRUTAS / INSUMOS
+                    # =========================
+                    for fruta, qtd_gramas in ingredientes_insumos.items():
+                    
+                        cursor.execute("""
+                            INSERT INTO evento_itens (evento_id, produto, quantidade, unidade)
+                            VALUES (?, ?, ?, ?)
+                        """, (
+                            evento_id,
+                            fruta.capitalize(),
+                            qtd_gramas,
+                            "g"
+                        ))
+                    
+                    conn.commit()
+                    
                     st.success("Orçamento salvo com sucesso!")
 
     # =========================
@@ -973,43 +1036,61 @@ elif menu == "Orçamentos":
     
         df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
 
-    if df_eventos.empty:
-        st.info("Nenhum orçamento pendente")
-    else:
-        for _, row in df_eventos.iterrows():
-
-            st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-
-            # 👁 CHECKLIST
-            if st.button(f"👁 Ver checklist {row['id']}"):
-
-                ingredientes = pd.read_sql("""
-                    SELECT * FROM evento_ingredientes WHERE evento_id=?
-                """, conn, params=(row["id"],))
-
-                if ingredientes.empty:
-                    st.warning("Nenhum item encontrado para este evento")
-                else:
+        if df_eventos.empty:
+            st.info("Nenhum orçamento pendente")
+        else:
+            for _, row in df_eventos.iterrows():
+                
+                st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+            
+                # =========================
+                # CHECKLIST
+                # =========================
+                if st.button(f"📋 Checklist {row['id']}"):
+            
+                    itens = pd.read_sql("""
+                        SELECT * FROM evento_itens WHERE evento_id=?
+                    """, conn, params=(row["id"],))
+            
                     st.subheader("📋 Checklist do Evento")
-
-                    for _, ing in ingredientes.iterrows():
-                        st.write(f"✔ {ing['produto']} → {ing['quantidade']:.0f}")
-
-            st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
-
-            col1, col2 = st.columns(2)
-
-            if col1.button(f"✅ Aprovar {row['id']}"):
-                cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
-                conn.commit()
-                st.rerun()
-
-            if col2.button(f"🗑 Excluir {row['id']}"):
-                cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
-                conn.commit()
-                st.rerun()
-
-            st.divider()
+            
+                    st.markdown(f"""
+                    ### 📍 Informações do Evento
+            
+                    **Cliente:** {row['cliente']}  
+                    **Data:** {row['data']}  
+                    **Cidade:** {row['cidade']}  
+                    **Valor:** R$ {row['venda']:,.2f}
+                    """)
+            
+                    if itens.empty:
+                        st.warning("Nenhum item encontrado")
+                    else:
+                        df_checklist = itens.copy()
+            
+                        df_checklist.rename(columns={
+                            "produto": "Produto",
+                            "quantidade": "Quantidade",
+                            "unidade": "Unidade"
+                        }, inplace=True)
+            
+                        st.dataframe(df_checklist[["Produto", "Quantidade", "Unidade"]])
+            
+                st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+    
+                col1, col2 = st.columns(2)
+    
+                if col1.button(f"✅ Aprovar {row['id']}"):
+                    cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
+                    conn.commit()
+                    st.rerun()
+    
+                if col2.button(f"🗑 Excluir {row['id']}"):
+                    cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
+                    conn.commit()
+                    st.rerun()
+    
+                st.divider()
 
     # =========================
     # ABA 3 - APROVADOS
@@ -1040,8 +1121,38 @@ elif menu == "Orçamentos":
         
 elif menu == "Vendas":
 
-    st.title("Vendas")
-    st.info("Histórico de eventos em breve")
+    
+    st.title("💰 Vendas")
+
+    df_vendas = pd.read_sql(
+        "SELECT * FROM eventos WHERE status='aprovado'",
+        conn
+    )
+
+    if df_vendas.empty:
+        st.info("Nenhuma venda ainda")
+    else:
+
+        # 🔥 MÉTRICAS
+        total_vendas = df_vendas["venda"].sum()
+        qtd_eventos = len(df_vendas)
+        ticket_medio = total_vendas / qtd_eventos if qtd_eventos > 0 else 0
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("💰 Faturamento", f"R$ {total_vendas:,.2f}")
+        col2.metric("📅 Eventos Fechados", qtd_eventos)
+        col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+
+        st.divider()
+
+        # 📋 LISTA DE VENDAS
+        for _, row in df_vendas.iterrows():
+
+            st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+            st.write(f"💰 R$ {row['venda']:,.2f}")
+
+            st.divider()
 
 elif menu == "Pacotes":
 
