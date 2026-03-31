@@ -3,6 +3,30 @@ import pandas as pd
 import sqlite3
 from datetime import datetime
 
+def definir_categoria_global(produto):
+
+    produto = str(produto).lower()
+
+    if any(p in produto for p in [
+        "vodka", "gin", "rum", "whisky", "whiskey",
+        "tequila", "licor", "cachaça", "bacardi",
+        "absolut", "smirnoff", "jack", "campari"
+    ]):
+        return "Bebidas"
+
+    elif any(p in produto for p in [
+        "xarope", "açucar", "acucar", "grenadine"
+    ]):
+        return "Insumos"
+
+    elif any(p in produto for p in [
+        "limão", "limao", "laranja", "abacaxi", "morango"
+    ]):
+        return "Frutas"
+
+    else:
+        return "Outros"
+
 st.set_page_config(page_title="Ellosystem", layout="wide")
 
 # -------------------------
