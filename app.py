@@ -1020,56 +1020,28 @@ elif menu == "Orçamentos":
                 # TOTAL
                 # =========================
                 st.divider()
-
+                
                 custo_total = custo_bebidas + custo_frutas
-
+                
                 st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
-
+                
                 # ✅ PREÇO DE VENDA
                 margem = st.slider("Margem de lucro (%)", 0, 300, 100)
                 preco_venda = custo_total * (1 + margem / 100)
-
+                
                 st.metric("💰 Preço sugerido", f"R$ {preco_venda:,.2f}")
-
+                
+                # 💰 VALOR POR CONVIDADO
+                if num_convidados > 0:
+                    custo_por_convidado = preco_venda / num_convidados
+                else:
+                    custo_por_convidado = 0
+                
+                st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:,.2f}")
+                
+                # 💾 SALVAR ORÇAMENTO
                 if st.button("💾 Salvar orçamento"):
-
-                    cursor.execute("""
-                        INSERT INTO eventos (
-                            cliente, data, cidade,
-                            telefone, endereco, tipo_evento,
-                            hora_chegada, hora_inicio, hora_convidados,
-                            convidados,
-                            custo, venda, status
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        nome_cliente,
-                        str(data_evento),
-                        cidade_evento,
-                        telefone,
-                        endereco,
-                        tipo_evento,
-                        str(hora_chegada),
-                        str(hora_inicio),
-                        str(hora_convidados),
-                        num_convidados,
-                        custo_total,
-                        preco_venda,
-                        custo_por_convidado,
-                        "pendente"
-                    ))
                 
-                    conn.commit()
-                    evento_id = cursor.lastrowid
-                
-                    # 💰 cálculo correto FORA do SQL
-                    if num_convidados > 0:
-                        custo_por_convidado = preco_venda / num_convidados
-                    else:
-                        custo_por_convidado = 0
-                
-                    st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:.2f}")
-
                     cursor.execute("""
                         INSERT INTO eventos (
                             cliente, data, cidade,
@@ -1098,6 +1070,7 @@ elif menu == "Orçamentos":
                     conn.commit()
                     evento_id = cursor.lastrowid
 
+    st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
                     # SALVAR BEBIDAS
                     # =========================
