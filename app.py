@@ -1099,7 +1099,7 @@ elif menu == "Orçamentos":
                             else:
                                 return "Outros"
     
-                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
+                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria_global)
     
                         # =========================
                         # COLUNAS OPERACIONAIS
