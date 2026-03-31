@@ -1070,7 +1070,7 @@ elif menu == "Orçamentos":
                     conn.commit()
                     evento_id = cursor.lastrowid
 
-    st.success("✅ Orçamento salvo com sucesso!")
+                st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
                     # SALVAR BEBIDAS
                     # =========================
