@@ -1032,8 +1032,6 @@ elif menu == "Orçamentos":
     # =========================
     with tab2:
 
-        with tab2:
-
     st.subheader("📋 Orçamentos Pendentes")
 
     df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
