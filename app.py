@@ -109,6 +109,13 @@ CREATE TABLE IF NOT EXISTS evento_itens (
 
 conn.commit()
 
+# adiciona categoria sem quebrar
+try:
+    cursor.execute("ALTER TABLE evento_itens ADD COLUMN categoria TEXT")
+    conn.commit()
+except:
+    pass
+
 # -------------------------
 # FUNÇÃO AUXILIAR
 # -------------------------
@@ -1023,13 +1030,14 @@ elif menu == "Orçamentos":
                                 qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                     
                                 cursor.execute("""
-                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade)
-                                    VALUES (?, ?, ?, ?)
+                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
+                                    VALUES (?, ?, ?, ?, ?)
                                 """, (
                                     evento_id,
                                     marca,
                                     qtd_garrafas,
-                                    "garrafas"
+                                    "garrafas",
+                                    "Bebidas"
                                 ))
                     
                     # =========================
@@ -1038,13 +1046,14 @@ elif menu == "Orçamentos":
                     for fruta, qtd_gramas in ingredientes_insumos.items():
                     
                         cursor.execute("""
-                            INSERT INTO evento_itens (evento_id, produto, quantidade, unidade)
-                            VALUES (?, ?, ?, ?)
+                            INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
+                            VALUES (?, ?, ?, ?, ?)
                         """, (
                             evento_id,
                             fruta.capitalize(),
                             qtd_gramas,
-                            "g"
+                            "g",
+                            "Insumos"  # ou "Frutas" se quiser separar depois
                         ))
                     
                     conn.commit()
