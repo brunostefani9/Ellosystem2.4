@@ -1021,84 +1021,84 @@ elif menu == "Orçamentos":
             # =========================
             st.divider()
 
-                custo_total = custo_bebidas + custo_frutas
-                
-                st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
-                
-                # ✅ PREÇO DE VENDA
-                margem = st.slider("Margem de lucro (%)", 0, 300, 100)
-                preco_venda = custo_total * (1 + margem / 100)
-                
-                st.metric("💰 Preço sugerido", f"R$ {preco_venda:,.2f}")
-                
-                # 💰 VALOR POR CONVIDADO
-                if num_convidados > 0:
-                    custo_por_convidado = preco_venda / num_convidados
-                else:
-                    custo_por_convidado = 0
-                
-                st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:,.2f}")
-                
-                # 💾 SALVAR ORÇAMENTO
-                if st.button("💾 Salvar orçamento"):
-                
-                    cursor.execute("""
-                        INSERT INTO eventos (
-                            cliente, data, cidade,
-                            telefone, endereco, tipo_evento,
-                            hora_chegada, hora_inicio, hora_convidados,
-                            convidados,
-                            custo, venda, status
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        nome_cliente,
-                        str(data_evento),
-                        cidade_evento,
-                        telefone,
-                        endereco,
-                        tipo_evento,
-                        str(hora_chegada),
-                        str(hora_inicio),
-                        str(hora_convidados),
-                        num_convidados,
-                        custo_total,
-                        preco_venda,
-                        "pendente"
-                    ))
-                
-                    conn.commit()
-                    evento_id = cursor.lastrowid
-                
-                    # =========================
-                    # SALVAR BEBIDAS
-                    # =========================
-                    for item, dados in ingredientes_bebidas.items():
-                        marca = escolhas_marcas[item]
-                        qtd_ml = dados["qtd"]
-                
-                        result = df_bebidas[df_bebidas["nome"] == marca]
-                
-                        if not result.empty:
-                            volume = result.iloc[0]["quantidade"]
-                
-                            if volume > 0:
-                                qtd_real = qtd_ml / volume
-                                qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
-                
-                                cursor.execute("""
-                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
-                                    VALUES (?, ?, ?, ?, ?)
-                                """, (
-                                    evento_id,
-                                    marca,
-                                    qtd_garrafas,
-                                    "garrafas",
-                                    "Bebidas"
-                                ))
-                
-                    conn.commit()
-                    st.success("✅ Orçamento salvo com sucesso!")
+            custo_total = custo_bebidas + custo_frutas
+            
+            st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
+            
+            # ✅ PREÇO DE VENDA
+            margem = st.slider("Margem de lucro (%)", 0, 300, 100)
+            preco_venda = custo_total * (1 + margem / 100)
+            
+            st.metric("💰 Preço sugerido", f"R$ {preco_venda:,.2f}")
+            
+            # 💰 VALOR POR CONVIDADO
+            if num_convidados > 0:
+                custo_por_convidado = preco_venda / num_convidados
+            else:
+                custo_por_convidado = 0
+            
+            st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:,.2f}")
+            
+            # 💾 SALVAR ORÇAMENTO
+            if st.button("💾 Salvar orçamento"):
+            
+                cursor.execute("""
+                    INSERT INTO eventos (
+                        cliente, data, cidade,
+                        telefone, endereco, tipo_evento,
+                        hora_chegada, hora_inicio, hora_convidados,
+                        convidados,
+                        custo, venda, status
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    nome_cliente,
+                    str(data_evento),
+                    cidade_evento,
+                    telefone,
+                    endereco,
+                    tipo_evento,
+                    str(hora_chegada),
+                    str(hora_inicio),
+                    str(hora_convidados),
+                    num_convidados,
+                    custo_total,
+                    preco_venda,
+                    "pendente"
+                ))
+            
+                conn.commit()
+                evento_id = cursor.lastrowid
+            
+                # =========================
+                # SALVAR BEBIDAS
+                # =========================
+                for item, dados in ingredientes_bebidas.items():
+                    marca = escolhas_marcas[item]
+                    qtd_ml = dados["qtd"]
+            
+                    result = df_bebidas[df_bebidas["nome"] == marca]
+            
+                    if not result.empty:
+                        volume = result.iloc[0]["quantidade"]
+            
+                        if volume > 0:
+                            qtd_real = qtd_ml / volume
+                            qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+            
+                            cursor.execute("""
+                                INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (
+                                evento_id,
+                                marca,
+                                qtd_garrafas,
+                                "garrafas",
+                                "Bebidas"
+                            ))
+            
+                conn.commit()
+                st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
                     # SALVAR FRUTAS / INSUMOS
                     # =========================
