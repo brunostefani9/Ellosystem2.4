@@ -1044,9 +1044,21 @@ elif menu == "Orçamentos":
                 st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
     
                 # =========================
+                # CONTROLE DE ABERTURA
+                # =========================
+                if f"abrir_{row['id']}" not in st.session_state:
+                    st.session_state[f"abrir_{row['id']}"] = False
+    
+                # =========================
+                # BOTÃO CHECKLIST
+                # =========================
+                if st.button(f"📋 Checklist {row['id']}", key=f"check_{row['id']}"):
+                    st.session_state[f"abrir_{row['id']}"] = True
+    
+                # =========================
                 # CHECKLIST
                 # =========================
-                if st.button(f"📋 Checklist {row['id']}"):
+                if st.session_state[f"abrir_{row['id']}"]:
     
                     itens = pd.read_sql("""
                         SELECT * FROM evento_itens WHERE evento_id=?
@@ -1068,39 +1080,80 @@ elif menu == "Orçamentos":
                     else:
                         df_checklist = itens.copy()
     
-                        # Categoria automática
-                        def definir_categoria(unidade):
-                            if unidade == "garrafas":
+                        # =========================
+                        # CATEGORIA INTELIGENTE
+                        # =========================
+                        def definir_categoria(produto):
+    
+                            produto = produto.lower()
+    
+                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça"]):
                                 return "Bebidas"
-                            elif unidade == "g":
+    
+                            elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango"]):
                                 return "Frutas"
+    
+                            elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine"]):
+                                return "Insumos"
+    
                             else:
                                 return "Outros"
     
-                        df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
     
-                        # Colunas operacionais
+                        # =========================
+                        # COLUNAS OPERACIONAIS
+                        # =========================
                         df_checklist["Início"] = ""
                         df_checklist["Fim"] = ""
     
-                        st.dataframe(
-                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
-                            .rename(columns={
-                                "produto": "Produto",
-                                "quantidade": "Qtde"
-                            })
+                        # =========================
+                        # EDITOR
+                        # =========================
+                        df_editado = st.data_editor(
+                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]],
+                            num_rows="dynamic",
+                            use_container_width=True,
+                            key=f"editor_{row['id']}"
                         )
     
+                        # =========================
+                        # SALVAR EDIÇÃO
+                        # =========================
+                        if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
+    
+                            cursor.execute("DELETE FROM evento_itens WHERE evento_id=?", (row["id"],))
+    
+                            for _, item in df_editado.iterrows():
+                                cursor.execute("""
+                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade)
+                                    VALUES (?, ?, ?, ?)
+                                """, (
+                                    row["id"],
+                                    item["produto"],
+                                    item["quantidade"],
+                                    "un"
+                                ))
+    
+                            conn.commit()
+                            st.success("Checklist atualizado!")
+    
+                # =========================
+                # VALOR
+                # =========================
                 st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
     
+                # =========================
+                # AÇÕES
+                # =========================
                 col1, col2 = st.columns(2)
     
-                if col1.button(f"✅ Aprovar {row['id']}"):
+                if col1.button(f"✅ Aprovar {row['id']}", key=f"aprovar_{row['id']}"):
                     cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
                     conn.commit()
                     st.rerun()
     
-                if col2.button(f"🗑 Excluir {row['id']}"):
+                if col2.button(f"🗑 Excluir {row['id']}", key=f"excluir_{row['id']}"):
                     cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
                     conn.commit()
                     st.rerun()
