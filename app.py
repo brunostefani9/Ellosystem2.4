@@ -1031,12 +1031,8 @@ elif menu == "Orçamentos":
             
             st.metric("💰 Preço sugerido", f"R$ {preco_venda:,.2f}")
             
-            # 💰 VALOR POR CONVIDADO
-            if num_convidados > 0:
-                custo_por_convidado = preco_venda / num_convidados  # divide o preço total pelo número de convidados
-            else:
-                custo_por_convidado = 0
-            
+           # 💰 VALOR POR CONVIDADO
+            custo_por_convidado = preco_venda / num_convidados if num_convidados > 0 else 0
             st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:,.2f}")
             
             # 💾 SALVAR ORÇAMENTO
