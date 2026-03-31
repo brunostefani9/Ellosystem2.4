@@ -136,6 +136,12 @@ try:
 except:
     pass
 
+try:
+    cursor.execute("ALTER TABLE eventos ADD COLUMN custo_por_convidado REAL")
+    conn.commit()
+except:
+    pass
+
 # -------------------------
 # SIDEBAR
 # -------------------------
@@ -1049,6 +1055,7 @@ elif menu == "Orçamentos":
                         num_convidados,
                         custo_total,
                         preco_venda,
+                        custo_por_convidado,
                         "pendente"
                     ))
                 
