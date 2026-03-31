@@ -1049,6 +1049,7 @@ elif menu == "Orçamentos":
                         num_convidados,
                         custo_total,
                         preco_venda,
+                        "pendente"
                     ))
                 
                     conn.commit()
