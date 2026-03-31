@@ -1259,49 +1259,76 @@ elif menu == "Orçamentos":
         
 elif menu == "Vendas":
 
-    st.title("📊 Vendas")
+    st.title("💰 Vendas")
 
-    df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='finalizado'", conn)
+    tab_vendas, tab_registro = st.tabs(["📊 Resumo", "📁 Registro"])
 
-    if df_eventos.empty:
-        st.info("Nenhuma venda registrada")
-    else:
-        for _, row in df_eventos.iterrows():
+    # =========================
+    # 📊 RESUMO (FATURAMENTO)
+    # =========================
+    with tab_vendas:
 
-            st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-            st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+        df_vendas = pd.read_sql("""
+            SELECT * FROM eventos 
+            WHERE status IN ('aprovado', 'finalizado')
+        """, conn)
 
-            if st.button(f"📋 Checklist venda {row['id']}"):
+        if df_vendas.empty:
+            st.info("Nenhuma venda registrada")
+        else:
+            df_vendas["data"] = pd.to_datetime(df_vendas["data"])
 
-                itens = pd.read_sql("""
-                    SELECT * FROM evento_itens WHERE evento_id=?
-                """, conn, params=(row["id"],))
+            # filtro por mês
+            meses = df_vendas["data"].dt.to_period("M").astype(str).unique()
+            mes_selecionado = st.selectbox("Selecionar mês", sorted(meses))
 
-                if not itens.empty:
-                    df_checklist = itens.copy()
+            df_filtrado = df_vendas[
+                df_vendas["data"].dt.to_period("M").astype(str) == mes_selecionado
+            ]
 
-                    def definir_categoria(unidade):
-                        if unidade == "garrafas":
-                            return "Bebidas"
-                        elif unidade == "g":
-                            return "Frutas"
-                        else:
-                            return "Outros"
+            faturamento = df_filtrado["venda"].sum()
 
-                    df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
-                    df_checklist["Início"] = ""
-                    df_checklist["Fim"] = ""
+            st.metric("💰 Faturamento do mês", f"R$ {faturamento:,.2f}")
 
-                    st.dataframe(
-                        df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
-                        .rename(columns={
-                            "produto": "Produto",
-                            "quantidade": "Qtde"
-                        })
-                    )
+            st.dataframe(df_filtrado[["cliente", "data", "cidade", "venda"]])
 
-            st.divider()
+    # =========================
+    # 📁 REGISTRO COMPLETO
+    # =========================
+    with tab_registro:
 
+        st.subheader("📁 Histórico de Eventos")
+
+        df_todos = pd.read_sql("""
+            SELECT * FROM eventos 
+            WHERE status IN ('aprovado', 'finalizado')
+            ORDER BY data DESC
+        """, conn)
+
+        if df_todos.empty:
+            st.info("Nenhum evento registrado")
+        else:
+            for _, row in df_todos.iterrows():
+
+                st.write(f"""
+                **👤 {row['cliente']}**  
+                📅 {row['data']} | 📍 {row['cidade']}  
+                💰 R$ {row['venda']:,.2f}
+                """)
+
+                # botão checklist
+                if st.button(f"📋 Ver Checklist {row['id']}", key=f"check_venda_{row['id']}"):
+
+                    itens = pd.read_sql("""
+                        SELECT * FROM evento_itens WHERE evento_id=?
+                    """, conn, params=(row["id"],))
+
+                    if itens.empty:
+                        st.warning("Sem itens")
+                    else:
+                        st.dataframe(itens[["produto", "quantidade", "unidade"]])
+
+                st.divider()
 elif menu == "Pacotes":
 
     st.title("📦 Pacotes / Serviços")
