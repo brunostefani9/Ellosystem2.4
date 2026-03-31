@@ -124,6 +124,18 @@ def normalizar_nome(nome):
         return ""
     return nome.strip().lower()
 
+try:
+    cursor.execute("ALTER TABLE eventos ADD COLUMN telefone TEXT")
+    cursor.execute("ALTER TABLE eventos ADD COLUMN endereco TEXT")
+    cursor.execute("ALTER TABLE eventos ADD COLUMN tipo_evento TEXT")
+    cursor.execute("ALTER TABLE eventos ADD COLUMN hora_chegada TEXT")
+    cursor.execute("ALTER TABLE eventos ADD COLUMN hora_inicio TEXT")
+    cursor.execute("ALTER TABLE eventos ADD COLUMN hora_convidados TEXT")
+    cursor.execute("ALTER TABLE eventos ADD COLUMN convidados INTEGER")
+    conn.commit()
+except:
+    pass
+
 # -------------------------
 # SIDEBAR
 # -------------------------
@@ -813,6 +825,23 @@ elif menu == "Orçamentos":
         data_evento = col2.date_input("Data do evento")
         cidade_evento = col3.text_input("Cidade / Local")
 
+        telefone = st.text_input("📞 Telefone")
+
+        endereco = st.text_input("📍 Endereço do evento")
+        
+        tipo_evento = st.selectbox("🎉 Tipo de evento", [
+            "Casamento", "Aniversário", "Corporativo", "Festa privada", "Outro"
+        ])
+        
+        col1, col2 = st.columns(2)
+        
+        hora_chegada = col1.time_input("🕒 Chegada da equipe")
+        hora_inicio = col2.time_input("🍸 Início do serviço")
+        
+        hora_convidados = st.time_input("👥 Chegada dos convidados")
+        
+        num_convidados = st.number_input("👥 Número de convidados", min_value=1)
+        
         modo_calculo = st.radio(
             "Modo de cálculo",
             ["Evento inteiro", "Por hora"]
@@ -999,17 +1028,65 @@ elif menu == "Orçamentos":
                 if st.button("💾 Salvar orçamento"):
 
                     cursor.execute("""
-                        INSERT INTO eventos (cliente, data, cidade, custo, venda, status)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO eventos (
+                            cliente, data, cidade,
+                            telefone, endereco, tipo_evento,
+                            hora_chegada, hora_inicio, hora_convidados,
+                            convidados,
+                            custo, venda, status
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         nome_cliente,
                         str(data_evento),
                         cidade_evento,
+                        telefone,
+                        endereco,
+                        tipo_evento,
+                        str(hora_chegada),
+                        str(hora_inicio),
+                        str(hora_convidados),
+                        num_convidados,
+                        custo_total,
+                        preco_venda,
+                    ))
+                
+                    conn.commit()
+                    evento_id = cursor.lastrowid
+                
+                    # 💰 cálculo correto FORA do SQL
+                    if num_convidados > 0:
+                        custo_por_convidado = preco_venda / num_convidados
+                    else:
+                        custo_por_convidado = 0
+                
+                    st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:.2f}")
+
+                    cursor.execute("""
+                        INSERT INTO eventos (
+                            cliente, data, cidade,
+                            telefone, endereco, tipo_evento,
+                            hora_chegada, hora_inicio, hora_convidados,
+                            convidados,
+                            custo, venda, status
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        nome_cliente,
+                        str(data_evento),
+                        cidade_evento,
+                        telefone,
+                        endereco,
+                        tipo_evento,
+                        str(hora_chegada),
+                        str(hora_inicio),
+                        str(hora_convidados),
+                        num_convidados,
                         custo_total,
                         preco_venda,
                         "pendente"
                     ))
-
+                    
                     conn.commit()
                     evento_id = cursor.lastrowid
 
@@ -1101,11 +1178,22 @@ elif menu == "Orçamentos":
     
                     st.markdown(f"""
                     ### 📍 Informações do Evento
-    
-                    **Cliente:** {row['cliente']}  
-                    **Data:** {row['data']}  
-                    **Cidade:** {row['cidade']}  
-                    **Valor:** R$ {row['venda']:,.2f}
+                    
+                    **👤 Cliente:** {row['cliente']}  
+                    📞 {row['telefone']}  
+                    
+                    📅 {row['data']}  
+                    📍 {row['cidade']} - {row['endereco']}  
+                    
+                    🎉 Tipo: {row['tipo_evento']}  
+                    
+                    🕒 Chegada equipe: {row['hora_chegada']}  
+                    🍸 Início serviço: {row['hora_inicio']}  
+                    👥 Convidados chegam: {row['hora_convidados']}  
+                    
+                    👥 Nº convidados: {row['convidados']}  
+                    
+                    💰 Valor: R$ {row['venda']:,.2f}
                     """)
     
                     if itens.empty:
@@ -1159,13 +1247,14 @@ elif menu == "Orçamentos":
     
                             for _, item in df_editado.iterrows():
                                 cursor.execute("""
-                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade)
-                                    VALUES (?, ?, ?, ?)
+                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
+                                    VALUES (?, ?, ?, ?, ?)
                                 """, (
                                     row["id"],
                                     item["produto"],
                                     item["quantidade"],
-                                    "un"
+                                    item.get("unidade", "un"),
+                                    item["Categoria"]
                                 ))
     
                             conn.commit()
@@ -1235,10 +1324,13 @@ elif menu == "Orçamentos":
                             else:
                                 return "Outros"
     
-                        df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+                        df_checklist = itens.copy()
+
+                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria_global)
+                        
                         df_checklist["Início"] = ""
                         df_checklist["Fim"] = ""
-    
+                        
                         st.dataframe(
                             df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
                             .rename(columns={
@@ -1276,7 +1368,7 @@ elif menu == "Vendas":
         if df_vendas.empty:
             st.info("Nenhuma venda registrada")
         else:
-            df_vendas["data"] = pd.to_datetime(df_vendas["data"])
+            df_vendas["data"] = pd.to_datetime(df_vendas["data"], errors="coerce")
 
             # filtro por mês
             meses = df_vendas["data"].dt.to_period("M").astype(str).unique()
