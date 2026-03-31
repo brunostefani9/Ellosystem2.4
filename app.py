@@ -1032,65 +1032,82 @@ elif menu == "Orçamentos":
     # =========================
     with tab2:
 
-        st.subheader("📋 Orçamentos Pendentes")
-    
-        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+        with tab2:
 
-        if df_eventos.empty:
-            st.info("Nenhum orçamento pendente")
-        else:
-            for _, row in df_eventos.iterrows():
-                
-                st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-            
-                # =========================
-                # CHECKLIST
-                # =========================
-                if st.button(f"📋 Checklist {row['id']}"):
-            
-                    itens = pd.read_sql("""
-                        SELECT * FROM evento_itens WHERE evento_id=?
-                    """, conn, params=(row["id"],))
-            
-                    st.subheader("📋 Checklist do Evento")
-            
-                    st.markdown(f"""
-                    ### 📍 Informações do Evento
-            
-                    **Cliente:** {row['cliente']}  
-                    **Data:** {row['data']}  
-                    **Cidade:** {row['cidade']}  
-                    **Valor:** R$ {row['venda']:,.2f}
-                    """)
-            
-                    if itens.empty:
-                        st.warning("Nenhum item encontrado")
-                    else:
-                        df_checklist = itens.copy()
-            
-                        df_checklist.rename(columns={
+    st.subheader("📋 Orçamentos Pendentes")
+
+    df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+
+    if df_eventos.empty:
+        st.info("Nenhum orçamento pendente")
+    else:
+        for _, row in df_eventos.iterrows():
+
+            st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+
+            # =========================
+            # CHECKLIST
+            # =========================
+            if st.button(f"📋 Checklist {row['id']}"):
+
+                itens = pd.read_sql("""
+                    SELECT * FROM evento_itens WHERE evento_id=?
+                """, conn, params=(row["id"],))
+
+                st.subheader("📋 Checklist do Evento")
+
+                st.markdown(f"""
+                ### 📍 Informações do Evento
+
+                **Cliente:** {row['cliente']}  
+                **Data:** {row['data']}  
+                **Cidade:** {row['cidade']}  
+                **Valor:** R$ {row['venda']:,.2f}
+                """)
+
+                if itens.empty:
+                    st.warning("Nenhum item encontrado")
+                else:
+                    df_checklist = itens.copy()
+
+                    # Categoria automática
+                    def definir_categoria(unidade):
+                        if unidade == "garrafas":
+                            return "Bebidas"
+                        elif unidade == "g":
+                            return "Frutas"
+                        else:
+                            return "Outros"
+
+                    df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+
+                    # Colunas operacionais
+                    df_checklist["Início"] = ""
+                    df_checklist["Fim"] = ""
+
+                    st.dataframe(
+                        df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
+                        .rename(columns={
                             "produto": "Produto",
-                            "quantidade": "Quantidade",
-                            "unidade": "Unidade"
-                        }, inplace=True)
-            
-                        st.dataframe(df_checklist[["Produto", "Quantidade", "Unidade"]])
-            
-                st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
-    
-                col1, col2 = st.columns(2)
-    
-                if col1.button(f"✅ Aprovar {row['id']}"):
-                    cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
-                    conn.commit()
-                    st.rerun()
-    
-                if col2.button(f"🗑 Excluir {row['id']}"):
-                    cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
-                    conn.commit()
-                    st.rerun()
-    
-                st.divider()
+                            "quantidade": "Qtde"
+                        })
+                    )
+
+            st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+
+            col1, col2 = st.columns(2)
+
+            if col1.button(f"✅ Aprovar {row['id']}"):
+                cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
+                conn.commit()
+                st.rerun()
+
+            if col2.button(f"🗑 Excluir {row['id']}"):
+                cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
+                conn.commit()
+                st.rerun()
+
+            st.divider()
 
     # =========================
     # ABA 3 - APROVADOS
@@ -1098,17 +1115,54 @@ elif menu == "Orçamentos":
     with tab3:
 
         st.subheader("✅ Eventos Aprovados")
-
+    
         df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='aprovado'", conn)
-
+    
         if df_eventos.empty:
             st.info("Nenhum evento aprovado")
         else:
             for _, row in df_eventos.iterrows():
-
+    
                 st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-                st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
-
+    
+                # CHECKLIST (igual ao anterior)
+                if st.button(f"📋 Checklist aprovado {row['id']}"):
+    
+                    itens = pd.read_sql("""
+                        SELECT * FROM evento_itens WHERE evento_id=?
+                    """, conn, params=(row["id"],))
+    
+                    st.subheader("📋 Checklist do Evento")
+    
+                    st.markdown(f"""
+                    **Cliente:** {row['cliente']}  
+                    **Data:** {row['data']}  
+                    **Cidade:** {row['cidade']}  
+                    """)
+    
+                    if not itens.empty:
+                        df_checklist = itens.copy()
+    
+                        def definir_categoria(unidade):
+                            if unidade == "garrafas":
+                                return "Bebidas"
+                            elif unidade == "g":
+                                return "Frutas"
+                            else:
+                                return "Outros"
+    
+                        df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+                        df_checklist["Início"] = ""
+                        df_checklist["Fim"] = ""
+    
+                        st.dataframe(
+                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
+                            .rename(columns={
+                                "produto": "Produto",
+                                "quantidade": "Qtde"
+                            })
+                        )
+    
                 if st.button(f"✔ Finalizar {row['id']}"):
                     cursor.execute(
                         "UPDATE eventos SET status='finalizado' WHERE id=?",
@@ -1116,41 +1170,51 @@ elif menu == "Orçamentos":
                     )
                     conn.commit()
                     st.rerun()
-
+    
                 st.divider()
         
 elif menu == "Vendas":
 
-    
-    st.title("💰 Vendas")
+    st.title("📊 Vendas")
 
-    df_vendas = pd.read_sql(
-        "SELECT * FROM eventos WHERE status='aprovado'",
-        conn
-    )
+    df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='finalizado'", conn)
 
-    if df_vendas.empty:
-        st.info("Nenhuma venda ainda")
+    if df_eventos.empty:
+        st.info("Nenhuma venda registrada")
     else:
-
-        # 🔥 MÉTRICAS
-        total_vendas = df_vendas["venda"].sum()
-        qtd_eventos = len(df_vendas)
-        ticket_medio = total_vendas / qtd_eventos if qtd_eventos > 0 else 0
-
-        col1, col2, col3 = st.columns(3)
-
-        col1.metric("💰 Faturamento", f"R$ {total_vendas:,.2f}")
-        col2.metric("📅 Eventos Fechados", qtd_eventos)
-        col3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
-
-        st.divider()
-
-        # 📋 LISTA DE VENDAS
-        for _, row in df_vendas.iterrows():
+        for _, row in df_eventos.iterrows():
 
             st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-            st.write(f"💰 R$ {row['venda']:,.2f}")
+            st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
+
+            if st.button(f"📋 Checklist venda {row['id']}"):
+
+                itens = pd.read_sql("""
+                    SELECT * FROM evento_itens WHERE evento_id=?
+                """, conn, params=(row["id"],))
+
+                if not itens.empty:
+                    df_checklist = itens.copy()
+
+                    def definir_categoria(unidade):
+                        if unidade == "garrafas":
+                            return "Bebidas"
+                        elif unidade == "g":
+                            return "Frutas"
+                        else:
+                            return "Outros"
+
+                    df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+                    df_checklist["Início"] = ""
+                    df_checklist["Fim"] = ""
+
+                    st.dataframe(
+                        df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
+                        .rename(columns={
+                            "produto": "Produto",
+                            "quantidade": "Qtde"
+                        })
+                    )
 
             st.divider()
 
