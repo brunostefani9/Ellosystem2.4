@@ -1097,8 +1097,8 @@ elif menu == "Orçamentos":
                                 "Bebidas"
                             ))
             
-                conn.commit()
-                st.success("✅ Orçamento salvo com sucesso!")
+                    conn.commit()
+                    st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
                     # SALVAR FRUTAS / INSUMOS
                     # =========================
