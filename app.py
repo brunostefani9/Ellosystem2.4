@@ -1016,11 +1016,11 @@ elif menu == "Orçamentos":
 
                         st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
-                # =========================
-                # TOTAL
-                # =========================
-                st.divider()
-                
+            # =========================
+            # TOTAL
+            # =========================
+            st.divider()
+
                 custo_total = custo_bebidas + custo_frutas
                 
                 st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
@@ -1066,27 +1066,26 @@ elif menu == "Orçamentos":
                         preco_venda,
                         "pendente"
                     ))
-                    
+                
                     conn.commit()
                     evento_id = cursor.lastrowid
-
-                st.success("✅ Orçamento salvo com sucesso!")
+                
                     # =========================
                     # SALVAR BEBIDAS
                     # =========================
                     for item, dados in ingredientes_bebidas.items():
                         marca = escolhas_marcas[item]
                         qtd_ml = dados["qtd"]
-                    
+                
                         result = df_bebidas[df_bebidas["nome"] == marca]
-                    
+                
                         if not result.empty:
                             volume = result.iloc[0]["quantidade"]
-                    
+                
                             if volume > 0:
                                 qtd_real = qtd_ml / volume
                                 qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
-                    
+                
                                 cursor.execute("""
                                     INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
                                     VALUES (?, ?, ?, ?, ?)
@@ -1097,7 +1096,9 @@ elif menu == "Orçamentos":
                                     "garrafas",
                                     "Bebidas"
                                 ))
-                    
+                
+                    conn.commit()
+                    st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
                     # SALVAR FRUTAS / INSUMOS
                     # =========================
