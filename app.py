@@ -1381,7 +1381,7 @@ with tab3:
 
             st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
 
-            if st.button(f"📋 Checklist aprovado {row['id']}", key=f"check_aprov_{row['id']}"
+            if st.button(f"📋 Checklist aprovado {row['id']}", key=f"check_aprov_{row['id']}"):
 
                 itens = pd.read_sql("""
                     SELECT * FROM evento_itens WHERE evento_id=?
