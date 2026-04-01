@@ -156,6 +156,7 @@ menu = st.sidebar.radio(
 "Estoque",
 "Receitas",
 "Orçamentos",
+"Cachês",
 "Vendas",
 "Pacotes"
 ]
@@ -1390,7 +1391,73 @@ elif menu == "Orçamentos":
                     st.rerun()
     
                 st.divider()
-        
+
+
+elif menu == "Cachês":
+
+    st.title("👥 Cálculo de Cachês")
+
+    # =========================
+    # EQUIPE
+    # =========================
+    st.subheader("Equipe do Evento")
+
+    col1, col2, col3 = st.columns(3)
+
+    qtd_bartenders = col1.number_input("🍸 Bartenders", min_value=0, value=2)
+    qtd_auxiliares = col2.number_input("🧰 Auxiliares", min_value=0, value=1)
+    qtd_coordenador = col3.number_input("🎯 Coordenador", min_value=0, value=1)
+
+    # =========================
+    # VALORES
+    # =========================
+    st.subheader("Valores de Cachê")
+
+    col1, col2, col3 = st.columns(3)
+
+    valor_bartender = col1.number_input("💰 Cachê Bartender", value=150.0)
+    valor_auxiliar = col2.number_input("💰 Cachê Auxiliar", value=100.0)
+    valor_coordenador = col3.number_input("💰 Cachê Coordenador", value=250.0)
+
+    # =========================
+    # EXTRAS
+    # =========================
+    st.subheader("Extras")
+
+    col1, col2 = st.columns(2)
+
+    horas_extra = col1.number_input("⏱️ Horas extras", min_value=0, value=0)
+    valor_hora_extra = col2.number_input("💰 Valor por hora extra", value=30.0)
+
+    distancia = st.number_input("🛣️ Distância (km)", min_value=0.0, value=0.0)
+    valor_km = st.number_input("💰 Valor por km", value=1.5)
+
+    # =========================
+    # CÁLCULO
+    # =========================
+    total_caches = (
+        qtd_bartenders * valor_bartender +
+        qtd_auxiliares * valor_auxiliar +
+        qtd_coordenador * valor_coordenador
+    )
+
+    total_horas_extra = horas_extra * valor_hora_extra
+    total_km = distancia * valor_km
+
+    total_final = total_caches + total_horas_extra + total_km
+
+    # =========================
+    # RESULTADO
+    # =========================
+    st.divider()
+
+    st.metric("👥 Cachês base", f"R$ {total_caches:,.2f}")
+    st.metric("⏱️ Horas extras", f"R$ {total_horas_extra:,.2f}")
+    st.metric("🛣️ Deslocamento", f"R$ {total_km:,.2f}")
+
+    st.metric("💸 Total geral da equipe", f"R$ {total_final:,.2f}")
+
+
 elif menu == "Vendas":
 
     st.title("💰 Vendas")
