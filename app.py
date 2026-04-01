@@ -1398,64 +1398,74 @@ elif menu == "Cachês":
     st.title("👥 Cálculo de Cachês")
 
     # =========================
-    # EQUIPE
+    # QUANTIDADE DE EQUIPE
     # =========================
-    st.subheader("Equipe do Evento")
+    st.subheader("Equipe")
 
     col1, col2, col3 = st.columns(3)
 
     qtd_bartenders = col1.number_input("🍸 Bartenders", min_value=0, value=2)
-    qtd_auxiliares = col2.number_input("🧰 Auxiliares", min_value=0, value=1)
-    qtd_coordenador = col3.number_input("🎯 Coordenador", min_value=0, value=1)
+    qtd_barbacks = col2.number_input("🧰 Barbacks", min_value=0, value=1)
+    qtd_lider = col3.number_input("👑 Líder", min_value=0, max_value=1, value=1)
 
     # =========================
-    # VALORES
+    # VALORES (EDITÁVEIS)
     # =========================
-    st.subheader("Valores de Cachê")
+    st.subheader("💰 Valores de Cachê")
 
     col1, col2, col3 = st.columns(3)
 
-    valor_bartender = col1.number_input("💰 Cachê Bartender", value=150.0)
-    valor_auxiliar = col2.number_input("💰 Cachê Auxiliar", value=100.0)
-    valor_coordenador = col3.number_input("💰 Cachê Coordenador", value=250.0)
+    valor_bartender = col1.number_input("Bartender", value=250.0)
+    valor_barback = col2.number_input("Barback", value=180.0)
+    valor_lider = col3.number_input("Líder", value=300.0)
 
     # =========================
     # EXTRAS
     # =========================
-    st.subheader("Extras")
+    st.subheader("🚗 Extras")
 
     col1, col2 = st.columns(2)
 
-    horas_extra = col1.number_input("⏱️ Horas extras", min_value=0, value=0)
-    valor_hora_extra = col2.number_input("💰 Valor por hora extra", value=30.0)
+    qtd_carro = col1.number_input("🚗 Pessoas com carro", min_value=0, value=1)
+    valor_carro = col2.number_input("💰 Ajuda custo carro", value=100.0)
 
-    distancia = st.number_input("🛣️ Distância (km)", min_value=0.0, value=0.0)
-    valor_km = st.number_input("💰 Valor por km", value=1.5)
+    # =========================
+    # HORAS (CONTROLE)
+    # =========================
+    st.subheader("⏱️ Duração")
+
+    horas = st.number_input("Horas totais do evento (incluindo montagem)", value=7.0)
+    limite_horas = st.number_input("Horas inclusas no cachê", value=7.0)
+    valor_hora_extra = st.number_input("💰 Valor hora extra", value=40.0)
 
     # =========================
     # CÁLCULO
     # =========================
-    total_caches = (
+    total_base = (
         qtd_bartenders * valor_bartender +
-        qtd_auxiliares * valor_auxiliar +
-        qtd_coordenador * valor_coordenador
+        qtd_barbacks * valor_barback +
+        qtd_lider * valor_lider
     )
 
-    total_horas_extra = horas_extra * valor_hora_extra
-    total_km = distancia * valor_km
+    # hora extra automática
+    horas_extra = max(0, horas - limite_horas)
+    custo_horas_extra = horas_extra * valor_hora_extra * (qtd_bartenders + qtd_barbacks + qtd_lider)
 
-    total_final = total_caches + total_horas_extra + total_km
+    # carro
+    custo_carro = qtd_carro * valor_carro
+
+    total_final = total_base + custo_horas_extra + custo_carro
 
     # =========================
     # RESULTADO
     # =========================
     st.divider()
 
-    st.metric("👥 Cachês base", f"R$ {total_caches:,.2f}")
-    st.metric("⏱️ Horas extras", f"R$ {total_horas_extra:,.2f}")
-    st.metric("🛣️ Deslocamento", f"R$ {total_km:,.2f}")
+    st.metric("👥 Cachê base equipe", f"R$ {total_base:,.2f}")
+    st.metric("⏱️ Horas extras", f"R$ {custo_horas_extra:,.2f}")
+    st.metric("🚗 Transporte", f"R$ {custo_carro:,.2f}")
 
-    st.metric("💸 Total geral da equipe", f"R$ {total_final:,.2f}")
+    st.metric("💸 Total geral equipe", f"R$ {total_final:,.2f}")
 
 
 elif menu == "Vendas":
