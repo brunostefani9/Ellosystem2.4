@@ -1365,105 +1365,105 @@ elif menu == "Orçamentos":
     
                 st.divider()
 
-# =========================
-# ABA 3 - APROVADOS
-# =========================
-with tab3:
-
-    st.subheader("✅ Eventos Aprovados")
-
-    df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='aprovado'", conn)
-
-    if df_eventos.empty:
-        st.info("Nenhum evento aprovado")
-    else:
-        for _, row in df_eventos.iterrows():
-
-            st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
-
-            if st.button(f"📋 Checklist aprovado {row['id']}", key=f"check_aprov_{row['id']}"):
-
-                itens = pd.read_sql("""
-                    SELECT * FROM evento_itens WHERE evento_id=?
-                """, conn, params=(row["id"],))
-
-                st.subheader("📋 Checklist do Evento")
-
+    # =========================
+    # ABA 3 - APROVADOS
+    # =========================
+    with tab3:
+    
+        st.subheader("✅ Eventos Aprovados")
+    
+        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='aprovado'", conn)
+    
+        if df_eventos.empty:
+            st.info("Nenhum evento aprovado")
+        else:
+            for _, row in df_eventos.iterrows():
+    
+                st.write(f"👤 {row['cliente']} | 📅 {row['data']} | 📍 {row['cidade']}")
+    
+                if st.button(f"📋 Checklist aprovado {row['id']}", key=f"check_aprov_{row['id']}"):
+    
+                    itens = pd.read_sql("""
+                        SELECT * FROM evento_itens WHERE evento_id=?
+                    """, conn, params=(row["id"],))
+    
+                    st.subheader("📋 Checklist do Evento")
+    
+                    # =========================
+                    # INFO DO EVENTO (SEM VALOR)
+                    # =========================
+                    st.markdown(f"""
+                    ### 📍 Informações do Evento
+    
+                    **👤 Cliente:** {row['cliente']}  
+                    📞 {row['telefone']}  
+    
+                    📅 {row['data']}  
+                    📍 {row['cidade']} - {row['endereco']}  
+    
+                    🎉 Tipo: {row['tipo_evento']}  
+    
+                    🕒 Chegada equipe: {row['hora_chegada']}  
+                    🍸 Início serviço: {row['hora_inicio']}  
+                    👥 Convidados chegam: {row['hora_convidados']}  
+    
+                    👥 Nº convidados: {row['convidados']}  
+                    """)
+    
+                    # =========================
+                    # 👥 EQUIPE
+                    # =========================
+                    st.markdown("### 👥 Equipe")
+    
+                    if "equipe" in row and row["equipe"]:
+                        nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
+                        for nome in nomes:
+                            st.write(f"✔ {nome}")
+                    else:
+                        st.write("Sem equipe definida")
+    
+                    # =========================
+                    # ITENS
+                    # =========================
+                    if not itens.empty:
+    
+                        df_checklist = itens.copy()
+    
+                        def definir_categoria(unidade):
+                            if unidade == "garrafas":
+                                return "Bebidas"
+                            elif unidade == "g":
+                                return "Frutas"
+                            else:
+                                return "Outros"
+    
+                        df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+    
+                        df_checklist["Início"] = ""
+                        df_checklist["Fim"] = ""
+    
+                        st.dataframe(
+                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
+                            .rename(columns={
+                                "produto": "Produto",
+                                "quantidade": "Qtde"
+                            })
+                        )
+                    else:
+                        st.warning("Nenhum item encontrado")
+    
                 # =========================
-                # INFO DO EVENTO (SEM VALOR)
+                # FINALIZAR EVENTO
                 # =========================
-                st.markdown(f"""
-                ### 📍 Informações do Evento
-
-                **👤 Cliente:** {row['cliente']}  
-                📞 {row['telefone']}  
-
-                📅 {row['data']}  
-                📍 {row['cidade']} - {row['endereco']}  
-
-                🎉 Tipo: {row['tipo_evento']}  
-
-                🕒 Chegada equipe: {row['hora_chegada']}  
-                🍸 Início serviço: {row['hora_inicio']}  
-                👥 Convidados chegam: {row['hora_convidados']}  
-
-                👥 Nº convidados: {row['convidados']}  
-                """)
-
-                # =========================
-                # 👥 EQUIPE
-                # =========================
-                st.markdown("### 👥 Equipe")
-
-                if "equipe" in row and row["equipe"]:
-                    nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
-                    for nome in nomes:
-                        st.write(f"✔ {nome}")
-                else:
-                    st.write("Sem equipe definida")
-
-                # =========================
-                # ITENS
-                # =========================
-                if not itens.empty:
-
-                    df_checklist = itens.copy()
-
-                    def definir_categoria(unidade):
-                        if unidade == "garrafas":
-                            return "Bebidas"
-                        elif unidade == "g":
-                            return "Frutas"
-                        else:
-                            return "Outros"
-
-                    df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
-
-                    df_checklist["Início"] = ""
-                    df_checklist["Fim"] = ""
-
-                    st.dataframe(
-                        df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
-                        .rename(columns={
-                            "produto": "Produto",
-                            "quantidade": "Qtde"
-                        })
+                if st.button(f"✔ Finalizar {row['id']}", key=f"fin_{row['id']}"):
+                    cursor.execute(
+                        "UPDATE eventos SET status='finalizado' WHERE id=?",
+                        (row["id"],)
                     )
-                else:
-                    st.warning("Nenhum item encontrado")
-
-            # =========================
-            # FINALIZAR EVENTO
-            # =========================
-            if st.button(f"✔ Finalizar {row['id']}", key=f"fin_{row['id']}"):
-                cursor.execute(
-                    "UPDATE eventos SET status='finalizado' WHERE id=?",
-                    (row["id"],)
-                )
-                conn.commit()
-                st.rerun()
-
-            st.divider()
+                    conn.commit()
+                    st.rerun()
+    
+                st.divider()
 
 
 elif menu == "Cachês":
