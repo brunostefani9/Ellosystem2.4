@@ -845,8 +845,6 @@ elif menu == "Orçamentos":
         hora_inicio = col2.time_input("🍸 Início do serviço")
         
         hora_convidados = st.time_input("👥 Chegada dos convidados")
-
-        num_convidados = col1.number_input("Convidados", min_value=1, value=50)
         
         modo_calculo = st.radio(
             "Modo de cálculo",
@@ -860,6 +858,7 @@ elif menu == "Orçamentos":
 
         col1, col2, col3 = st.columns(3)
 
+        num_convidados = col1.number_input("Convidados", min_value=1, value=50)
         horas = col2.number_input("Horas de evento", min_value=1, value=4)
         drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
@@ -867,7 +866,7 @@ elif menu == "Orçamentos":
             total_drinks = num_convidados * drinks_por_hora
         else:
             total_drinks = num_convidados * horas * drinks_por_hora
-
+            
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
         # =========================
