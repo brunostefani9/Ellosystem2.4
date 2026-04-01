@@ -860,14 +860,13 @@ elif menu == "Orçamentos":
 
         col1, col2, col3 = st.columns(3)
 
-        convidados = col1.number_input("Convidados", min_value=1, value=50)
         horas = col2.number_input("Horas de evento", min_value=1, value=4)
         drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
         if modo_calculo == "Evento inteiro":
-            total_drinks = convidados * drinks_por_hora
+            total_drinks = num_convidados * drinks_por_hora
         else:
-            total_drinks = convidados * horas * drinks_por_hora
+            total_drinks = num_convidados * horas * drinks_por_hora
 
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
@@ -1018,33 +1017,28 @@ elif menu == "Orçamentos":
                         st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
             # =========================
-            # TOTAL (CORREÇÃO DEFINITIVA)
+            # TOTAL
             # =========================
             st.divider()
             
-            # 1. Garante que o custo_total existe
+            # garante que existe
             if 'custo_total' not in locals():
                 custo_total = 0
             
             st.metric("💰 Custo Total do Evento (Bruto)", f"R$ {custo_total:,.2f}")
             
-            # 2. Margem de Lucro
+            # margem
             margem = st.slider("Margem de lucro (%)", 0, 300, 100)
             preco_venda = custo_total * (1 + margem / 100)
+            
             st.metric("💰 Preço Final Sugerido", f"R$ {preco_venda:,.2f}")
             
-            # 3. CÁLCULO POR CONVIDADO (O ajuste está aqui)
-            # Vamos usar a variável 'num_convidados' que você criou lá no início do formulário
-            if 'num_convidados' in locals() and num_convidados > 0:
+            # ✅ CÁLCULO CORRETO POR CONVIDADO (SIMPLES E LIMPO)
+            if num_convidados > 0:
                 valor_por_convidado = preco_venda / num_convidados
             else:
-                # Se 'num_convidados' falhar, tenta usar a variável 'convidados'
-                # que aparece em outra parte do seu código
-                try:
-                    valor_por_convidado = preco_venda / convidados if convidados > 0 else 0
-                except:
-                    valor_por_convidado = 0
-                
+                valor_por_convidado = 0
+            
             st.metric("💰 Valor cobrado por convidado", f"R$ {valor_por_convidado:,.2f}")
             
             
