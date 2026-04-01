@@ -1011,15 +1011,15 @@ elif menu == "Orçamentos":
 
                         custo_item = qtd_gramas * custo_por_grama
                         custo_frutas += custo_item
-                        custo_total = custo_bebidas + custo_frutas + custo_extras
 
                         st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
+
             # =========================
-            # TOTAL
+            # CUSTOS EXTRAS (AQUI 👇)
             # =========================
             st.subheader("💸 Custos Extras")
-
+            
             col1, col2, col3 = st.columns(3)
             
             custo_gelo = col1.number_input("🧊 Gelo", min_value=0.0, format="%.2f")
@@ -1028,8 +1028,12 @@ elif menu == "Orçamentos":
             
             custo_outros = st.number_input("📦 Outros custos", min_value=0.0, format="%.2f")
             
-            # soma dos extras
             custo_extras = custo_gelo + custo_transporte + custo_viagem + custo_outros
+            
+            # =========================
+            # TOTAL
+            # =========================
+            custo_total = custo_bebidas + custo_frutas + custo_extras
             
             st.divider()
             
