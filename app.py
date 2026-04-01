@@ -1068,7 +1068,13 @@ elif menu == "Orçamentos":
                 preco_com_desconto = preco_venda * (1 - desconto / 100)
                 
                 st.metric("💸 Preço com desconto", f"R$ {preco_com_desconto:,.2f}")
-                
+                valor_desconto = preco_venda - preco_com_desconto
+
+                st.metric(
+                    "🔻 Desconto",
+                    f"R$ {valor_desconto:,.2f}",
+                    f"{desconto}%"
+                )
                 
                 # =========================
                 # LUCRO
