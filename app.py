@@ -1018,21 +1018,31 @@ elif menu == "Orçamentos":
                         st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
             # =========================
-            # TOTAL
+            # TOTAL (CORREÇÃO AQUI)
             # =========================
             st.divider()
             
-            st.metric("💰 Custo Total do Evento", f"R$ {custo_total:,.2f}")
+            # Garantimos que custo_total exista mesmo se o cálculo acima falhar
+            if 'custo_total' not in locals():
+                custo_total = 0
             
-            # ✅ PREÇO DE VENDA
+            st.metric("💰 Custo Total do Evento (Bruto)", f"R$ {custo_total:,.2f}")
+            
+            # ✅ PREÇO DE VENDA (Com margem de lucro)
             margem = st.slider("Margem de lucro (%)", 0, 300, 100)
             preco_venda = custo_total * (1 + margem / 100)
             
-            st.metric("💰 Preço sugerido", f"R$ {preco_venda:,.2f}")
+            st.metric("💰 Preço Final Sugerido", f"R$ {preco_venda:,.2f}")
             
-           # 💰 VALOR POR CONVIDADO
-            custo_por_convidado = preco_venda / num_convidados if num_convidados > 0 else 0
-            st.metric("💰 Valor por convidado", f"R$ {custo_por_convidado:,.2f}")
+            # ✅ VALOR POR CONVIDADO (O cálculo que você pediu)
+            # Usamos o preco_venda dividido pelo número de convidados do início do formulário
+            if num_convidados > 0:
+                valor_por_convidado = preco_venda / num_convidados
+            else:
+                valor_por_convidado = 0
+                
+            st.metric("💰 Valor cobrado por convidado", f"R$ {valor_por_convidado:,.2f}")
+            
             
             # 💾 SALVAR ORÇAMENTO
             if st.button("💾 Salvar orçamento"):
