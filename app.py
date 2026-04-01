@@ -1013,7 +1013,7 @@ elif menu == "Orçamentos":
 
                         custo_item = qtd_gramas * custo_por_grama
                         custo_frutas += custo_item
-                         custo_total = custo_bebidas + custo_frutas
+                        custo_total = custo_bebidas + custo_frutas
 
                         st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
