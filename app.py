@@ -846,7 +846,7 @@ elif menu == "Orçamentos":
         
         hora_convidados = st.time_input("👥 Chegada dos convidados")
 
-        convidados = col1.number_input("Convidados", min_value=1, value=50)
+        num_convidados = col1.number_input("Convidados", min_value=1, value=50)
         
         modo_calculo = st.radio(
             "Modo de cálculo",
@@ -864,9 +864,9 @@ elif menu == "Orçamentos":
         drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
         if modo_calculo == "Evento inteiro":
-            total_drinks = convidados * drinks_por_hora
+            total_drinks = num_convidados * drinks_por_hora
         else:
-            total_drinks = convidados * horas * drinks_por_hora
+            total_drinks = num_convidados * horas * drinks_por_hora
 
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
@@ -1034,14 +1034,9 @@ elif menu == "Orçamentos":
             st.metric("💰 Preço Final Sugerido", f"R$ {preco_venda:,.2f}")
             
             # ✅ CÁLCULO CORRETO POR CONVIDADO (SIMPLES E LIMPO)
-            if num_convidados > 0:
-                valor_por_convidado = preco_venda / num_convidados
-            else:
-                valor_por_convidado = 0
+            valor_por_convidado = preco_venda / num_convidados if num_convidados > 0 else 0
             
             st.metric("💰 Valor cobrado por convidado", f"R$ {valor_por_convidado:,.2f}")
-            
-            
             
             # 💾 SALVAR ORÇAMENTO
             if st.button("💾 Salvar orçamento"):
