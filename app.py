@@ -849,6 +849,16 @@ elif menu == "Orçamentos":
         tipo_evento = st.selectbox("🎉 Tipo de evento", [
             "Casamento", "Aniversário", "Corporativo", "Festa privada", "Outro"
         ])
+
+        # =========================
+        # EQUIPE DO EVENTO
+        # =========================
+        st.subheader("👥 Equipe")
+        
+        nomes_equipe = st.text_area(
+            "Nomes da equipe (um por linha)",
+            placeholder="Ex:\nJoão\nPedro\nLucas"
+        )
         
         col1, col2 = st.columns(2)
         
@@ -1222,41 +1232,61 @@ elif menu == "Orçamentos":
                 # CHECKLIST
                 # =========================
                 if st.session_state[f"abrir_{row['id']}"]:
-    
+                
                     itens = pd.read_sql("""
                         SELECT * FROM evento_itens WHERE evento_id=?
                     """, conn, params=(row["id"],))
-    
+                
                     st.subheader("📋 Checklist do Evento")
-    
+                
+                    # =========================
+                    # INFORMAÇÕES DO EVENTO
+                    # =========================
                     st.markdown(f"""
                     ### 📍 Informações do Evento
-                    
+                
                     **👤 Cliente:** {row['cliente']}  
                     📞 {row['telefone']}  
-                    
+                
                     📅 {row['data']}  
                     📍 {row['cidade']} - {row['endereco']}  
-                    
+                
                     🎉 Tipo: {row['tipo_evento']}  
-                    
+                
                     🕒 Chegada equipe: {row['hora_chegada']}  
                     🍸 Início serviço: {row['hora_inicio']}  
                     👥 Convidados chegam: {row['hora_convidados']}  
-                    
+                
                     👥 Nº convidados: {row['convidados']}  
-                    
+                
                     💰 Valor: R$ {row['venda']:,.2f}
                     """)
-    
+                
+                    # =========================
+                    # 👥 EQUIPE (NOVO)
+                    # =========================
+                    st.markdown("### 👥 Equipe")
+                
+                    if "equipe" in row and row["equipe"]:
+                        nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
+                        
+                        for nome in nomes:
+                            st.write(f"✔ {nome}")
+                    else:
+                        st.write("Sem equipe definida")
+                
+                    # =========================
+                    # ITENS DO EVENTO
+                    # =========================
                     if itens.empty:
                         st.warning("Nenhum item encontrado")
                     else:
                         df_checklist = itens.copy()
-    
+                
                         # =========================
                         # CATEGORIA INTELIGENTE
                         # =========================
+
                         def definir_categoria(produto):
     
                             produto = produto.lower()
