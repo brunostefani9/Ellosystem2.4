@@ -1408,12 +1408,12 @@ elif menu == "Cachês":
     st.title("👥 Cálculo de Cachês")
 
     # =========================
-    # MODO
+    # SUB ABAS
     # =========================
-    modo = st.radio("Modo de cálculo", ["Resumo", "Por pessoa"])
+    subaba = st.radio("Escolha a visão", ["Resumo", "Por pessoa", "Histórico"])
 
     # =========================
-    # VALORES PADRÃO
+    # VALORES BASE (GLOBAL)
     # =========================
     st.subheader("💰 Valores base")
 
@@ -1423,13 +1423,13 @@ elif menu == "Cachês":
     valor_barback = col2.number_input("Barback", value=180.0)
     valor_lider = col3.number_input("Líder", value=300.0)
 
-    limite_horas = st.number_input("Horas inclusas no cachê", value=7.0)
-    valor_hora_extra = st.number_input("💰 Valor hora extra", value=40.0)
+    limite_horas = st.number_input("Horas inclusas", value=7.0)
+    valor_hora_extra = st.number_input("💰 Hora extra", value=40.0)
 
     # =========================
-    # MODO RESUMO
+    # 🔹 RESUMO
     # =========================
-    if modo == "Resumo":
+    if subaba == "Resumo":
 
         st.subheader("Equipe")
 
@@ -1444,9 +1444,9 @@ elif menu == "Cachês":
         col1, col2 = st.columns(2)
 
         qtd_carro = col1.number_input("🚗 Pessoas com carro", min_value=0, value=1)
-        valor_carro = col2.number_input("💰 Ajuda custo carro", value=100.0)
+        valor_carro = col2.number_input("💰 Ajuda carro", value=100.0)
 
-        horas = st.number_input("⏱️ Horas totais do evento", value=7.0)
+        horas = st.number_input("⏱️ Horas totais", value=7.0)
 
         total_base = (
             qtd_bartenders * valor_bartender +
@@ -1465,24 +1465,28 @@ elif menu == "Cachês":
 
         st.divider()
 
-        st.metric("👥 Cachê base", f"R$ {total_base:,.2f}")
-        st.metric("⏱️ Horas extras", f"R$ {custo_horas_extra:,.2f}")
+        st.metric("👥 Base", f"R$ {total_base:,.2f}")
+        st.metric("⏱️ Extras", f"R$ {custo_horas_extra:,.2f}")
         st.metric("🚗 Transporte", f"R$ {custo_carro:,.2f}")
-        st.metric("💸 Total equipe", f"R$ {total_final:,.2f}")
+        st.metric("💸 Total", f"R$ {total_final:,.2f}")
 
     # =========================
-    # MODO POR PESSOA
+    # 🔹 POR PESSOA
     # =========================
-    else:
+    elif subaba == "Por pessoa":
 
-        st.subheader("👤 Pagamento por pessoa")
+        st.subheader("👤 Pagamento individual")
 
         evento_nome = st.text_input("Nome do evento")
 
-        qtd_pessoas = st.number_input("Quantidade de pessoas", min_value=1, value=3)
+        qtd_pessoas = st.number_input(
+            "Quantidade de pessoas",
+            min_value=1,
+            max_value=20,
+            value=3
+        )
 
         total_geral = 0
-
         dados_pagamento = []
 
         for i in range(qtd_pessoas):
@@ -1499,7 +1503,11 @@ elif menu == "Cachês":
                 key=f"funcao_{i}"
             )
 
-            horas = col3.number_input("Horas", value=7.0, key=f"horas_{i}")
+            horas = col3.number_input(
+                "Horas",
+                value=7.0,
+                key=f"horas_{i}"
+            )
 
             if funcao == "Bartender":
                 valor_base = valor_bartender
@@ -1511,15 +1519,17 @@ elif menu == "Cachês":
             horas_extra = max(0, horas - limite_horas)
             pagamento = valor_base + (horas_extra * valor_hora_extra)
 
-            st.metric(f"💰 {nome if nome else 'Sem nome'}", f"R$ {pagamento:,.2f}")
+            st.metric(
+                f"💰 {nome if nome else f'Pessoa {i+1}'}",
+                f"R$ {pagamento:,.2f}"
+            )
 
             total_geral += pagamento
 
             dados_pagamento.append((evento_nome, nome, funcao, pagamento))
 
         st.divider()
-
-        st.metric("💸 Total geral equipe", f"R$ {total_geral:,.2f}")
+        st.metric("💸 Total equipe", f"R$ {total_geral:,.2f}")
 
         # SALVAR
         if st.button("💾 Salvar pagamentos"):
@@ -1532,20 +1542,21 @@ elif menu == "Cachês":
                 """, dados)
 
             conn.commit()
-            st.success("✅ Pagamentos salvos com sucesso!")
+            st.success("✅ Pagamentos salvos!")
 
     # =========================
-    # HISTÓRICO
+    # 🔹 HISTÓRICO
     # =========================
-    st.divider()
-    st.subheader("📊 Histórico de pagamentos")
+    elif subaba == "Histórico":
 
-    df_pagamentos = pd.read_sql(
-        "SELECT * FROM pagamentos_equipe ORDER BY data DESC",
-        conn
-    )
+        st.subheader("📊 Histórico de pagamentos")
 
-    st.dataframe(df_pagamentos)
+        df_pagamentos = pd.read_sql(
+            "SELECT * FROM pagamentos_equipe ORDER BY data DESC",
+            conn
+        )
+
+        st.dataframe(df_pagamentos)
 
 
 elif menu == "Vendas":
