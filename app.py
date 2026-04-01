@@ -1011,13 +1011,26 @@ elif menu == "Orçamentos":
 
                         custo_item = qtd_gramas * custo_por_grama
                         custo_frutas += custo_item
-                        custo_total = custo_bebidas + custo_frutas
+                        custo_total = custo_bebidas + custo_frutas + custo_extras
 
                         st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
 
             # =========================
             # TOTAL
             # =========================
+            st.subheader("💸 Custos Extras")
+
+            col1, col2, col3 = st.columns(3)
+            
+            custo_gelo = col1.number_input("🧊 Gelo", min_value=0.0, format="%.2f")
+            custo_transporte = col2.number_input("🚚 Transporte", min_value=0.0, format="%.2f")
+            custo_viagem = col3.number_input("🛣️ Viagem / Km", min_value=0.0, format="%.2f")
+            
+            custo_outros = st.number_input("📦 Outros custos", min_value=0.0, format="%.2f")
+            
+            # soma dos extras
+            custo_extras = custo_gelo + custo_transporte + custo_viagem + custo_outros
+            
             st.divider()
             
             # garante que existe
@@ -1025,7 +1038,8 @@ elif menu == "Orçamentos":
                 custo_total = 0
             
             st.metric("💰 Custo Total do Evento (Bruto)", f"R$ {custo_total:,.2f}")
-            
+
+            st.markdown(f"### 💸 Extras: R$ {custo_extras:,.2f}")
             # margem
             margem = st.slider("Margem de lucro (%)", 0, 300, 100)
             preco_venda = custo_total * (1 + margem / 100)
