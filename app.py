@@ -364,7 +364,7 @@ def tela_insumos():
                         quantidade,
                         preco,
                         uso,
-                        quantidade_gramas / uso if uso != 0 else 0,
+                        quantidade / uso if uso != 0 else 0,
                         custo
                     ))
                 
