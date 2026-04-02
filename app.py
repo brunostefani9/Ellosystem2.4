@@ -1947,7 +1947,7 @@ elif menu == "Vendas":
 
     df = pd.read_sql("SELECT * FROM vendas", conn)
 
-    # 🔥 SE NÃO TIVER DADOS, CRIA ESTRUTURA
+    # estrutura vazia
     if df.empty:
         df = pd.DataFrame(columns=[
             "evento_id",
@@ -1958,10 +1958,10 @@ elif menu == "Vendas":
             "lucro"
         ])
 
-    # 🔥 KPIs (FUNCIONA MESMO VAZIO)
-    total_vendas = df["valor_venda"].sum() if not df.empty else 0
-    total_custo = df["custo"].sum() if not df.empty else 0
-    total_lucro = df["lucro"].sum() if not df.empty else 0
+    # KPIs
+    total_vendas = df["valor_venda"].sum()
+    total_custo = df["custo"].sum()
+    total_lucro = df["lucro"].sum()
 
     margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
 
@@ -1974,13 +1974,13 @@ elif menu == "Vendas":
 
     st.markdown("---")
 
-    # 🔎 filtro
+    # filtro
     cliente = st.text_input("Buscar cliente")
 
-    if cliente and not df.empty:
+    if cliente:
         df = df[df["cliente"].str.contains(cliente, case=False)]
 
-    # 🔥 FORMATAÇÃO BONITA
+    # tabela
     st.dataframe(
         df,
         use_container_width=True,
@@ -1991,17 +1991,19 @@ elif menu == "Vendas":
         }
     )
 
+    # gráfico
+    st.markdown("---")
+    st.subheader("📊 Evolução das vendas")
+
+    if not df.empty:
+        df["data"] = pd.to_datetime(df["data"])
+        vendas_por_data = df.groupby("data")["valor_venda"].sum()
+        st.line_chart(vendas_por_data)
+    else:
+        st.info("Sem dados ainda")
+
     if df.empty:
-        st.warning("Nenhuma venda registrada ainda — os dados aparecerão automaticamente após aprovar eventos.")
-        st.markdown("---")
-        st.subheader("📊 Evolução das vendas")
-        
-        if not df.empty:
-            df["data"] = pd.to_datetime(df["data"])
-            vendas_por_data = df.groupby("data")["valor_venda"].sum()
-            st.line_chart(vendas_por_data)
-        else:
-            st.info("Sem dados para gráfico ainda")
+        st.warning("Nenhuma venda registrada ainda — aparecerá ao aprovar eventos.")
 
 elif menu == "Financeiro":
 
@@ -2029,19 +2031,53 @@ elif menu == "Financeiro":
 
         saldo = entrada - saida
 
-        col1, col2, col3 = st.columns(3)
+        # KPIs
+        col1, col2, col3, col4 = st.columns(4)
 
         col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
         col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
         col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
+        col4.metric("📈 Resultado", f"R$ {saldo:,.2f}")
 
         st.markdown("---")
 
-        # gráfico
         if not df.empty:
+
             df["data"] = pd.to_datetime(df["data"])
-            fluxo = df.groupby(["data", "tipo"])["valor"].sum().unstack().fillna(0)
-            st.line_chart(fluxo)
+
+            # 📊 mensal
+            df["mes"] = df["data"].dt.to_period("M")
+            mensal = df.groupby(["mes", "tipo"])["valor"].sum().unstack().fillna(0)
+
+            st.subheader("📊 Resultado mensal")
+            st.bar_chart(mensal)
+
+            # 💸 gastos
+            st.subheader("💸 Gastos por categoria")
+            gastos = df[df["tipo"] == "Saída"].groupby("categoria")["valor"].sum()
+            st.dataframe(gastos)
+
+            # 💳 entradas por forma
+            st.subheader("💳 Entradas por forma")
+            formas = df[df["tipo"] == "Entrada"].groupby("forma_pagamento")["valor"].sum()
+            st.dataframe(formas)
+
+            # 🏦 saldo acumulado
+            df_ordenado = df.sort_values("data")
+
+            df_ordenado["fluxo"] = df_ordenado.apply(
+                lambda x: x["valor"] if x["tipo"] == "Entrada" else -x["valor"],
+                axis=1
+            )
+
+            df_ordenado["saldo_acumulado"] = df_ordenado["fluxo"].cumsum()
+
+            st.subheader("🏦 Evolução do caixa")
+            st.line_chart(df_ordenado.set_index("data")["saldo_acumulado"])
+
+            # alerta
+            if saida > entrada:
+                st.error("⚠️ Você está gastando mais do que ganha!")
 
     # =========================
     # ➕ LANÇAMENTOS
