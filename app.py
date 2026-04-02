@@ -2194,9 +2194,9 @@ elif menu == "Pacotes":
             placeholder="gelo saborizado\ncopo especial"
         )
 
-        cursor.execute("ALTER TABLE pacotes ADD COLUMN preco REAL")
-        cursor.execute("ALTER TABLE pacotes ADD COLUMN custo REAL")
-        conn.commit()
+            cursor.execute("ALTER TABLE pacotes ADD COLUMN preco REAL")
+            cursor.execute("ALTER TABLE pacotes ADD COLUMN custo REAL")
+            conn.commit()
         
         st.markdown("### 💰 Precificação")
 
