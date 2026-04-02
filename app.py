@@ -805,25 +805,29 @@ elif menu == "Receitas":
 
             else:
 
+                # 🔥 Apaga receita antiga
+                cursor.execute(
+                    "DELETE FROM receitas WHERE drink=?",
+                    (st.session_state["drink_nome"],)
+                )
+                
+                # 🔥 Insere novos ingredientes
                 for item in st.session_state["ingredientes_temp"]:
-                    cursor.execute("DELETE FROM receitas WHERE drink=?", (st.session_state["drink_nome"],))
-
-                    for item in st.session_state["ingredientes_temp"]:
-                        cursor.execute("""
-                        INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
-                        VALUES(?,?,?,?)
-                        """, (
-                            st.session_state["drink_nome"],
-                            item["ingrediente"],
-                            item["quantidade"],
-                            item["unidade"]
-                        ))
+                    cursor.execute("""
+                    INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
+                    VALUES(?,?,?,?)
+                    """, (
+                        st.session_state["drink_nome"],
+                        item["ingrediente"],
+                        item["quantidade"],
+                        item["unidade"]
+                    ))
 
                 conn.commit()
 
                 st.session_state["msg"] = "🍹 Drink cadastrado com sucesso!"
 
-                # limpa tudo
+                # limpa
                 st.session_state["ingredientes_temp"] = []
                 st.session_state["drink_nome"] = ""
                 st.rerun()
@@ -845,16 +849,17 @@ elif menu == "Receitas":
                 custo_total = 0
 
                 col1, col2 = st.columns([5,1])
+
                 with col1:
                     st.markdown(f"### 🍹 {drink}")
+
                     for _, row in receita.iterrows():
                         ingrediente = row["ingrediente"]
                         quantidade = row["quantidade"]
                         unidade = row["unidade"]
 
-                        # Busca custo nas tabelas
                         custo_unitario = 0
-                        uso_padrao = 1  # valor padrão pra evitar erro
+                        uso_padrao = 1
 
                         for tabela in ["precos_bebidas","precos_insumos","precos_artesanais"]:
                             result = pd.read_sql(
@@ -862,24 +867,37 @@ elif menu == "Receitas":
                                 conn,
                                 params=(ingrediente,)
                             )
-                        
+
                             if not result.empty:
                                 custo_unitario = result.iloc[0]["custo"]
                                 uso_padrao = result.iloc[0]["uso"] if result.iloc[0]["uso"] > 0 else 1
                                 break
-                        
+
                         custo_total += (quantidade / uso_padrao) * custo_unitario
 
                         st.write(f"- {ingrediente} ({quantidade} {unidade})")
 
                 with col2:
                     st.markdown(f"### 💰\nR$ {custo_total:,.2f}")
-                    if st.button("🗑️", key=f"del_{drink}"):
-                        cursor.execute("DELETE FROM receitas WHERE drink=?", (drink,))
-                        conn.commit()
-                        st.rerun()
 
                 st.divider()
+
+            # =========================
+            # 🔥 EXCLUSÃO CENTRALIZADA
+            # =========================
+            st.markdown("---")
+            st.subheader("🗑 Excluir drink")
+
+            drink_excluir = st.selectbox("Selecione o drink", drinks)
+
+            if st.button("Excluir drink"):
+                cursor.execute(
+                    "DELETE FROM receitas WHERE drink=?",
+                    (drink_excluir,)
+                )
+                conn.commit()
+                st.success(f"{drink_excluir} excluído com sucesso!")
+                st.rerun()
 
 elif menu == "Orçamentos":
 
