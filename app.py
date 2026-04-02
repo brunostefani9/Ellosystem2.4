@@ -145,6 +145,16 @@ CREATE TABLE IF NOT EXISTS financeiro (
 """)
 conn.commit()
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS pacotes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT,
+    tipo TEXT,
+    dados TEXT
+)
+""")
+conn.commit()
+
 # adiciona categoria sem quebrar
 try:
     cursor.execute("ALTER TABLE evento_itens ADD COLUMN categoria TEXT")
@@ -2187,8 +2197,8 @@ elif menu == "Pacotes":
         if st.button("💾 Salvar pacote"):
 
             dados = json.dumps({
-                "itens": itens.split("\n"),
-                "extras": extras.split("\n")
+                "itens": [i for i in itens.split("\n") if i.strip()],
+                "extras": [e for e in extras.split("\n") if e.strip()]
             })
 
             cursor.execute("""
