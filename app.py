@@ -902,7 +902,7 @@ elif menu == "Receitas":
 elif menu == "Orçamentos":
 
     if "orcamento_bebidas" not in st.session_state:
-    st.session_state["orcamento_bebidas"] = {}
+        st.session_state["orcamento_bebidas"] = {}
 
     if "orcamento_frutas" not in st.session_state:
         st.session_state["orcamento_frutas"] = {}
