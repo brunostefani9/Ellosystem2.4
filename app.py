@@ -1101,12 +1101,17 @@ elif menu == "Orçamentos":
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-                                qtd_editavel = st.number_input(
-                                    "Garrafas",
-                                    min_value=0,
-                                    value=qtd_garrafas,
-                                    key=f"qtd_{marca}"
-                                )
+                                key_qtd = f"qtd_{marca}"
+
+                            # se ainda não existe, cria valor inicial
+                            if key_qtd not in st.session_state:
+                                st.session_state[key_qtd] = qtd_garrafas
+                            
+                            qtd_editavel = st.number_input(
+                                "Garrafas",
+                                min_value=0,
+                                key=key_qtd
+                            )
                 
                             with col3:
                                 custo_item = qtd_editavel * preco
@@ -1121,12 +1126,27 @@ elif menu == "Orçamentos":
                             custo_bebidas += custo_item
                 
                 st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
+                                
+                # =========================
+                # 📋 RESUMO BEBIDAS
+                # =========================
+                st.markdown("### 📋 Resumo Bebidas")
                 
+                for marca, dados in st.session_state["orcamento_bebidas"].items():
+                    qtd = dados["quantidade"]
+                    preco = dados["preco"]
                 
+                    total = qtd * preco
+                
+                    st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
+
                 # =========================
                 # FRUTAS
                 # =========================
                 st.subheader("🍋 Frutas")
+                
+                if "orcamento_frutas" not in st.session_state:
+                    st.session_state["orcamento_frutas"] = {}
                 
                 custo_frutas = 0
                 
@@ -1141,32 +1161,46 @@ elif menu == "Orçamentos":
                         preco_kg = encontrado.iloc[0]["preco"]
                         custo_por_grama = preco_kg / 1000
                 
-                        # 🔥 INTERFACE EDITÁVEL
                         col1, col2, col3 = st.columns([4,2,2])
                 
                         with col1:
                             st.write(f"✔ {fruta.capitalize()}")
                 
                         with col2:
+                            key_qtd = f"qtd_fruta_{fruta.lower().strip()}"
+                
+                            if key_qtd not in st.session_state:
+                                st.session_state[key_qtd] = float(qtd_gramas)
+                
                             qtd_editavel = st.number_input(
                                 "Gramas",
                                 min_value=0.0,
-                                value=float(qtd_gramas),
-                                key=f"qtd_fruta_{fruta}"
+                                key=key_qtd
                             )
                 
                         with col3:
                             custo_item = qtd_editavel * custo_por_grama
                             st.write(f"💰 R$ {custo_item:,.2f}")
                 
-                        # salva estado
                         st.session_state["orcamento_frutas"][fruta] = {
                             "quantidade": qtd_editavel,
                             "preco_grama": custo_por_grama
                         }
                 
                         custo_frutas += custo_item
+                        
+                # =========================
+                # 📋 RESUMO FRUTAS
+                # =========================
+                st.markdown("### 📋 Resumo Frutas")
                 
+                for fruta, dados in st.session_state["orcamento_frutas"].items():
+                    qtd = dados["quantidade"]
+                    preco = dados["preco_grama"]
+                
+                    total = qtd * preco
+                
+                    st.write(f"✔ {fruta.capitalize()} → {qtd:.0f} g | 💰 R$ {total:,.2f}")
                 
                 # =========================
                 # CUSTOS EXTRAS
