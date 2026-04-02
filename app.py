@@ -901,6 +901,12 @@ elif menu == "Receitas":
 
 elif menu == "Orçamentos":
 
+    if "orcamento_bebidas" not in st.session_state:
+    st.session_state["orcamento_bebidas"] = {}
+
+    if "orcamento_frutas" not in st.session_state:
+        st.session_state["orcamento_frutas"] = {}
+    
     st.title("Orçamentos")
 
     tab1, tab2, tab3 = st.tabs([
@@ -1072,6 +1078,8 @@ elif menu == "Orçamentos":
                 # =========================
                 # Cálculo do custo das bebidas
                 # =========================
+                custo_bebidas = 0
+                
                 for item, dados in ingredientes_bebidas.items():
                     qtd_ml = dados["qtd"]
                     marca = escolhas_marcas[item]
@@ -1086,13 +1094,35 @@ elif menu == "Orçamentos":
                             qtd_real = qtd_ml / volume
                             qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                 
-                            custo_item = qtd_garrafas * preco
+                            # 🔥 INTERFACE EDITÁVEL
+                            col1, col2, col3 = st.columns([4,2,2])
+                
+                            with col1:
+                                st.write(f"✔ {marca}")
+                
+                            with col2:
+                                qtd_editavel = st.number_input(
+                                    "Garrafas",
+                                    min_value=0,
+                                    value=qtd_garrafas,
+                                    key=f"qtd_{marca}"
+                                )
+                
+                            with col3:
+                                custo_item = qtd_editavel * preco
+                                st.write(f"💰 R$ {custo_item:,.2f}")
+                
+                            # salva estado
+                            st.session_state["orcamento_bebidas"][marca] = {
+                                "quantidade": qtd_editavel,
+                                "preco": preco
+                            }
+                
                             custo_bebidas += custo_item
                 
-                            st.write(f"✔ {marca} → {qtd_garrafas} garrafas | 💰 R$ {custo_item:,.2f}")
-                
                 st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
-
+                
+                
                 # =========================
                 # FRUTAS
                 # =========================
@@ -1111,10 +1141,31 @@ elif menu == "Orçamentos":
                         preco_kg = encontrado.iloc[0]["preco"]
                         custo_por_grama = preco_kg / 1000
                 
-                        custo_item = qtd_gramas * custo_por_grama
-                        custo_frutas += custo_item
+                        # 🔥 INTERFACE EDITÁVEL
+                        col1, col2, col3 = st.columns([4,2,2])
                 
-                        st.write(f"✔ {fruta.capitalize()} → {qtd_gramas:.0f} g | 💰 R$ {custo_item:,.2f}")
+                        with col1:
+                            st.write(f"✔ {fruta.capitalize()}")
+                
+                        with col2:
+                            qtd_editavel = st.number_input(
+                                "Gramas",
+                                min_value=0.0,
+                                value=float(qtd_gramas),
+                                key=f"qtd_fruta_{fruta}"
+                            )
+                
+                        with col3:
+                            custo_item = qtd_editavel * custo_por_grama
+                            st.write(f"💰 R$ {custo_item:,.2f}")
+                
+                        # salva estado
+                        st.session_state["orcamento_frutas"][fruta] = {
+                            "quantidade": qtd_editavel,
+                            "preco_grama": custo_por_grama
+                        }
+                
+                        custo_frutas += custo_item
                 
                 
                 # =========================
