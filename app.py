@@ -119,6 +119,17 @@ CREATE TABLE IF NOT EXISTS pagamentos_equipe (
 """)
 conn.commit()
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS financeiro (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    data TEXT,
+    tipo TEXT,
+    descricao TEXT,
+    valor REAL
+)
+""")
+conn.commit()
+
 # adiciona categoria sem quebrar
 try:
     cursor.execute("ALTER TABLE evento_itens ADD COLUMN categoria TEXT")
@@ -168,6 +179,7 @@ menu = st.sidebar.radio(
 "Orçamentos",
 "Cachês",
 "Vendas",
+"Financeiro",
 "Pacotes"
 ]
 )
@@ -1875,76 +1887,116 @@ elif menu == "Cachês":
 
 elif menu == "Vendas":
 
-    st.title("💰 Vendas")
+    st.title("📊 Vendas")
 
-    tab_vendas, tab_registro = st.tabs(["📊 Resumo", "📁 Registro"])
+    df = pd.read_sql("SELECT * FROM vendas", conn)
 
-    # =========================
-    # 📊 RESUMO (FATURAMENTO)
-    # =========================
-    with tab_vendas:
+    if df.empty:
+        st.info("Nenhuma venda registrada")
 
-        df_vendas = pd.read_sql("""
-            SELECT * FROM eventos 
-            WHERE status IN ('aprovado', 'finalizado')
-        """, conn)
+    else:
+        # 🔥 KPIs
+        total_vendas = df["valor_venda"].sum()
+        total_custo = df["custo"].sum()
+        total_lucro = df["lucro"].sum()
 
-        if df_vendas.empty:
-            st.info("Nenhuma venda registrada")
+        margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("💰 Receita", f"R$ {total_vendas:,.2f}")
+        col2.metric("💸 Custo", f"R$ {total_custo:,.2f}")
+        col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
+        col4.metric("📊 Margem", f"{margem:.1f}%")
+
+        st.markdown("---")
+
+        # 🔎 filtro por cliente
+        cliente = st.text_input("Buscar cliente")
+
+        if cliente:
+            df = df[df["cliente"].str.contains(cliente, case=False)]
+
+        st.dataframe(df, use_container_width=True)
+
+elif menu == "Financeiro":
+
+    st.title("💵 Financeiro")
+
+    tab1, tab2, tab3 = st.tabs(["Lançar", "Resumo", "Histórico"])
+
+    # -------------------------
+    # LANÇAMENTOS
+    # -------------------------
+    with tab1:
+
+        st.subheader("Novo lançamento")
+
+        with st.form("financeiro_form", clear_on_submit=True):
+
+            tipo = st.selectbox("Tipo", ["Entrada", "Saída"])
+            descricao = st.text_input("Descrição")
+            valor = st.number_input("Valor", min_value=0.0)
+
+            if st.form_submit_button("Salvar"):
+
+                valor_final = valor if tipo == "Entrada" else -valor
+
+                cursor.execute("""
+                    INSERT INTO financeiro VALUES (NULL,?,?,?,?)
+                """,
+                (
+                    datetime.now().strftime("%Y-%m-%d"),
+                    tipo,
+                    descricao,
+                    valor_final
+                ))
+
+                conn.commit()
+                st.success("Lançamento registrado!")
+
+    # -------------------------
+    # RESUMO
+    # -------------------------
+    with tab2:
+
+        df = pd.read_sql("SELECT * FROM financeiro", conn)
+
+        if df.empty:
+            st.info("Sem movimentações")
+
         else:
-            df_vendas["data"] = pd.to_datetime(df_vendas["data"], errors="coerce")
+            entradas = df[df["valor"] > 0]["valor"].sum()
+            saidas = df[df["valor"] < 0]["valor"].sum()
+            saldo = df["valor"].sum()
 
-            # filtro por mês
-            meses = df_vendas["data"].dt.to_period("M").astype(str).unique()
-            mes_selecionado = st.selectbox("Selecionar mês", sorted(meses))
+            col1, col2, col3 = st.columns(3)
 
-            df_filtrado = df_vendas[
-                df_vendas["data"].dt.to_period("M").astype(str) == mes_selecionado
-            ]
+            col1.metric("💰 Saldo", f"R$ {saldo:,.2f}")
+            col2.metric("📥 Entradas", f"R$ {entradas:,.2f}")
+            col3.metric("📤 Saídas", f"R$ {abs(saidas):,.2f}")
 
-            faturamento = df_filtrado["venda"].sum()
+            st.markdown("---")
 
-            st.metric("💰 Faturamento do mês", f"R$ {faturamento:,.2f}")
+            meta = st.number_input("Meta mensal", value=10000.0)
 
-            st.dataframe(df_filtrado[["cliente", "data", "cidade", "venda"]])
+            progresso = entradas / meta if meta > 0 else 0
 
-    # =========================
-    # 📁 REGISTRO COMPLETO
-    # =========================
-    with tab_registro:
+            st.progress(min(progresso, 1.0))
+            st.write(f"{progresso*100:.1f}% da meta atingida")
 
-        st.subheader("📁 Histórico de Eventos")
+    # -------------------------
+    # HISTÓRICO
+    # -------------------------
+    with tab3:
 
-        df_todos = pd.read_sql("""
-            SELECT * FROM eventos 
-            WHERE status IN ('aprovado', 'finalizado')
-            ORDER BY data DESC
-        """, conn)
+        df = pd.read_sql(
+            "SELECT * FROM financeiro ORDER BY data DESC",
+            conn
+        )
 
-        if df_todos.empty:
-            st.info("Nenhum evento registrado")
-        else:
-            for _, row in df_todos.iterrows():
+        st.dataframe(df, use_container_width=True)
 
-                st.write(f"""
-                **👤 {row['cliente']}**  
-                📅 {row['data']} | 📍 {row['cidade']}  
-                💰 R$ {row['venda']:,.2f}
-                """)
-
-                # botão checklist
-                if st.button(f"📋 Ver Checklist {row['id']}", key=f"check_venda_{row['id']}"):
-
-                    itens = pd.read_sql("""
-                        SELECT * FROM evento_itens WHERE evento_id=?
-                    """, conn, params=(row["id"],))
-
-                    if itens.empty:
-                        st.warning("Sem itens")
-                    else:
-                        st.dataframe(itens[["produto", "quantidade", "unidade"]])
-
-                st.divider()
 elif menu == "Pacotes":
 
     st.title("📦 Pacotes / Serviços")
