@@ -406,10 +406,27 @@ def tela_insumos():
         if st.button("💾 Salvar alterações insumos"):
 
             try:
-                df_editado.to_sql("precos_insumos", conn, if_exists="replace", index=False)
+                for _, row in df_editado.iterrows():
+                    cursor.execute("""
+                        UPDATE precos_insumos
+                        SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
+                        WHERE id=?
+                    """, (
+                        row["tipo"],
+                        row["nome"],
+                        row["quantidade"],
+                        row["preco"],
+                        row["uso"],
+                        row["rendimento"],
+                        row["custo"],
+                        row["id"]
+                    ))
+            
+                conn.commit()
                 st.success("Alterações salvas!")
-            except:
-                st.error("Erro ao salvar alterações")
+            
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
 
         # 🗑 EXCLUIR
         if not df.empty:
