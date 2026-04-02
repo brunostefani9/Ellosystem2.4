@@ -500,6 +500,10 @@ if menu == "Precificação":
 # ESTOQUE
 # -------------------------
 
+# -------------------------
+# ESTOQUE
+# -------------------------
+
 elif menu == "Estoque":
 
     st.title("Controle de Estoque")
@@ -516,7 +520,6 @@ elif menu == "Estoque":
     # -------------------------
     # ENTRADA
     # -------------------------
-
     with tab1:
 
         with st.form("entrada_estoque", clear_on_submit=True):
@@ -524,13 +527,9 @@ elif menu == "Estoque":
             st.subheader("Tipo do Produto")
 
             produto = st.text_input("Tipo do Produto").lower().strip()
-
             marca = st.text_input("Marca")
 
-            qtd = st.number_input(
-                "Quantidade",
-                min_value=0.0
-            )
+            qtd = st.number_input("Quantidade", min_value=0.0)
 
             status = st.selectbox(
                 "Status",
@@ -546,14 +545,11 @@ elif menu == "Estoque":
                 )
 
                 if atual.empty:
-
                     cursor.execute(
                         "INSERT INTO estoque VALUES(?,?,?)",
                         (produto, marca, qtd)
                     )
-
                 else:
-
                     nova = atual.iloc[0]["quantidade"] + qtd
 
                     cursor.execute("""
@@ -577,23 +573,19 @@ elif menu == "Estoque":
                 )
 
                 conn.commit()
-
                 st.success("Entrada registrada!")
 
     # -------------------------
     # SAÍDA
     # -------------------------
-
     with tab2:
 
         estoque = pd.read_sql("SELECT * FROM estoque", conn)
 
         if estoque.empty:
-
             st.info("Estoque vazio")
 
         else:
-
             with st.form("saida_estoque", clear_on_submit=True):
 
                 produto = st.selectbox(
@@ -603,10 +595,7 @@ elif menu == "Estoque":
 
                 marca = st.text_input("Marca")
 
-                qtd = st.number_input(
-                    "Quantidade",
-                    min_value=0.0
-                )
+                qtd = st.number_input("Quantidade", min_value=0.0)
 
                 if st.form_submit_button("Registrar saída"):
 
@@ -617,19 +606,15 @@ elif menu == "Estoque":
                     )
 
                     if atual.empty:
-
                         st.error("Item não encontrado no estoque")
 
                     else:
-
                         nova = atual.iloc[0]["quantidade"] - qtd
 
                         if nova < 0:
-
                             st.error("Estoque insuficiente")
 
                         else:
-
                             cursor.execute("""
                                 UPDATE estoque
                                 SET quantidade=?
@@ -651,13 +636,11 @@ elif menu == "Estoque":
                             )
 
                             conn.commit()
-
                             st.success("Saída registrada!")
 
     # -------------------------
     # ESTOQUE FÍSICO
     # -------------------------
-
     with tab3:
 
         df = pd.read_sql(
@@ -674,9 +657,53 @@ elif menu == "Estoque":
 
         if df.empty:
             st.info("Estoque vazio")
-        else:
-            st.dataframe(df, use_container_width=True)
 
+        else:
+            # 🔥 PUXAR PREÇOS
+            df_bebidas = pd.read_sql(
+                "SELECT nome, preco FROM precos_bebidas",
+                conn
+            )
+
+            # 🔥 MERGE (liga estoque com preços)
+            df = df.merge(
+                df_bebidas,
+                left_on="marca",
+                right_on="nome",
+                how="left"
+            )
+
+            # 🔥 CALCULAR VALOR TOTAL
+            df["valor_total"] = df["quantidade"] * df["preco"]
+
+            # 🔥 EXIBIÇÃO FORMATADA
+            st.dataframe(
+                df[["produto", "marca", "quantidade", "preco", "valor_total"]],
+                use_container_width=True,
+                column_config={
+                    "preco": st.column_config.NumberColumn(
+                        "💰 Preço Unitário",
+                        format="R$ %.2f"
+                    ),
+                    "valor_total": st.column_config.NumberColumn(
+                        "💎 Valor em Estoque",
+                        format="R$ %.2f"
+                    )
+                }
+            )
+
+            # 🔥 TOTAL DO ESTOQUE
+            total_estoque = df["valor_total"].sum()
+
+            st.markdown("---")
+            st.metric(
+                "💰 Valor total em estoque",
+                f"R$ {total_estoque:,.2f}"
+            )
+
+            # -------------------------
+            # EXCLUSÃO
+            # -------------------------
             st.subheader("Remover item")
 
             item = st.selectbox(
@@ -720,7 +747,6 @@ elif menu == "Estoque":
     # -------------------------
     # REGISTROS
     # -------------------------
-
     with tab4:
 
         df = pd.read_sql(
@@ -729,10 +755,6 @@ elif menu == "Estoque":
         )
 
         st.dataframe(df, use_container_width=True)
-
-# -------------------------
-# OUTRAS ABAS
-# -------------------------
 
 elif menu == "Relatórios":
 
@@ -1520,8 +1542,71 @@ elif menu == "Orçamentos":
                 col1, col2 = st.columns(2)
     
                 if col1.button(f"✅ Aprovar {row['id']}", key=f"aprovar_{row['id']}"):
-                    cursor.execute("UPDATE eventos SET status='aprovado' WHERE id=?", (row["id"],))
+                    alertas = []
+
+                    # 🔥 baixa estoque
+                    for marca, dados in st.session_state.get("orcamento_bebidas", {}).items():
+                    
+                        qtd_necessaria = dados["quantidade"]
+                    
+                        atual = pd.read_sql(
+                            "SELECT * FROM estoque WHERE marca=?",
+                            conn,
+                            params=(marca,)
+                        )
+                    
+                        if atual.empty:
+                            alertas.append(f"❌ {marca} não existe no estoque")
+                    
+                        else:
+                            qtd_atual = atual.iloc[0]["quantidade"]
+                    
+                            if qtd_atual < qtd_necessaria:
+                                alertas.append(
+                                    f"⚠️ {marca}: precisa {qtd_necessaria}, tem {qtd_atual}"
+                                )
+                    
+                            nova_qtd = max(0, qtd_atual - qtd_necessaria)
+                    
+                            cursor.execute("""
+                                UPDATE estoque
+                                SET quantidade=?
+                                WHERE marca=?
+                            """, (nova_qtd, marca))
+                    
+                            cursor.execute("""
+                                INSERT INTO movimentacoes
+                                VALUES(?,?,?,?,?,?)
+                            """,
+                            (
+                                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "bebida",
+                                marca,
+                                "Saída (orçamento aprovado)",
+                                qtd_necessaria,
+                                "Reserva"
+                            )
+                            )
+                    
+                    # 🔥 atualiza status
+                    cursor.execute(
+                        "UPDATE eventos SET status='aprovado' WHERE id=?",
+                        (row["id"],)
+                    )
+                    
                     conn.commit()
+                    
+                    # feedback
+                    if alertas:
+                        st.warning("⚠️ Problemas no estoque:")
+                        for a in alertas:
+                            st.write(a)
+                    else:
+                        st.success("✅ Evento aprovado e estoque atualizado!")
+                    
+                    # limpa memória
+                    st.session_state["orcamento_bebidas"] = {}
+                    
                     st.rerun()
     
                 if col2.button(f"🗑 Excluir {row['id']}", key=f"excluir_{row['id']}"):
