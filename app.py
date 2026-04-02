@@ -1945,31 +1945,61 @@ elif menu == "Vendas":
 
     df = pd.read_sql("SELECT * FROM vendas", conn)
 
+    # 🔥 SE NÃO TIVER DADOS, CRIA ESTRUTURA
     if df.empty:
-        st.info("Nenhuma venda registrada")
+        df = pd.DataFrame(columns=[
+            "evento_id",
+            "cliente",
+            "data",
+            "valor_venda",
+            "custo",
+            "lucro"
+        ])
 
-    else:
-        total_vendas = df["valor_venda"].sum()
-        total_custo = df["custo"].sum()
-        total_lucro = df["lucro"].sum()
+    # 🔥 KPIs (FUNCIONA MESMO VAZIO)
+    total_vendas = df["valor_venda"].sum() if not df.empty else 0
+    total_custo = df["custo"].sum() if not df.empty else 0
+    total_lucro = df["lucro"].sum() if not df.empty else 0
 
-        margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
+    margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
 
-        col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4 = st.columns(4)
 
-        col1.metric("💰 Receita", f"R$ {total_vendas:,.2f}")
-        col2.metric("💸 Custo", f"R$ {total_custo:,.2f}")
-        col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
-        col4.metric("📊 Margem", f"{margem:.1f}%")
+    col1.metric("💰 Receita", f"R$ {total_vendas:,.2f}")
+    col2.metric("💸 Custo", f"R$ {total_custo:,.2f}")
+    col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
+    col4.metric("📊 Margem", f"{margem:.1f}%")
 
+    st.markdown("---")
+
+    # 🔎 filtro
+    cliente = st.text_input("Buscar cliente")
+
+    if cliente and not df.empty:
+        df = df[df["cliente"].str.contains(cliente, case=False)]
+
+    # 🔥 FORMATAÇÃO BONITA
+    st.dataframe(
+        df,
+        use_container_width=True,
+        column_config={
+            "valor_venda": st.column_config.NumberColumn("💰 Venda", format="R$ %.2f"),
+            "custo": st.column_config.NumberColumn("💸 Custo", format="R$ %.2f"),
+            "lucro": st.column_config.NumberColumn("📈 Lucro", format="R$ %.2f"),
+        }
+    )
+
+    if df.empty:
+        st.warning("Nenhuma venda registrada ainda — os dados aparecerão automaticamente após aprovar eventos.")
         st.markdown("---")
-
-        cliente = st.text_input("Buscar cliente")
-
-        if cliente:
-            df = df[df["cliente"].str.contains(cliente, case=False)]
-
-        st.dataframe(df, use_container_width=True)
+        st.subheader("📊 Evolução das vendas")
+        
+        if not df.empty:
+            df["data"] = pd.to_datetime(df["data"])
+            vendas_por_data = df.groupby("data")["valor_venda"].sum()
+            st.line_chart(vendas_por_data)
+        else:
+            st.info("Sem dados para gráfico ainda")
 
 elif menu == "Financeiro":
 
