@@ -391,13 +391,38 @@ def tela_insumos():
             df,
             use_container_width=True,
             column_config={
+        
+                "id": st.column_config.NumberColumn(
+                    "ID",
+                    disabled=True  # 🔒 não pode editar
+                ),
+        
+                "tipo": "Tipo",
+        
+                "nome": "Nome",
+        
+                "quantidade": st.column_config.NumberColumn(
+                    "Quantidade (KG)"
+                ),
+        
                 "preco": st.column_config.NumberColumn(
                     "💰 Preço (KG)",
                     format="R$ %.2f"
                 ),
+        
+                "uso": st.column_config.NumberColumn(
+                    "Uso (g)"
+                ),
+        
+                "rendimento": st.column_config.NumberColumn(
+                    "Rendimento",
+                    disabled=True  # 🔒 calculado
+                ),
+        
                 "custo": st.column_config.NumberColumn(
                     "💰 Custo por uso",
-                    format="R$ %.2f"
+                    format="R$ %.2f",
+                    disabled=True  # 🔒 calculado
                 ),
             }
         )
