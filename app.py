@@ -276,18 +276,31 @@ def tela_precificacao(nome_tabela):
 
                 try:
                     for _, row in df_editado.iterrows():
-                        cursor.execute(f"""
-                        UPDATE {nome_tabela}
-                        SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
-                        WHERE id=?
+
+                        quantidade = row["quantidade"]
+                        uso = row["uso"]
+                        preco = row["preco"]
+                    
+                        if uso == 0 or quantidade == 0:
+                            rendimento = 0
+                            custo = 0
+                        else:
+                            quantidade_gramas = quantidade * 1000
+                            rendimento = quantidade_gramas / uso
+                            custo = preco / rendimento
+                    
+                        cursor.execute("""
+                            UPDATE precos_insumos
+                            SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
+                            WHERE id=?
                         """, (
                             row["tipo"],
                             row["nome"],
-                            row["quantidade"],
-                            row["preco"],
-                            row["uso"],
-                            row["rendimento"],
-                            row["custo"],
+                            quantidade,
+                            preco,
+                            uso,
+                            rendimento,
+                            custo,
                             row["id"]
                         ))
 
