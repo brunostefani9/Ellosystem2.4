@@ -137,6 +137,8 @@ CREATE TABLE IF NOT EXISTS financeiro (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     data TEXT,
     tipo TEXT,
+    categoria TEXT,
+    forma_pagamento TEXT,
     descricao TEXT,
     valor REAL
 )
@@ -2003,73 +2005,89 @@ elif menu == "Vendas":
 
 elif menu == "Financeiro":
 
-    st.title("💵 Financeiro")
+    st.title("💰 Financeiro")
 
-    tab1, tab2, tab3 = st.tabs(["Lançar", "Resumo", "Histórico"])
+    tab1, tab2, tab3 = st.tabs([
+        "📊 Resumo",
+        "➕ Lançamentos",
+        "📄 Extrato"
+    ])
 
-    # -------------------------
-    # LANÇAMENTOS
-    # -------------------------
+    # =========================
+    # 📊 RESUMO
+    # =========================
     with tab1:
 
-        st.subheader("Novo lançamento")
+        df = pd.read_sql("SELECT * FROM financeiro", conn)
 
-        with st.form("financeiro_form", clear_on_submit=True):
+        if df.empty:
+            entrada = 0
+            saida = 0
+        else:
+            entrada = df[df["tipo"] == "Entrada"]["valor"].sum()
+            saida = df[df["tipo"] == "Saída"]["valor"].sum()
+
+        saldo = entrada - saida
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
+        col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
+        col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
+
+        st.markdown("---")
+
+        # gráfico
+        if not df.empty:
+            df["data"] = pd.to_datetime(df["data"])
+            fluxo = df.groupby(["data", "tipo"])["valor"].sum().unstack().fillna(0)
+            st.line_chart(fluxo)
+
+    # =========================
+    # ➕ LANÇAMENTOS
+    # =========================
+    with tab2:
+
+        with st.form("novo_lancamento", clear_on_submit=True):
 
             tipo = st.selectbox("Tipo", ["Entrada", "Saída"])
-            descricao = st.text_input("Descrição")
+
             valor = st.number_input("Valor", min_value=0.0)
 
-            if st.form_submit_button("Salvar"):
+            categoria = st.selectbox(
+                "Categoria",
+                ["Evento", "Bebidas", "Equipe", "Transporte", "Marketing", "Outros"]
+            )
 
-                valor_final = valor if tipo == "Entrada" else -valor
+            forma = st.selectbox(
+                "Forma de pagamento",
+                ["Dinheiro", "Pix", "Cartão", "Transferência"]
+            )
+
+            descricao = st.text_input("Descrição")
+
+            if st.form_submit_button("Salvar lançamento"):
 
                 cursor.execute("""
-                    INSERT INTO financeiro VALUES (NULL,?,?,?,?)
+                INSERT INTO financeiro 
+                (data, tipo, categoria, forma_pagamento, descricao, valor)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now().strftime("%Y-%m-%d"),
                     tipo,
+                    categoria,
+                    forma,
                     descricao,
-                    valor_final
+                    valor
                 ))
 
                 conn.commit()
                 st.success("Lançamento registrado!")
 
-    # -------------------------
-    # RESUMO
-    # -------------------------
-    with tab2:
-
-        df = pd.read_sql("SELECT * FROM financeiro", conn)
-
-        if df.empty:
-            st.info("Sem movimentações")
-
-        else:
-            entradas = df[df["valor"] > 0]["valor"].sum()
-            saidas = df[df["valor"] < 0]["valor"].sum()
-            saldo = df["valor"].sum()
-
-            col1, col2, col3 = st.columns(3)
-
-            col1.metric("💰 Saldo", f"R$ {saldo:,.2f}")
-            col2.metric("📥 Entradas", f"R$ {entradas:,.2f}")
-            col3.metric("📤 Saídas", f"R$ {abs(saidas):,.2f}")
-
-            st.markdown("---")
-
-            meta = st.number_input("Meta mensal", value=10000.0)
-
-            progresso = entradas / meta if meta > 0 else 0
-
-            st.progress(min(progresso, 1.0))
-            st.write(f"{progresso*100:.1f}% da meta atingida")
-
-    # -------------------------
-    # HISTÓRICO
-    # -------------------------
+    # =========================
+    # 📄 EXTRATO
+    # =========================
     with tab3:
 
         df = pd.read_sql(
@@ -2077,7 +2095,28 @@ elif menu == "Financeiro":
             conn
         )
 
-        st.dataframe(df, use_container_width=True)
+        if df.empty:
+            st.info("Nenhum lançamento ainda")
+        else:
+
+            filtro = st.selectbox(
+                "Filtrar tipo",
+                ["Todos", "Entrada", "Saída"]
+            )
+
+            if filtro != "Todos":
+                df = df[df["tipo"] == filtro]
+
+            st.dataframe(
+                df,
+                use_container_width=True,
+                column_config={
+                    "valor": st.column_config.NumberColumn(
+                        "💰 Valor",
+                        format="R$ %.2f"
+                    )
+                }
+            )
 
 elif menu == "Pacotes":
 
