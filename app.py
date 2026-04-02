@@ -120,6 +120,19 @@ CREATE TABLE IF NOT EXISTS pagamentos_equipe (
 conn.commit()
 
 cursor.execute("""
+CREATE TABLE IF NOT EXISTS vendas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evento_id INTEGER,
+    cliente TEXT,
+    data TEXT,
+    valor_venda REAL,
+    custo REAL,
+    lucro REAL
+)
+""")
+conn.commit()
+
+cursor.execute("""
 CREATE TABLE IF NOT EXISTS financeiro (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     data TEXT,
@@ -1554,6 +1567,47 @@ elif menu == "Orçamentos":
                 col1, col2 = st.columns(2)
     
                 if col1.button(f"✅ Aprovar {row['id']}", key=f"aprovar_{row['id']}"):
+
+                    # Atualiza status
+                    cursor.execute(
+                        "UPDATE eventos SET status='aprovado' WHERE id=?",
+                        (row["id"],)
+                    )
+                
+                    # 🔥 PEGAR VALORES DO EVENTO
+                    valor_venda = row["venda"] if "venda" in row else 0
+                    custo = row["custo"] if "custo" in row else 0
+                    lucro = valor_venda - custo
+                
+                    # 🔥 SALVAR NA TABELA VENDAS
+                    cursor.execute("""
+                    INSERT INTO vendas (evento_id, cliente, data, valor_venda, custo, lucro)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["cliente"],
+                        row["data"],
+                        valor_venda,
+                        custo,
+                        lucro
+                    ))
+                
+                    # 🔥 LANÇAR NO FINANCEIRO (AUTOMÁTICO)
+                    cursor.execute("""
+                    INSERT INTO financeiro (data, tipo, descricao, valor)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        datetime.now().strftime("%Y-%m-%d"),
+                        "Entrada",
+                        f"Evento {row['cliente']}",
+                        valor_venda
+                    ))
+                
+                    conn.commit()
+                    st.success("Evento aprovado e venda registrada!")
+                    st.rerun()
                     alertas = []
 
                     # 🔥 baixa estoque
@@ -1895,7 +1949,6 @@ elif menu == "Vendas":
         st.info("Nenhuma venda registrada")
 
     else:
-        # 🔥 KPIs
         total_vendas = df["valor_venda"].sum()
         total_custo = df["custo"].sum()
         total_lucro = df["lucro"].sum()
@@ -1911,7 +1964,6 @@ elif menu == "Vendas":
 
         st.markdown("---")
 
-        # 🔎 filtro por cliente
         cliente = st.text_input("Buscar cliente")
 
         if cliente:
