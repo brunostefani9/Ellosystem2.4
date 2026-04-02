@@ -392,12 +392,12 @@ def tela_insumos():
             use_container_width=True,
             column_config={
                 "preco": st.column_config.NumberColumn(
-                    "💰 Preço",
+                    "💰 Preço (KG)",
                     format="R$ %.2f"
                 ),
                 "custo": st.column_config.NumberColumn(
-                    "💰 Custo (por unidade)",
-                    format="R$ %.4f"
+                    "💰 Custo por uso",
+                    format="R$ %.2f"
                 ),
             }
         )
