@@ -2194,6 +2194,19 @@ elif menu == "Pacotes":
             placeholder="gelo saborizado\ncopo especial"
         )
 
+        cursor.execute("ALTER TABLE pacotes ADD COLUMN preco REAL")
+        cursor.execute("ALTER TABLE pacotes ADD COLUMN custo REAL")
+        conn.commit()
+        
+        st.markdown("### 💰 Precificação")
+
+        custo = st.number_input("Custo do pacote", min_value=0.0)
+        preco = st.number_input("Preço de venda", min_value=0.0)
+        
+        lucro_preview = preco - custo
+        
+        st.info(f"Lucro estimado: R$ {lucro_preview:,.2f}")
+
         if st.button("💾 Salvar pacote"):
 
             dados = json.dumps({
@@ -2202,9 +2215,9 @@ elif menu == "Pacotes":
             })
 
             cursor.execute("""
-            INSERT INTO pacotes (nome, tipo, dados)
-            VALUES (?,?,?)
-            """,(nome, tipo, dados))
+            INSERT INTO pacotes (nome, tipo, dados, preco, custo)
+            VALUES (?,?,?,?,?)
+            """,(nome, tipo, dados, preco, custo))
 
             conn.commit()
 
@@ -2228,6 +2241,12 @@ elif menu == "Pacotes":
             dados = json.loads(pacote["dados"])
 
             st.subheader(pacote["nome"])
+
+            lucro = (pacote["preco"] or 0) - (pacote["custo"] or 0)
+
+            st.write(f"💰 Preço: R$ {pacote['preco']}")
+            st.write(f"💸 Custo: R$ {pacote['custo']}")
+            st.write(f"📈 Lucro: R$ {lucro}")
 
             st.write("📦 Itens:")
             for i in dados["itens"]:
