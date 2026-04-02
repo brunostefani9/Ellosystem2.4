@@ -324,24 +324,26 @@ def tela_insumos():
     # -------------------------
     with tab1:
 
+        st.info("📌 Cadastro de frutas:\n- Quantidade sempre em KG\n- Uso sempre em GRAMAS")
+    
         with st.form("form_insumos", clear_on_submit=True):
-
+    
             nome = st.text_input("Nome do insumo")
-
+    
             quantidade = st.number_input(
-                "Quantidade total (g ou ml)",
+                "Quantidade (KG)",  # ✅ corrigido
                 min_value=0.0,
                 format="%.2f"
             )
-
+    
             preco = st.number_input(
-                "Preço",
+                "Preço (por KG)",  # 🔥 já melhora também
                 min_value=0.0,
                 format="%.2f"
             )
-
+    
             uso = st.number_input(
-                "Uso por receita (g ou ml)",
+                "Uso por receita (GRAMAS)",  # ✅ corrigido
                 min_value=1.0,
                 value=25.0,
                 format="%.2f"
@@ -351,26 +353,32 @@ def tela_insumos():
 
                 if quantidade == 0:
                     st.error("Quantidade não pode ser zero")
+                elif uso == 0:
+                    st.error("Uso não pode ser zero")
                 else:
-
-                    custo = (preco / quantidade) * uso
-                
+            
+                    # 🔹 converter KG → GRAMAS
+                    quantidade_gramas = quantidade * 1000
+            
+                    # 🔹 cálculo correto
+                    rendimento = quantidade_gramas / uso
+                    custo = preco / rendimento
+            
                     cursor.execute("""
                     INSERT INTO precos_insumos
                     VALUES(NULL,?,?,?,?,?,?,?)
                     """,(
-                        "insumo",
+                        "fruta",
                         normalizar_nome(nome),
-                        quantidade,
+                        quantidade,   # continua salvando em KG
                         preco,
                         uso,
-                        quantidade / uso if uso != 0 else 0,
+                        rendimento,
                         custo
                     ))
-                
+            
                     conn.commit()
-                    st.success("Insumo cadastrado!")
-
+                    st.success("Fruta cadastrada corretamente!")
     # -------------------------
     # LISTA / EDIÇÃO
     # -------------------------
