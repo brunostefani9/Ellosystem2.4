@@ -69,9 +69,6 @@ def gerar_pdf_orcamento(nome, data, cidade, tipo, convidados, valor, descricao):
 
     doc.build(elementos)
 
-# 👇 DEPOIS DISSO vem seu menu
-elif menu == "Orçamentos":
-
 def definir_categoria_global(produto):
 
     produto = str(produto).lower()
