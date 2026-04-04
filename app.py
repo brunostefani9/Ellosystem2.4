@@ -33,16 +33,7 @@ st.set_page_config(page_title="Ellosystem", layout="wide")
 # DATABASE
 # -------------------------
 
-import psycopg
-
-conn = psycopg.connect(
-    host="db.enryjijyjvwchnlpeitk.supabase.co",
-    dbname="postgres",
-    user="postgres",
-    password="Ello182099@",
-    port="Ello182099@"
-)
-
+conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
 cursor = conn.cursor()
 
 def criar_tabela(nome):
@@ -711,8 +702,6 @@ elif menu == "Estoque":
                 conn
             )
 
-            df["marca"] = df["marca"].str.lower().str.strip()
-            df_bebidas["nome"] = df_bebidas["nome"].str.lower().str.strip()
             # 🔥 MERGE (liga estoque com preços)
             df = df.merge(
                 df_bebidas,
@@ -721,8 +710,6 @@ elif menu == "Estoque":
                 how="left"
             )
 
-            df["preco"] = df["preco"].fillna(0)
-            
             # 🔥 CALCULAR VALOR TOTAL
             df["valor_total"] = df["quantidade"] * df["preco"]
 
@@ -973,10 +960,12 @@ elif menu == "Receitas":
 
 elif menu == "Orçamentos":
 
-    # limpa sempre que entra na tela
-    st.session_state["orcamento_bebidas"] = {}
-    st.session_state["orcamento_frutas"] = {}
-        
+    if "orcamento_bebidas" not in st.session_state:
+        st.session_state["orcamento_bebidas"] = {}
+
+    if "orcamento_frutas" not in st.session_state:
+        st.session_state["orcamento_frutas"] = {}
+    
     st.title("Orçamentos")
 
     tab1, tab2, tab3 = st.tabs([
@@ -1201,20 +1190,14 @@ elif menu == "Orçamentos":
                 # 📋 RESUMO BEBIDAS
                 # =========================
                 st.markdown("### 📋 Resumo Bebidas")
-
-                for item, dados in ingredientes_bebidas.items():
                 
-                    marca = escolhas_marcas[item]
+                for marca, dados in st.session_state["orcamento_bebidas"].items():
+                    qtd = dados["quantidade"]
+                    preco = dados["preco"]
                 
-                    qtd = st.session_state.get(f"qtd_{marca}", 0)
+                    total = qtd * preco
                 
-                    result = df_bebidas[df_bebidas["nome"] == marca]
-                
-                    if not result.empty:
-                        preco = result.iloc[0]["preco"]
-                        total = qtd * preco
-                
-                        st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
+                    st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
 
                 # =========================
                 # FRUTAS
@@ -1331,12 +1314,9 @@ elif menu == "Orçamentos":
                 preco_com_desconto = preco_venda * (1 - desconto / 100)
                 
                 st.metric("💸 Preço com desconto", f"R$ {preco_com_desconto:,.2f}")
+                valor_desconto = preco_venda - preco_com_desconto
 
-                if st.button("📄 Gerar PDF do orçamento"):
-                
-                    valor_desconto = preco_venda - preco_com_desconto
-
-                    st.metric(
+                st.metric(
                     "🔻 Desconto",
                     f"R$ {valor_desconto:,.2f}",
                     f"{desconto}%"
@@ -1814,7 +1794,6 @@ elif menu == "Orçamentos":
     
                 st.divider()
 
-
 elif menu == "Cachês":
 
     st.title("👥 Cálculo de Cachês")
@@ -2214,16 +2193,8 @@ elif menu == "Pacotes":
             placeholder="gelo saborizado\ncopo especial"
         )
 
-        try:
-            cursor.execute("ALTER TABLE pacotes ADD COLUMN preco REAL")
-        except:
-            pass
-        
-        try:
-            cursor.execute("ALTER TABLE pacotes ADD COLUMN custo REAL")
-        except:
-            pass
-        
+        cursor.execute("ALTER TABLE pacotes ADD COLUMN preco REAL")
+        cursor.execute("ALTER TABLE pacotes ADD COLUMN custo REAL")
         conn.commit()
         
         st.markdown("### 💰 Precificação")
