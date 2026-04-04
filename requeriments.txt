@@ -2,3 +2,4 @@ streamlite
 pandas
 reportlab
 fpdf
+psycopg2-binary
