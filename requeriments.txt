@@ -1,3 +1,4 @@
 streamlite
 pandas
 reportlab
+fpdf
