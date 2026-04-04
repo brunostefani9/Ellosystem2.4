@@ -1321,9 +1321,9 @@ elif menu == "Orçamentos":
 
                 if st.button("📄 Gerar PDF do orçamento"):
                 
-                valor_desconto = preco_venda - preco_com_desconto
+                    valor_desconto = preco_venda - preco_com_desconto
 
-                st.metric(
+                    st.metric(
                     "🔻 Desconto",
                     f"R$ {valor_desconto:,.2f}",
                     f"{desconto}%"
