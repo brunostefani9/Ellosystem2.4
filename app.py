@@ -1027,16 +1027,16 @@ elif menu == "Receitas":
 elif menu == "Orçamentos":
 
     # limpa sempre que entra na tela
-st.session_state["orcamento_bebidas"] = {}
-st.session_state["orcamento_frutas"] = {}
+    st.session_state["orcamento_bebidas"] = {}
+    st.session_state["orcamento_frutas"] = {}
+        
+        st.title("Orçamentos")
     
-    st.title("Orçamentos")
-
-    tab1, tab2, tab3 = st.tabs([
-        "🧾 Novo Orçamento",
-        "⏳ Pendentes",
-        "✅ Aprovados"
-    ])
+        tab1, tab2, tab3 = st.tabs([
+            "🧾 Novo Orçamento",
+            "⏳ Pendentes",
+            "✅ Aprovados"
+        ])
 
     # =========================
     # ABA 1 - NOVO ORÇAMENTO
