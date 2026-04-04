@@ -1030,13 +1030,13 @@ elif menu == "Orçamentos":
     st.session_state["orcamento_bebidas"] = {}
     st.session_state["orcamento_frutas"] = {}
         
-        st.title("Orçamentos")
-    
-        tab1, tab2, tab3 = st.tabs([
-            "🧾 Novo Orçamento",
-            "⏳ Pendentes",
-            "✅ Aprovados"
-        ])
+    st.title("Orçamentos")
+
+    tab1, tab2, tab3 = st.tabs([
+        "🧾 Novo Orçamento",
+        "⏳ Pendentes",
+        "✅ Aprovados"
+    ])
 
     # =========================
     # ABA 1 - NOVO ORÇAMENTO
