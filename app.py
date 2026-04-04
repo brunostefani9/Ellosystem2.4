@@ -33,7 +33,16 @@ st.set_page_config(page_title="Ellosystem", layout="wide")
 # DATABASE
 # -------------------------
 
-conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
+import psycopg2
+
+conn = psycopg2.connect(
+    host="db.enryjijyjvwchnlpeitk.supabase.co",
+    database="postgres",
+    user="postgres",
+    password="SUA_SENHA_AQUI",
+    port="Ello182099@"
+)
+
 cursor = conn.cursor()
 
 def criar_tabela(nome):
