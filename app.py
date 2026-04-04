@@ -33,11 +33,11 @@ st.set_page_config(page_title="Ellosystem", layout="wide")
 # DATABASE
 # -------------------------
 
-import psycopg2
+import psycopg
 
-conn = psycopg2.connect(
+conn = psycopg.connect(
     host="db.enryjijyjvwchnlpeitk.supabase.co",
-    database="postgres",
+    dbname="postgres",
     user="postgres",
     password="Ello182099@",
     port="Ello182099@"
