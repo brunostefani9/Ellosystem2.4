@@ -39,7 +39,7 @@ conn = psycopg2.connect(
     host="db.enryjijyjvwchnlpeitk.supabase.co",
     database="postgres",
     user="postgres",
-    password="SUA_SENHA_AQUI",
+    password="Ello182099@",
     port="Ello182099@"
 )
 
