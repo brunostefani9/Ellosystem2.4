@@ -702,6 +702,8 @@ elif menu == "Estoque":
                 conn
             )
 
+            df["marca"] = df["marca"].str.lower().str.strip()
+            df_bebidas["nome"] = df_bebidas["nome"].str.lower().str.strip()
             # 🔥 MERGE (liga estoque com preços)
             df = df.merge(
                 df_bebidas,
@@ -710,6 +712,8 @@ elif menu == "Estoque":
                 how="left"
             )
 
+            df["preco"] = df["preco"].fillna(0)
+            
             # 🔥 CALCULAR VALOR TOTAL
             df["valor_total"] = df["quantidade"] * df["preco"]
 
