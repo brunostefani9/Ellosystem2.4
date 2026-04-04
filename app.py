@@ -2,6 +2,75 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
+import streamlit as st
+import pandas as pd
+
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+
+def gerar_pdf_orcamento(nome, data, cidade, tipo, convidados, valor, descricao):
+
+    doc = SimpleDocTemplate("orcamento.pdf")
+    styles = getSampleStyleSheet()
+
+    # 🎨 estilos personalizados
+    titulo = ParagraphStyle(
+        'Titulo',
+        parent=styles['Title'],
+        textColor=colors.black,
+        fontSize=20,
+        spaceAfter=20
+    )
+
+    destaque = ParagraphStyle(
+        'Destaque',
+        parent=styles['Heading1'],
+        textColor=colors.green,
+        fontSize=18,
+        spaceAfter=20
+    )
+
+    normal = styles["Normal"]
+
+    elementos = []
+
+    # 🧾 TÍTULO
+    elementos.append(Paragraph("🍸 PROPOSTA DE SERVIÇO", titulo))
+
+    # 📋 BLOCO CLIENTE
+    elementos.append(Paragraph(f"<b>Cliente:</b> {nome}", normal))
+    elementos.append(Paragraph(f"<b>Data do evento:</b> {data}", normal))
+    elementos.append(Paragraph(f"<b>Local:</b> {cidade}", normal))
+    elementos.append(Paragraph(f"<b>Tipo de evento:</b> {tipo}", normal))
+    elementos.append(Paragraph(f"<b>Convidados:</b> {convidados}", normal))
+
+    elementos.append(Spacer(1, 20))
+
+    # 📝 DESCRIÇÃO
+    elementos.append(Paragraph("<b>Sobre o serviço</b>", styles["Heading2"]))
+    elementos.append(Spacer(1, 10))
+
+    texto = descricao if descricao else "Serviço de bar completo com equipe especializada, insumos e estrutura inclusa."
+    elementos.append(Paragraph(texto, normal))
+
+    elementos.append(Spacer(1, 30))
+
+    # 💰 VALOR DESTACADO
+    elementos.append(Paragraph(f"Investimento: R$ {valor:,.2f}", destaque))
+
+    elementos.append(Spacer(1, 20))
+
+    # 📌 RODAPÉ
+    elementos.append(Paragraph(
+        "Estamos à disposição para qualquer ajuste ou personalização do evento.",
+        normal
+    ))
+
+    doc.build(elementos)
+
+# 👇 DEPOIS DISSO vem seu menu
+elif menu == "Orçamentos":
 
 def definir_categoria_global(produto):
 
@@ -960,11 +1029,9 @@ elif menu == "Receitas":
 
 elif menu == "Orçamentos":
 
-    if "orcamento_bebidas" not in st.session_state:
-        st.session_state["orcamento_bebidas"] = {}
-
-    if "orcamento_frutas" not in st.session_state:
-        st.session_state["orcamento_frutas"] = {}
+    # limpa sempre que entra na tela
+st.session_state["orcamento_bebidas"] = {}
+st.session_state["orcamento_frutas"] = {}
     
     st.title("Orçamentos")
 
@@ -1190,14 +1257,20 @@ elif menu == "Orçamentos":
                 # 📋 RESUMO BEBIDAS
                 # =========================
                 st.markdown("### 📋 Resumo Bebidas")
+
+                for item, dados in ingredientes_bebidas.items():
                 
-                for marca, dados in st.session_state["orcamento_bebidas"].items():
-                    qtd = dados["quantidade"]
-                    preco = dados["preco"]
+                    marca = escolhas_marcas[item]
                 
-                    total = qtd * preco
+                    qtd = st.session_state.get(f"qtd_{marca}", 0)
                 
-                    st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
+                    result = df_bebidas[df_bebidas["nome"] == marca]
+                
+                    if not result.empty:
+                        preco = result.iloc[0]["preco"]
+                        total = qtd * preco
+                
+                        st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
 
                 # =========================
                 # FRUTAS
@@ -1314,6 +1387,28 @@ elif menu == "Orçamentos":
                 preco_com_desconto = preco_venda * (1 - desconto / 100)
                 
                 st.metric("💸 Preço com desconto", f"R$ {preco_com_desconto:,.2f}")
+                
+                descricao_servico = st.text_area("📝 Descrição do serviço (vai aparecer no PDF)")
+
+                if st.button("📄 Gerar PDF do orçamento"):
+
+                    gerar_pdf_orcamento(
+                        nome_cliente,
+                        data_evento,
+                        cidade_evento,
+                        tipo_evento,
+                        num_convidados,
+                        preco_com_desconto,
+                        descricao_servico
+                    )
+                
+                    with open("orcamento.pdf", "rb") as f:
+                        st.download_button(
+                            "⬇️ Baixar PDF",
+                            f,
+                            file_name=f"orcamento_{nome_cliente}.pdf"
+                        )
+                
                 valor_desconto = preco_venda - preco_com_desconto
 
                 st.metric(
