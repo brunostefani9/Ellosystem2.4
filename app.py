@@ -1071,31 +1071,31 @@ elif menu == "Orçamentos":
             pesos = {}
             total_peso = 0
     
-                for drink in selecao:
-                    peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
-                    pesos[drink] = peso
-                    total_peso += peso
-    
-                ingredientes_totais = {}
-    
-                for drink in selecao:
-    
-                    proporcao = pesos[drink] / total_peso
-                    qtd_drinks = total_drinks * proporcao
-    
-                    receita = df_receitas[df_receitas["drink"] == drink]
-    
-                    for _, row in receita.iterrows():
-    
-                        ingrediente = normalizar_nome(row["ingrediente"])
-                        qtd = row["quantidade"]
-    
-                        total_ingrediente = qtd * qtd_drinks
-    
-                        if ingrediente in ingredientes_totais:
-                            ingredientes_totais[ingrediente] += total_ingrediente
-                        else:
-                            ingredientes_totais[ingrediente] = total_ingrediente
+            for drink in selecao:
+                peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+                pesos[drink] = peso
+                total_peso += peso
+
+            ingredientes_totais = {}
+
+            for drink in selecao:
+
+                proporcao = pesos[drink] / total_peso
+                qtd_drinks = total_drinks * proporcao
+
+                receita = df_receitas[df_receitas["drink"] == drink]
+
+                for _, row in receita.iterrows():
+
+                    ingrediente = normalizar_nome(row["ingrediente"])
+                    qtd = row["quantidade"]
+
+                    total_ingrediente = qtd * qtd_drinks
+
+                    if ingrediente in ingredientes_totais:
+                        ingredientes_totais[ingrediente] += total_ingrediente
+                    else:
+                        ingredientes_totais[ingrediente] = total_ingrediente
 
                 # =========================
                 # DADOS
