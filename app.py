@@ -2279,14 +2279,41 @@ elif menu == "Pacotes":
         
         st.markdown(f"### 💸 Custo total das bebidas: R$ {custo_total_pacote:,.2f}")
 
-        extras = st.text_area(
-            "Extras opcionais",
-            placeholder="gelo saborizado\ncopo especial"
-        )
+        st.markdown("### 🧊 Extras do pacote")
+
+        extras_lista = []
+        
+        total_extras = 0.0
+        
+        qtd_extras = st.number_input("Quantidade de extras", min_value=0, value=0)
+        
+        for i in range(qtd_extras):
+        
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                nome_extra = st.text_input(f"Extra {i+1}", key=f"extra_nome_{i}")
+        
+            with col2:
+                valor_extra = st.number_input(
+                    f"Valor {i+1}",
+                    min_value=0.0,
+                    key=f"extra_valor_{i}"
+                )
+        
+            if nome_extra:
+                extras_lista.append({
+                    "nome": nome_extra,
+                    "valor": valor_extra
+                })
+        
+            total_extras += valor_extra
+        
+        st.markdown(f"### 💰 Total Extras: R$ {total_extras:,.2f}")
         
         st.markdown("### 💰 Precificação")
 
-        custo = custo_total_pacote
+        custo = custo_total_pacote + total_extras
         
         st.info(f"Custo automático: R$ {custo:,.2f}")
         
@@ -2324,7 +2351,7 @@ elif menu == "Pacotes":
 
             dados = json.dumps({
                 "bebidas": itens_pacote,
-                "extras": [e for e in extras.split("\n") if e.strip()]
+                "extras": extras_lista
             })
 
             cursor.execute("""
@@ -2375,9 +2402,9 @@ elif menu == "Pacotes":
                     st.write(f"✔ {i}")
 
             st.write("✨ Extras:")
-            for e in dados["extras"]:
-                if e:
-                    st.write(f"+ {e}")
+
+            for e in dados.get("extras", []):
+                st.write(f"+ {e['nome']} → R$ {e['valor']:,.2f}")
 
             if st.button("🗑 Excluir pacote"):
                 cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,))
