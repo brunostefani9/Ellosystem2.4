@@ -1213,63 +1213,63 @@ elif menu == "Orçamentos":
                 
                 for chave, dados in st.session_state["orcamento_bebidas"].items():
 
-                marca = dados["marca"]
-                qtd = dados["quantidade"]
-                preco = dados["preco"]
-            
-                total = qtd * preco
-            
-                if qtd > 0:
-                    st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
-
-                # =========================
-                # FRUTAS
-                # =========================
-                st.subheader("🍋 Frutas")
+                    marca = dados["marca"]
+                    qtd = dados["quantidade"]
+                    preco = dados["preco"]
                 
-                if "orcamento_frutas" not in st.session_state:
-                    st.session_state["orcamento_frutas"] = {}
+                    total = qtd * preco
                 
-                custo_frutas = 0
-                
-                for fruta, qtd_gramas in ingredientes_insumos.items():
-                
-                    encontrado = df_insumos[
-                        df_insumos["nome"].str.lower() == fruta
-                    ]
-                
-                    if not encontrado.empty:
-                
-                        preco_kg = encontrado.iloc[0]["preco"]
-                        custo_por_grama = preco_kg / 1000
-                
-                        col1, col2, col3 = st.columns([4,2,2])
-                
-                        with col1:
-                            st.write(f"✔ {fruta.capitalize()}")
-                
-                        with col2:
-                            key_qtd = f"qtd_fruta_{fruta.lower().strip()}"
-                
-                            if key_qtd not in st.session_state:
-                                st.session_state[key_qtd] = float(qtd_gramas)
-                
-                            qtd_editavel = st.number_input(
-                                "Gramas",
-                                min_value=0.0,
-                                key=key_qtd
-                            )
-                
-                        with col3:
-                            custo_item = qtd_editavel * custo_por_grama
-                            st.write(f"💰 R$ {custo_item:,.2f}")
-                
-                        st.session_state["orcamento_frutas"][fruta] = {
-                            "quantidade": qtd_editavel,
-                            "preco_grama": custo_por_grama
-                        }
-                
-                        custo_frutas += custo_item
+                    if qtd > 0:
+                        st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
+    
+                    # =========================
+                    # FRUTAS
+                    # =========================
+                    st.subheader("🍋 Frutas")
+                    
+                    if "orcamento_frutas" not in st.session_state:
+                        st.session_state["orcamento_frutas"] = {}
+                    
+                    custo_frutas = 0
+                    
+                    for fruta, qtd_gramas in ingredientes_insumos.items():
+                    
+                        encontrado = df_insumos[
+                            df_insumos["nome"].str.lower() == fruta
+                        ]
+                    
+                        if not encontrado.empty:
+                    
+                            preco_kg = encontrado.iloc[0]["preco"]
+                            custo_por_grama = preco_kg / 1000
+                    
+                            col1, col2, col3 = st.columns([4,2,2])
+                    
+                            with col1:
+                                st.write(f"✔ {fruta.capitalize()}")
+                    
+                            with col2:
+                                key_qtd = f"qtd_fruta_{fruta.lower().strip()}"
+                    
+                                if key_qtd not in st.session_state:
+                                    st.session_state[key_qtd] = float(qtd_gramas)
+                    
+                                qtd_editavel = st.number_input(
+                                    "Gramas",
+                                    min_value=0.0,
+                                    key=key_qtd
+                                )
+                    
+                            with col3:
+                                custo_item = qtd_editavel * custo_por_grama
+                                st.write(f"💰 R$ {custo_item:,.2f}")
+                    
+                            st.session_state["orcamento_frutas"][fruta] = {
+                                "quantidade": qtd_editavel,
+                                "preco_grama": custo_por_grama
+                            }
+                    
+                            custo_frutas += custo_item
                         
                 # =========================
                 # 📋 RESUMO FRUTAS
