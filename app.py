@@ -808,8 +808,174 @@ elif menu == "Estoque":
 
 elif menu == "Relatórios":
 
-    st.title("Relatórios")
-    st.info("Indicadores virão na próxima etapa")
+    st.title("📊 Dashboard Geral")
+
+    # =========================
+    # FILTRO GLOBAL
+    # =========================
+    col1, col2 = st.columns(2)
+    data_inicio = col1.date_input("📅 Data inicial")
+    data_fim = col2.date_input("📅 Data final")
+
+    # =========================
+    # CARREGAR DADOS
+    # =========================
+    df_vendas = pd.read_sql("SELECT * FROM vendas", conn)
+    df_fin = pd.read_sql("SELECT * FROM financeiro", conn)
+    df_itens = pd.read_sql("SELECT * FROM evento_itens", conn)
+
+    # converter datas
+    if not df_vendas.empty:
+        df_vendas["data"] = pd.to_datetime(df_vendas["data"])
+
+    if not df_fin.empty:
+        df_fin["data"] = pd.to_datetime(df_fin["data"])
+
+    # aplicar filtro
+    if data_inicio and data_fim:
+        if not df_vendas.empty:
+            df_vendas = df_vendas[
+                (df_vendas["data"] >= pd.to_datetime(data_inicio)) &
+                (df_vendas["data"] <= pd.to_datetime(data_fim))
+            ]
+
+        if not df_fin.empty:
+            df_fin = df_fin[
+                (df_fin["data"] >= pd.to_datetime(data_inicio)) &
+                (df_fin["data"] <= pd.to_datetime(data_fim))
+            ]
+
+    # =========================
+    # ABAS
+    # =========================
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Visão Geral",
+        "💰 Financeiro",
+        "📈 Vendas",
+        "🎯 Metas",
+        "📦 Produtos"
+    ])
+
+    # =========================
+    # 📊 VISÃO GERAL
+    # =========================
+    with tab1:
+
+        total_vendas = df_vendas["valor_venda"].sum() if not df_vendas.empty else 0
+        total_custo = df_vendas["custo"].sum() if not df_vendas.empty else 0
+        total_lucro = df_vendas["lucro"].sum() if not df_vendas.empty else 0
+
+        margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("💰 Faturamento", f"R$ {total_vendas:,.2f}")
+        col2.metric("💸 Custos", f"R$ {total_custo:,.2f}")
+        col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
+        col4.metric("📊 Margem", f"{margem:.1f}%")
+
+        st.divider()
+
+        if not df_vendas.empty:
+            vendas_dia = df_vendas.groupby(df_vendas["data"].dt.date)["valor_venda"].sum()
+            st.line_chart(vendas_dia)
+
+    # =========================
+    # 💰 FINANCEIRO
+    # =========================
+    with tab2:
+
+        entradas = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum() if not df_fin.empty else 0
+        saidas = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum() if not df_fin.empty else 0
+
+        saldo = entradas - saidas
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("💵 Entradas", f"R$ {entradas:,.2f}")
+        col2.metric("💸 Saídas", f"R$ {saidas:,.2f}")
+        col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
+
+        st.divider()
+
+        if not df_fin.empty:
+            fluxo = df_fin.groupby(["data", "tipo"])["valor"].sum().unstack().fillna(0)
+            st.line_chart(fluxo)
+
+    # =========================
+    # 📈 VENDAS
+    # =========================
+    with tab3:
+
+        if not df_vendas.empty:
+
+            vendas_mes = df_vendas.groupby(
+                df_vendas["data"].dt.to_period("M")
+            )["valor_venda"].sum()
+
+            st.subheader("📅 Vendas por mês")
+            st.bar_chart(vendas_mes)
+
+            st.divider()
+
+            top_clientes = df_vendas.groupby("cliente")["valor_venda"].sum() \
+                                    .sort_values(ascending=False).head(5)
+
+            st.subheader("🏆 Top Clientes")
+            st.dataframe(top_clientes)
+
+            ticket_medio = df_vendas["valor_venda"].mean()
+            st.metric("🎟 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+
+        else:
+            st.info("Sem dados de vendas")
+
+    # =========================
+    # 🎯 METAS
+    # =========================
+    with tab4:
+
+        meta_mensal = st.number_input("Meta mensal (R$)", value=10000.0)
+
+        if not df_vendas.empty:
+
+            mes_atual = pd.Timestamp.now().to_period("M")
+
+            vendas_mes = df_vendas[
+                df_vendas["data"].dt.to_period("M") == mes_atual
+            ]["valor_venda"].sum()
+
+            progresso = (vendas_mes / meta_mensal * 100) if meta_mensal > 0 else 0
+
+            st.metric("📊 Vendas no mês", f"R$ {vendas_mes:,.2f}")
+            st.progress(min(progresso / 100, 1.0))
+            st.write(f"{progresso:.1f}% da meta")
+
+        else:
+            st.info("Sem vendas no mês")
+
+    # =========================
+    # 📦 PRODUTOS
+    # =========================
+    with tab5:
+
+        if not df_itens.empty:
+
+            ranking = df_itens.groupby("produto")["quantidade"].sum() \
+                              .sort_values(ascending=False).head(10)
+
+            st.subheader("🔥 Produtos mais utilizados")
+            st.bar_chart(ranking)
+
+            st.divider()
+
+            categorias = df_itens.groupby("categoria")["quantidade"].sum()
+            st.subheader("📊 Consumo por categoria")
+            st.bar_chart(categorias)
+
+        else:
+            st.info("Sem dados de produtos")
+    
 
 elif menu == "Receitas":
 
