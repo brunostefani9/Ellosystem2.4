@@ -2229,15 +2229,55 @@ elif menu == "Pacotes":
 
         nome = st.text_input("Nome do pacote")
 
-        tipo = st.selectbox(
-            "Tipo do serviço",
-            ["Bar Principal","Whisky","Gin","Spritz","Shots","Outro"]
-        )
+        tipo = st.text_input("Tipo do serviço (livre)")
 
-        itens = st.text_area(
-            "Itens (um por linha)",
-            placeholder="jack daniels\nred label\ngelo"
-        )
+        st.markdown("### 🍸 Bebidas do pacote")
+
+        df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
+        
+        itens_pacote = []
+        
+        custo_total_pacote = 0
+        
+        if not df_bebidas.empty:
+        
+            bebidas_selecionadas = st.multiselect(
+                "Selecione as bebidas",
+                df_bebidas["nome"]
+            )
+        
+            for bebida in bebidas_selecionadas:
+        
+                dados = df_bebidas[df_bebidas["nome"] == bebida].iloc[0]
+        
+                preco = dados["preco"]
+                volume = dados["quantidade"]
+        
+                col1, col2, col3 = st.columns([4,2,2])
+        
+                with col1:
+                    st.write(f"✔ {bebida}")
+        
+                with col2:
+                    qtd = st.number_input(
+                        "Qtd",
+                        min_value=0,
+                        key=f"pac_{bebida}"
+                    )
+        
+                with col3:
+                    total_item = qtd * preco
+                    st.write(f"💰 R$ {total_item:,.2f}")
+        
+                custo_total_pacote += total_item
+        
+                itens_pacote.append({
+                    "nome": bebida,
+                    "quantidade": qtd,
+                    "preco": preco
+                })
+        
+        st.markdown(f"### 💸 Custo total das bebidas: R$ {custo_total_pacote:,.2f}")
 
         extras = st.text_area(
             "Extras opcionais",
@@ -2246,17 +2286,44 @@ elif menu == "Pacotes":
         
         st.markdown("### 💰 Precificação")
 
-        custo = st.number_input("Custo do pacote", min_value=0.0)
-        preco = st.number_input("Preço de venda", min_value=0.0)
+        custo = custo_total_pacote
         
+        st.info(f"Custo automático: R$ {custo:,.2f}")
+        
+        # -------------------------
+        # MARGEM
+        # -------------------------
+        margem = st.slider("Margem de lucro (%)", 0, 300, 100)
+        
+        preco_sugerido = custo * (1 + margem / 100)
+        
+        st.metric("💡 Preço sugerido", f"R$ {preco_sugerido:,.2f}")
+        
+        # -------------------------
+        # PREÇO FINAL (EDITÁVEL)
+        # -------------------------
+        preco = st.number_input(
+            "Preço de venda final",
+            min_value=0.0,
+            value=float(preco_sugerido)
+        )
+        
+        # -------------------------
+        # LUCRO
+        # -------------------------
         lucro_preview = preco - custo
+        
+        if lucro_preview < 0:
+            st.error(f"⚠️ Prejuízo: R$ {lucro_preview:,.2f}")
+        else:
+            st.success(f"✅ Lucro estimado: R$ {lucro_preview:,.2f}")
         
         st.info(f"Lucro estimado: R$ {lucro_preview:,.2f}")
 
         if st.button("💾 Salvar pacote"):
 
             dados = json.dumps({
-                "itens": [i for i in itens.split("\n") if i.strip()],
+                "bebidas": itens_pacote,
                 "extras": [e for e in extras.split("\n") if e.strip()]
             })
 
@@ -2268,6 +2335,13 @@ elif menu == "Pacotes":
             conn.commit()
 
             st.success("Pacote salvo!")
+
+        # -------------------------
+        # MARKUP (AQUI)
+        # -------------------------
+        if custo > 0:
+            markup = preco / custo
+            st.metric("📊 Markup", f"{markup:.2f}x")
 
     # -------------------------
     # LISTA
@@ -2284,7 +2358,8 @@ elif menu == "Pacotes":
 
             pacote = df[df["id"] == id_sel].iloc[0]
 
-            dados = json.loads(pacote["dados"])
+            for b in dados.get("bebidas", []):
+                st.write(f"✔ {b['nome']} - {b['quantidade']} un")
 
             st.subheader(pacote["nome"])
 
