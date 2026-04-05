@@ -971,7 +971,6 @@ elif menu == "Receitas":
                 st.success(f"{drink_excluir} excluído com sucesso!")
                 st.rerun()
 
-ainda nao achei especificamente, aqui vai a aba completa, pode me ajudar ?
 elif menu == "Orçamentos":
 
     if "orcamento_bebidas" not in st.session_state:
