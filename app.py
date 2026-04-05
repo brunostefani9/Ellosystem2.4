@@ -1064,8 +1064,12 @@ elif menu == "Orçamentos":
 
             if selecao:
 
-                pesos = {}
-                total_peso = 0
+            # 🔥 LIMPA MEMÓRIA ANTIGA (ESSENCIAL)
+            st.session_state["orcamento_bebidas"] = {}
+            st.session_state["orcamento_frutas"] = {}
+        
+            pesos = {}
+            total_peso = 0
 
                 for drink in selecao:
                     peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
@@ -1143,7 +1147,7 @@ elif menu == "Orçamentos":
                     escolha = st.selectbox(
                         f"{item} - Escolha a marca",
                         opcoes["nome"],
-                        key=f"marca_{item}"
+                        key=f"marca_{item}_{hash(item)}"
                     )
                     escolhas_marcas[item] = escolha
                 
@@ -1173,7 +1177,7 @@ elif menu == "Orçamentos":
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-                                key_qtd = f"qtd_{marca}"
+                                key_qtd = f"qtd_{marca}_{item}"
 
                             # se ainda não existe, cria valor inicial
                             if key_qtd not in st.session_state:
@@ -1190,7 +1194,10 @@ elif menu == "Orçamentos":
                                 st.write(f"💰 R$ {custo_item:,.2f}")
                 
                             # salva estado
-                            st.session_state["orcamento_bebidas"][marca] = {
+                            chave = f"{marca}_{item}"
+
+                            st.session_state["orcamento_bebidas"][chave] = {
+                                "marca": marca,
                                 "quantidade": qtd_editavel,
                                 "preco": preco
                             }
@@ -1204,12 +1211,15 @@ elif menu == "Orçamentos":
                 # =========================
                 st.markdown("### 📋 Resumo Bebidas")
                 
-                for marca, dados in st.session_state["orcamento_bebidas"].items():
-                    qtd = dados["quantidade"]
-                    preco = dados["preco"]
-                
-                    total = qtd * preco
-                
+                for chave, dados in st.session_state["orcamento_bebidas"].items():
+
+                marca = dados["marca"]
+                qtd = dados["quantidade"]
+                preco = dados["preco"]
+            
+                total = qtd * preco
+            
+                if qtd > 0:
                     st.write(f"✔ {marca} → {qtd} garrafas | 💰 R$ {total:,.2f}")
 
                 # =========================
