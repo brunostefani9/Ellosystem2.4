@@ -2281,33 +2281,56 @@ elif menu == "Pacotes":
 
         st.markdown("### 🧊 Extras do pacote")
 
-        extras_lista = []
+        # -------------------------
+        # ESTADO
+        # -------------------------
+        if "extras_lista" not in st.session_state:
+            st.session_state["extras_lista"] = []
         
-        total_extras = 0.0
+        # -------------------------
+        # INPUTS
+        # -------------------------
+        col1, col2, col3 = st.columns([4,2,1])
         
-        qtd_extras = st.number_input("Quantidade de extras", min_value=0, value=0)
+        with col1:
+            nome_extra = st.text_input("Nome do extra", placeholder="Ex: 45 esferas de gelo translúcido")
         
-        for i in range(qtd_extras):
+        with col2:
+            valor_extra = st.number_input("Valor", min_value=0.0, format="%.2f")
         
-            col1, col2 = st.columns(2)
+        with col3:
+            if st.button("➕"):
+                if nome_extra:
+                    st.session_state["extras_lista"].append({
+                        "nome": nome_extra,
+                        "valor": valor_extra
+                    })
         
-            with col1:
-                nome_extra = st.text_input(f"Extra {i+1}", key=f"extra_nome_{i}")
+        # -------------------------
+        # LISTA
+        # -------------------------
+        total_extras = 0
         
-            with col2:
-                valor_extra = st.number_input(
-                    f"Valor {i+1}",
-                    min_value=0.0,
-                    key=f"extra_valor_{i}"
-                )
+        if st.session_state["extras_lista"]:
         
-            if nome_extra:
-                extras_lista.append({
-                    "nome": nome_extra,
-                    "valor": valor_extra
-                })
+            st.markdown("### 📋 Extras adicionados")
         
-            total_extras += valor_extra
+            for i, extra in enumerate(st.session_state["extras_lista"]):
+        
+                col1, col2, col3 = st.columns([4,2,1])
+        
+                with col1:
+                    st.write(f"✔ {extra['nome']}")
+        
+                with col2:
+                    st.write(f"R$ {extra['valor']:,.2f}")
+        
+                with col3:
+                    if st.button("❌", key=f"del_extra_{i}"):
+                        st.session_state["extras_lista"].pop(i)
+                        st.rerun()
+        
+                total_extras += extra["valor"]
         
         st.markdown(f"### 💰 Total Extras: R$ {total_extras:,.2f}")
         
@@ -2351,7 +2374,7 @@ elif menu == "Pacotes":
 
             dados = json.dumps({
                 "bebidas": itens_pacote,
-                "extras": extras_lista
+                "extras": st.session_state["extras_lista"]
             })
 
             cursor.execute("""
@@ -2362,6 +2385,7 @@ elif menu == "Pacotes":
             conn.commit()
 
             st.success("Pacote salvo!")
+            st.session_state["extras_lista"] = []
 
         # -------------------------
         # MARKUP (AQUI)
