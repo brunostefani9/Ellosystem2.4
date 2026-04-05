@@ -1062,40 +1062,40 @@ elif menu == "Orçamentos":
             drinks = df_receitas["drink"].unique()
             selecao = st.multiselect("Selecione os drinks", drinks)
 
-            if selecao:
+        if selecao:
 
-            # 🔥 LIMPA MEMÓRIA ANTIGA (ESSENCIAL)
-            st.session_state["orcamento_bebidas"] = {}
-            st.session_state["orcamento_frutas"] = {}
-        
-            pesos = {}
-            total_peso = 0
+        # 🔥 LIMPA MEMÓRIA ANTIGA (ESSENCIAL)
+        st.session_state["orcamento_bebidas"] = {}
+        st.session_state["orcamento_frutas"] = {}
+    
+        pesos = {}
+        total_peso = 0
 
-                for drink in selecao:
-                    peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
-                    pesos[drink] = peso
-                    total_peso += peso
+            for drink in selecao:
+                peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+                pesos[drink] = peso
+                total_peso += peso
 
-                ingredientes_totais = {}
+            ingredientes_totais = {}
 
-                for drink in selecao:
+            for drink in selecao:
 
-                    proporcao = pesos[drink] / total_peso
-                    qtd_drinks = total_drinks * proporcao
+                proporcao = pesos[drink] / total_peso
+                qtd_drinks = total_drinks * proporcao
 
-                    receita = df_receitas[df_receitas["drink"] == drink]
+                receita = df_receitas[df_receitas["drink"] == drink]
 
-                    for _, row in receita.iterrows():
+                for _, row in receita.iterrows():
 
-                        ingrediente = normalizar_nome(row["ingrediente"])
-                        qtd = row["quantidade"]
+                    ingrediente = normalizar_nome(row["ingrediente"])
+                    qtd = row["quantidade"]
 
-                        total_ingrediente = qtd * qtd_drinks
+                    total_ingrediente = qtd * qtd_drinks
 
-                        if ingrediente in ingredientes_totais:
-                            ingredientes_totais[ingrediente] += total_ingrediente
-                        else:
-                            ingredientes_totais[ingrediente] = total_ingrediente
+                    if ingrediente in ingredientes_totais:
+                        ingredientes_totais[ingrediente] += total_ingrediente
+                    else:
+                        ingredientes_totais[ingrediente] = total_ingrediente
 
                 # =========================
                 # DADOS
