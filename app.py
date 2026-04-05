@@ -188,6 +188,19 @@ try:
 except:
     pass
 
+# adiciona categoria sem quebrar
+try:
+    cursor.execute("ALTER TABLE evento_itens ADD COLUMN categoria TEXT")
+    conn.commit()
+except:
+    pass
+
+try:
+    cursor.execute("ALTER TABLE pacotes ADD COLUMN preco_por_pessoa REAL")
+    conn.commit()
+except:
+    pass
+
 # -------------------------
 # SIDEBAR
 # -------------------------
@@ -1282,12 +1295,50 @@ elif menu == "Orçamentos":
                     custo_caches +
                     custo_outros
                 )
+                                
+                # =========================
+                # 📦 PACOTES / SERVIÇOS ADICIONAIS
+                # =========================
+                st.subheader("📦 Serviços Adicionais")
                 
+                df_pacotes = pd.read_sql("SELECT * FROM pacotes", conn)
+                
+                total_pacotes = 0
+                
+                if not df_pacotes.empty:
+                
+                    nomes_pacotes = df_pacotes["nome"].tolist()
+                
+                    pacotes_selecionados = st.multiselect(
+                        "Selecione pacotes adicionais",
+                        nomes_pacotes
+                    )
+                
+                    for nome in pacotes_selecionados:
+                
+                        pacote = df_pacotes[df_pacotes["nome"] == nome].iloc[0]
+                
+                        preco_fixo = pacote["preco"] if "preco" in pacote else 0
+                        preco_por_pessoa = pacote["preco_por_pessoa"] if "preco_por_pessoa" in pacote else 0
+                
+                        if preco_por_pessoa and preco_por_pessoa > 0:
+                            total = preco_por_pessoa * num_convidados
+                            st.write(f"✔ {nome} ({num_convidados} pessoas) → R$ {total:,.2f}")
+                        else:
+                            total = preco_fixo
+                            st.write(f"✔ {nome} → R$ {total:,.2f}")
+                
+                        total_pacotes += total
+                
+                else:
+                    st.info("Nenhum pacote cadastrado")
+                
+                st.markdown(f"### 💰 Total Pacotes: R$ {total_pacotes:,.2f}")
                 
                 # =========================
                 # TOTAL
                 # =========================
-                custo_total = custo_bebidas + custo_frutas + custo_extras
+                custo_total = custo_bebidas + custo_frutas + custo_extras + total_pacotes
                 
                 st.divider()
                 
@@ -2192,10 +2243,6 @@ elif menu == "Pacotes":
             "Extras opcionais",
             placeholder="gelo saborizado\ncopo especial"
         )
-
-        cursor.execute("ALTER TABLE pacotes ADD COLUMN preco REAL")
-        cursor.execute("ALTER TABLE pacotes ADD COLUMN custo REAL")
-        conn.commit()
         
         st.markdown("### 💰 Precificação")
 
