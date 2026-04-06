@@ -564,76 +564,71 @@ if menu == "Precificação":
 
 elif menu == "Estoque":
 
-    st.title("📦 Controle de Estoque")
+    st.title("Controle de Estoque")
+
+    # 🔧 GARANTIR COLUNAS NOVAS
+    try:
+        cursor.execute("ALTER TABLE estoque ADD COLUMN tamanho TEXT")
+    except:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE estoque ADD COLUMN preco REAL")
+    except:
+        pass
+
+    conn.commit()
 
     tab1, tab2, tab3, tab4 = st.tabs(
         ["Entrada", "Saída", "Estoque físico", "Registros"]
     )
 
-    # =========================
+    # -------------------------
     # ENTRADA
-    # =========================
+    # -------------------------
     with tab1:
 
         with st.form("entrada_estoque", clear_on_submit=True):
 
-            st.subheader("➕ Entrada de Produto")
-
             produto = st.text_input("Tipo do Produto").lower().strip()
             marca = st.text_input("Marca")
-
-            tamanho = st.selectbox(
-                "Tamanho",
-                ["1L", "750ml", "700ml", "600ml"]
-            )
-
-            qtd = st.number_input("Quantidade", min_value=1.0)
+            tamanho = st.text_input("Tamanho (ex: 750ml, 1L)")
+            preco = st.number_input("Preço unitário", min_value=0.0)
+            qtd = st.number_input("Quantidade", min_value=0.0)
 
             status = st.selectbox(
-                "Tipo",
-                ["Compra", "Volta evento"]
+                "Status",
+                ["Compra", "Volta evento", "Teste"]
             )
-
-            preco = 0.0
-
-            if status == "Compra":
-                preco = st.number_input("Preço por garrafa", min_value=0.0)
-
-            else:
-                st.info("🔁 Retorno de evento: será somado ao estoque existente")
 
             if st.form_submit_button("Registrar entrada"):
 
-                atual = pd.read_sql(
-                    "SELECT * FROM estoque WHERE produto=? AND marca=? AND tamanho=?",
-                    conn,
-                    params=(produto, marca, tamanho)
-                )
-
-                if atual.empty:
-
-                    cursor.execute("""
-                        INSERT INTO estoque (produto, marca, tamanho, quantidade, preco)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (produto, marca, tamanho, qtd, preco))
+                if status == "Teste":
+                    st.warning("Movimentação de teste NÃO altera o estoque")
 
                 else:
-                    qtd_atual = atual.iloc[0]["quantidade"]
-                    preco_atual = atual.iloc[0]["preco"]
 
-                    nova_qtd = qtd_atual + qtd
+                    atual = pd.read_sql(
+                        "SELECT * FROM estoque WHERE produto=? AND marca=? AND tamanho=?",
+                        conn,
+                        params=(produto, marca, tamanho)
+                    )
 
-                    if status == "Compra":
-                        novo_preco = preco
+                    if atual.empty:
+                        cursor.execute(
+                            "INSERT INTO estoque VALUES(?,?,?,?,?)",
+                            (produto, marca, qtd, tamanho, preco)
+                        )
                     else:
-                        novo_preco = preco_atual
+                        nova_qtd = atual.iloc[0]["quantidade"] + qtd
 
-                    cursor.execute("""
-                        UPDATE estoque
-                        SET quantidade=?, preco=?
-                        WHERE produto=? AND marca=? AND tamanho=?
-                    """, (nova_qtd, novo_preco, produto, marca, tamanho))
+                        cursor.execute("""
+                            UPDATE estoque
+                            SET quantidade=?, preco=?
+                            WHERE produto=? AND marca=? AND tamanho=?
+                        """, (nova_qtd, preco, produto, marca, tamanho))
 
+                # REGISTRO (inclusive teste)
                 cursor.execute("""
                     INSERT INTO movimentacoes
                     VALUES(?,?,?,?,?,?)
@@ -649,12 +644,11 @@ elif menu == "Estoque":
                 )
 
                 conn.commit()
-                st.success("✅ Entrada registrada!")
-                st.rerun()
+                st.success("Entrada registrada!")
 
-    # =========================
+    # -------------------------
     # SAÍDA
-    # =========================
+    # -------------------------
     with tab2:
 
         estoque = pd.read_sql("SELECT * FROM estoque", conn)
@@ -670,20 +664,10 @@ elif menu == "Estoque":
                     estoque["produto"].unique()
                 )
 
-                marca = st.selectbox(
-                    "Marca",
-                    estoque[estoque["produto"] == produto]["marca"].unique()
-                )
+                marca = st.text_input("Marca")
+                tamanho = st.text_input("Tamanho")
 
-                tamanho = st.selectbox(
-                    "Tamanho",
-                    estoque[
-                        (estoque["produto"] == produto) &
-                        (estoque["marca"] == marca)
-                    ]["tamanho"].unique()
-                )
-
-                qtd = st.number_input("Quantidade", min_value=1.0)
+                qtd = st.number_input("Quantidade", min_value=0.0)
 
                 if st.form_submit_button("Registrar saída"):
 
@@ -697,8 +681,7 @@ elif menu == "Estoque":
                         st.error("Item não encontrado")
 
                     else:
-                        qtd_atual = atual.iloc[0]["quantidade"]
-                        nova = qtd_atual - qtd
+                        nova = atual.iloc[0]["quantidade"] - qtd
 
                         if nova < 0:
                             st.error("Estoque insuficiente")
@@ -725,12 +708,11 @@ elif menu == "Estoque":
                             )
 
                             conn.commit()
-                            st.success("✅ Saída registrada!")
-                            st.rerun()
+                            st.success("Saída registrada!")
 
-    # =========================
+    # -------------------------
     # ESTOQUE FÍSICO
-    # =========================
+    # -------------------------
     with tab3:
 
         df = pd.read_sql(
@@ -738,7 +720,7 @@ elif menu == "Estoque":
             conn
         )
 
-        busca = st.text_input("🔍 Buscar")
+        busca = st.text_input("Pesquisar")
 
         if busca:
             df = df[df["marca"].str.contains(busca, case=False)]
@@ -748,45 +730,66 @@ elif menu == "Estoque":
 
         else:
 
-            # 💰 cálculo automático
             df["valor_total"] = df["quantidade"] * df["preco"]
 
-            total_estoque = df["valor_total"].sum()
-            total_itens = df["quantidade"].sum()
-
-            col1, col2 = st.columns(2)
-            col1.metric("📦 Total de itens", int(total_itens))
-            col2.metric("💰 Valor total em estoque", f"R$ {total_estoque:,.2f}")
-
-            st.divider()
-
             st.dataframe(
-                df[
-                    ["produto", "marca", "tamanho", "quantidade", "preco", "valor_total"]
-                ],
+                df,
                 use_container_width=True,
                 column_config={
-                    "preco": st.column_config.NumberColumn("💰 Unitário", format="R$ %.2f"),
+                    "preco": st.column_config.NumberColumn("💰 Preço", format="R$ %.2f"),
                     "valor_total": st.column_config.NumberColumn("💎 Total", format="R$ %.2f")
                 }
             )
 
-            # 🔥 ranking financeiro
-            st.subheader("💸 Onde está seu dinheiro")
+            total = df["valor_total"].sum()
 
-            ranking = df.sort_values(by="valor_total", ascending=False)
-            st.bar_chart(ranking.set_index("marca")["valor_total"])
+            st.metric("💰 Valor total em estoque", f"R$ {total:,.2f}")
 
-            # 🔥 alerta
-            baixo = df[df["quantidade"] <= 2]
+            # 🔥 EXCLUIR ITEM
+            st.markdown("---")
+            st.subheader("🗑 Remover item")
 
-            if not baixo.empty:
-                st.warning("⚠️ Estoque baixo")
-                st.dataframe(baixo[["produto", "marca", "quantidade"]])
+            item = st.selectbox(
+                "Selecione",
+                df["produto"] + " | " + df["marca"] + " | " + df["tamanho"].astype(str)
+            )
 
-    # =========================
+            if st.button("Excluir item"):
+
+                produto_sel, marca_sel, tamanho_sel = item.split(" | ")
+
+                row = df[
+                    (df["produto"] == produto_sel) &
+                    (df["marca"] == marca_sel) &
+                    (df["tamanho"] == tamanho_sel)
+                ].iloc[0]
+
+                cursor.execute("""
+                    INSERT INTO movimentacoes
+                    VALUES(?,?,?,?,?,?)
+                """,
+                (
+                    datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    produto_sel,
+                    marca_sel,
+                    "Exclusão",
+                    row["quantidade"],
+                    "Manual"
+                )
+                )
+
+                cursor.execute("""
+                    DELETE FROM estoque
+                    WHERE produto=? AND marca=? AND tamanho=?
+                """, (produto_sel, marca_sel, tamanho_sel))
+
+                conn.commit()
+                st.success("Item removido!")
+                st.rerun()
+
+    # -------------------------
     # REGISTROS
-    # =========================
+    # -------------------------
     with tab4:
 
         df = pd.read_sql(
@@ -795,6 +798,8 @@ elif menu == "Estoque":
         )
 
         st.dataframe(df, use_container_width=True)
+
+        st.info("Movimentações com status 'Teste' não afetam o estoque")
 
 elif menu == "Relatórios":
 
