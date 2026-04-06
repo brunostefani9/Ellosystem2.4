@@ -815,10 +815,16 @@ elif menu == "Estoque":
                 )
                 )
 
-                cursor.execute("""
-                    DELETE FROM estoque
-                    WHERE produto=? AND marca=? AND tamanho=?
-                """, (produto_sel, marca_sel, tamanho_sel))
+                if tamanho_sel == "Sem tamanho":
+                    cursor.execute("""
+                        DELETE FROM estoque
+                        WHERE produto=? AND marca=? AND (tamanho IS NULL OR tamanho='')
+                    """, (produto_sel, marca_sel))
+                else:
+                    cursor.execute("""
+                        DELETE FROM estoque
+                        WHERE produto=? AND marca=? AND tamanho=?
+                    """, (produto_sel, marca_sel, tamanho_sel))
 
                 conn.commit()
 
