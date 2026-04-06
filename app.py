@@ -3,6 +3,47 @@ import pandas as pd
 import sqlite3
 from datetime import datetime
 
+# =========================
+# CONFIG + UI GLOBAL
+# =========================
+st.set_page_config(page_title="Ellosystem", layout="wide")
+
+st.markdown("""
+<style>
+body {background-color: #0f172a;}
+.block-container {padding-top: 2rem;}
+
+.stButton>button {
+    border-radius: 10px;
+    background-color: #6366f1;
+    color: white;
+    font-weight: 600;
+    border: none;
+    padding: 0.6rem 1rem;
+    width: 100%;
+}
+
+.stButton>button:hover {
+    background-color: #4f46e5;
+}
+
+.stTextInput input, .stNumberInput input {
+    border-radius: 8px;
+}
+
+.card {
+    padding: 20px;
+    border-radius: 12px;
+    background-color: #1e293b;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    margin-bottom: 20px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# FUNÇÕES
+# =========================
 def definir_categoria_global(produto):
 
     produto = str(produto).lower()
@@ -27,17 +68,18 @@ def definir_categoria_global(produto):
     else:
         return "Outros"
 
-st.set_page_config(page_title="Ellosystem", layout="wide")
+def normalizar_nome(nome):
+    if not nome:
+        return ""
+    return nome.strip().lower()
 
-# -------------------------
+# =========================
 # DATABASE
-# -------------------------
-
+# =========================
 conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
 cursor = conn.cursor()
 
 def criar_tabela(nome):
-
     cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS {nome}(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,7 +116,6 @@ status TEXT
 )
 """)
 
-# Nova tabela para Receitas
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS receitas(
 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,20 +196,12 @@ CREATE TABLE IF NOT EXISTS pacotes (
 """)
 conn.commit()
 
-# adiciona categoria sem quebrar
+# ALTER TABLE (mantido)
 try:
     cursor.execute("ALTER TABLE evento_itens ADD COLUMN categoria TEXT")
     conn.commit()
 except:
     pass
-
-# -------------------------
-# FUNÇÃO AUXILIAR
-# -------------------------
-def normalizar_nome(nome):
-    if not nome:
-        return ""
-    return nome.strip().lower()
 
 try:
     cursor.execute("ALTER TABLE eventos ADD COLUMN telefone TEXT")
@@ -188,7 +221,6 @@ try:
 except:
     pass
 
-# adiciona categoria sem quebrar
 try:
     cursor.execute("ALTER TABLE evento_itens ADD COLUMN categoria TEXT")
     conn.commit()
@@ -213,100 +245,88 @@ except:
 
 conn.commit()
 
-# -------------------------
-# SIDEBAR
-# -------------------------
+# =========================
+# SIDEBAR MODERNA
+# =========================
+st.sidebar.markdown("## 🍸 Ellosystem")
 
-st.sidebar.title("🍸 Ellosystem")
-
-menu = st.sidebar.radio(
-"Menu",
-[
-"Relatórios",
-"Precificação",
-"Estoque",
-"Receitas",
-"Orçamentos",
-"Cachês",
-"Vendas",
-"Financeiro",
-"Pacotes"
-]
+menu = st.sidebar.selectbox(
+    "Navegação",
+    [
+        "📊 Relatórios",
+        "💰 Precificação",
+        "📦 Estoque",
+        "🍹 Receitas",
+        "🧾 Orçamentos",
+        "👥 Cachês",
+        "📈 Vendas",
+        "🏦 Financeiro",
+        "🎁 Pacotes"
+    ]
 )
 
-# -------------------------
-# FUNÇÃO DE PRECIFICAÇÃO
-# -------------------------
-
+# =========================
+# PRECIFICAÇÃO (UI NOVA)
+# =========================
 def tela_precificacao(nome_tabela):
 
-    tab1, tab2 = st.tabs(["Cadastrar", "Lista"])
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("💰 Gestão de Precificação")
+    st.caption("Cadastre, edite e controle custos")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # =========================
-    # CADASTRO
-    # =========================
-    with tab1:
+    aba = st.segmented_control(
+        "",
+        ["📥 Cadastrar", "📋 Lista"],
+        default="📥 Cadastrar"
+    )
+
+    if aba == "📥 Cadastrar":
 
         with st.form(f"form_{nome_tabela}", clear_on_submit=True):
 
-            tipo = st.text_input("Tipo do item", key=f"tipo_{nome_tabela}")
+            col1, col2 = st.columns(2)
 
-            nome = st.text_input("Nome / Marca", key=f"nome_{nome_tabela}")
+            tipo = col1.text_input("Tipo do item", placeholder="Ex: Destilado")
+            nome = col2.text_input("Nome / Marca", placeholder="Ex: Absolut")
 
-            quantidade = st.number_input(
-                "Quantidade total (ml, g, un)",
-                min_value=0.0,
-                step=1.0,
-                format="%.0f"
-            )
+            col3, col4 = st.columns(2)
 
-            preco = st.number_input(
-                "Preço",
-                min_value=0.0,
-                format="%.2f",
-                key=f"preco_{nome_tabela}"
-            )
+            quantidade = col3.number_input("Quantidade total", min_value=0.0)
+            preco = col4.number_input("Preço", min_value=0.0)
 
-            uso = st.number_input(
-                "Quantidade usada no drink",
-                min_value=0.0,
-                step=1.0,
-                format="%.0f"
-            )
-            
-            if st.form_submit_button("Cadastrar"):
-        
+            uso = st.number_input("Uso no drink", min_value=0.0)
+
+            if st.form_submit_button("➕ Cadastrar item"):
+
                 if uso == 0:
                     st.error("Uso não pode ser zero")
                 else:
                     rendimento = quantidade / uso if uso > 0 else 0
                     custo = preco / rendimento if rendimento > 0 else 0
-        
+
                     cursor.execute(f"""
                     INSERT INTO {nome_tabela}
                     (tipo, nome, quantidade, preco, uso, rendimento, custo)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (
-                    tipo,
-                    normalizar_nome(nome),
-                    quantidade,
-                    preco,
-                    uso,
-                    rendimento,
-                    custo
+                        tipo,
+                        normalizar_nome(nome),
+                        quantidade,
+                        preco,
+                        uso,
+                        rendimento,
+                        custo
                     ))
-        
-                    conn.commit()
-                    st.success("Item cadastrado!")
 
-    # =========================
-    # LISTA / EDIÇÃO
-    # =========================
-    with tab2:
+                    conn.commit()
+                    st.success("✅ Item cadastrado!")
+
+    else:
 
         df = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
 
-        busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
+        busca = st.text_input("🔍 Buscar")
 
         if busca:
             df = df[
@@ -316,25 +336,9 @@ def tela_precificacao(nome_tabela):
 
         if not df.empty:
 
-            df_editado = st.data_editor(
-                df,
-                use_container_width=True,
-                column_config={
-                    "preco": st.column_config.NumberColumn(
-                        "💰 Preço",
-                        format="R$ %.2f"
-                    ),
-                    "custo": st.column_config.NumberColumn(
-                        "💰 Custo",
-                        format="R$ %.2f"
-                    ),
-                }
-            )
+            df_editado = st.data_editor(df, use_container_width=True)
 
-            # =========================
-            # SALVAR ALTERAÇÕES (SEGURO)
-            # =========================
-            if st.button("💾 Salvar alterações", key=f"save_{nome_tabela}"):
+            if st.button("💾 Salvar alterações"):
 
                 try:
                     for _, row in df_editado.iterrows():
@@ -342,7 +346,7 @@ def tela_precificacao(nome_tabela):
                         quantidade = row["quantidade"]
                         uso = row["uso"]
                         preco = row["preco"]
-                    
+
                         if uso == 0 or quantidade == 0:
                             rendimento = 0
                             custo = 0
@@ -350,9 +354,9 @@ def tela_precificacao(nome_tabela):
                             quantidade_gramas = quantidade * 1000
                             rendimento = quantidade_gramas / uso
                             custo = preco / rendimento
-                    
-                        cursor.execute("""
-                            UPDATE precos_insumos
+
+                        cursor.execute(f"""
+                            UPDATE {nome_tabela}
                             SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
                             WHERE id=?
                         """, (
@@ -370,15 +374,11 @@ def tela_precificacao(nome_tabela):
                     st.success("Alterações salvas!")
 
                 except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
+                    st.error(f"Erro: {e}")
 
-            # =========================
-            # EXCLUIR ITEM
-            # =========================
-            item = st.selectbox("Excluir item", df["id"], key=f"del_{nome_tabela}")
+            item = st.selectbox("🗑 Excluir item", df["id"])
 
-            if st.button("🗑 Excluir selecionado", key=f"btn_{nome_tabela}"):
-
+            if st.button("Excluir selecionado"):
                 cursor.execute(f"DELETE FROM {nome_tabela} WHERE id = ?", (item,))
                 conn.commit()
                 st.rerun()
@@ -386,126 +386,70 @@ def tela_precificacao(nome_tabela):
         else:
             st.info("Nenhum item cadastrado.")
 
-# -------------------------
-# FUNÇÃO INSUMOS (FRUTAS)
-# -------------------------
-
+# =========================
+# INSUMOS (UI NOVA)
+# =========================
 def tela_insumos():
 
-    tab1, tab2 = st.tabs(["Cadastrar","Lista"])
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("🍓 Gestão de Insumos")
+    st.caption("Controle de frutas e insumos")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # -------------------------
-    # CADASTRO
-    # -------------------------
-    with tab1:
+    aba = st.segmented_control(
+        "",
+        ["📥 Cadastrar", "📋 Lista"],
+        default="📥 Cadastrar"
+    )
 
-        st.info("📌 Cadastro de frutas:\n- Quantidade sempre em KG\n- Uso sempre em GRAMAS")
-    
+    if aba == "📥 Cadastrar":
+
+        st.info("📌 Quantidade em KG | Uso em gramas")
+
         with st.form("form_insumos", clear_on_submit=True):
-    
-            nome = st.text_input("Nome do insumo")
-    
-            quantidade = st.number_input(
-                "Quantidade (KG)",  # ✅ corrigido
-                min_value=0.0,
-                format="%.2f"
-            )
-    
-            preco = st.number_input(
-                "Preço (por KG)",  # 🔥 já melhora também
-                min_value=0.0,
-                format="%.2f"
-            )
-    
-            uso = st.number_input(
-                "Uso por receita (GRAMAS)",  # ✅ corrigido
-                min_value=1.0,
-                value=25.0,
-                format="%.2f"
-            )
-            
-            if st.form_submit_button("Cadastrar"):
 
-                if quantidade == 0:
-                    st.error("Quantidade não pode ser zero")
-                elif uso == 0:
-                    st.error("Uso não pode ser zero")
+            nome = st.text_input("Nome do insumo")
+
+            quantidade = st.number_input("Quantidade (KG)", min_value=0.0)
+            preco = st.number_input("Preço por KG", min_value=0.0)
+            uso = st.number_input("Uso (g)", min_value=1.0, value=25.0)
+
+            if st.form_submit_button("➕ Cadastrar"):
+
+                if quantidade == 0 or uso == 0:
+                    st.error("Valores inválidos")
                 else:
-            
-                    # 🔹 converter KG → GRAMAS
+
                     quantidade_gramas = quantidade * 1000
-            
-                    # 🔹 cálculo correto
                     rendimento = quantidade_gramas / uso
                     custo = preco / rendimento
-            
+
                     cursor.execute("""
                     INSERT INTO precos_insumos
                     VALUES(NULL,?,?,?,?,?,?,?)
-                    """,(
+                    """, (
                         "fruta",
                         normalizar_nome(nome),
-                        quantidade,   # continua salvando em KG
+                        quantidade,
                         preco,
                         uso,
                         rendimento,
                         custo
                     ))
-            
+
                     conn.commit()
-                    st.success("Fruta cadastrada corretamente!")
-    # -------------------------
-    # LISTA / EDIÇÃO
-    # -------------------------
-    with tab2:
+                    st.success("✅ Cadastrado!")
+
+    else:
 
         df = pd.read_sql("SELECT * FROM precos_insumos", conn)
 
-        # ✏️ EDITÁVEL + FORMATADO EM R$
-        df_editado = st.data_editor(
-            df,
-            use_container_width=True,
-            column_config={
-        
-                "id": st.column_config.NumberColumn(
-                    "ID",
-                    disabled=True  # 🔒 não pode editar
-                ),
-        
-                "tipo": "Tipo",
-        
-                "nome": "Nome",
-        
-                "quantidade": st.column_config.NumberColumn(
-                    "Quantidade (KG)"
-                ),
-        
-                "preco": st.column_config.NumberColumn(
-                    "💰 Preço (KG)",
-                    format="R$ %.2f"
-                ),
-        
-                "uso": st.column_config.NumberColumn(
-                    "Uso (g)"
-                ),
-        
-                "rendimento": st.column_config.NumberColumn(
-                    "Rendimento",
-                    disabled=True  # 🔒 calculado
-                ),
-        
-                "custo": st.column_config.NumberColumn(
-                    "💰 Custo por uso",
-                    format="R$ %.2f",
-                    disabled=True  # 🔒 calculado
-                ),
-            }
-        )
+        if not df.empty:
 
-        # 💾 SALVAR ALTERAÇÕES
-        if st.button("💾 Salvar alterações insumos"):
+            df_editado = st.data_editor(df, use_container_width=True)
 
-            try:
+            if st.button("💾 Salvar alterações"):
+
                 for _, row in df_editado.iterrows():
                     cursor.execute("""
                         UPDATE precos_insumos
@@ -521,41 +465,43 @@ def tela_insumos():
                         row["custo"],
                         row["id"]
                     ))
-            
+
                 conn.commit()
                 st.success("Alterações salvas!")
-            
-            except Exception as e:
-                st.error(f"Erro ao salvar: {e}")
 
-        # 🗑 EXCLUIR
-        if not df.empty:
-            item = st.selectbox("Excluir item", df["id"])
+            item = st.selectbox("🗑 Excluir", df["id"])
 
-            if st.button("🗑 Excluir"):
+            if st.button("Excluir"):
                 cursor.execute("DELETE FROM precos_insumos WHERE id = ?", (item,))
                 conn.commit()
                 st.rerun()
 
-# -------------------------
-# BLOCO DE PRECIFICAÇÃO
-# -------------------------
+        else:
+            st.info("Nenhum item cadastrado.")
 
-if menu == "Precificação":
+# =========================
+# BLOCO PRECIFICAÇÃO
+# =========================
+if menu == "💰 Precificação":
 
-    st.title("Precificação")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.title("💰 Precificação")
+    st.caption("Controle completo de custos")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    aba1,aba2,aba3 = st.tabs(
-        ["Bebidas","Frutas e Insumos","Artesanais"]
+    aba = st.segmented_control(
+        "",
+        ["🍸 Bebidas", "🍓 Insumos", "🧪 Artesanais"],
+        default="🍸 Bebidas"
     )
 
-    with aba1:
+    if aba == "🍸 Bebidas":
         tela_precificacao("precos_bebidas")
 
-    with aba2:
+    elif aba == "🍓 Insumos":
         tela_insumos()
 
-    with aba3:
+    else:
         tela_precificacao("precos_artesanais")
 
 # -------------------------
