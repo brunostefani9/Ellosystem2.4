@@ -201,6 +201,18 @@ try:
 except:
     pass
 
+try:
+    cursor.execute("ALTER TABLE estoque ADD COLUMN tamanho TEXT")
+except:
+    pass
+
+try:
+    cursor.execute("ALTER TABLE estoque ADD COLUMN preco REAL")
+except:
+    pass
+
+conn.commit()
+
 # -------------------------
 # SIDEBAR
 # -------------------------
