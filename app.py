@@ -1,14 +1,16 @@
 import os
 import streamlit as st
 from supabase import create_client
-
-url = "https://enryjijyjvwchnlpeitk.supabase.co"
-key = "sb_publishable_eBDSrzJPdg0Rj90d_8BS_g_Suld76PI"
-
-supabase = create_client(url, key)
 import pandas as pd
 import sqlite3
 from datetime import datetime
+
+SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
+SUPABASE_KEY= "sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM"
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+st.set_page_config(page_title="Ellosystem", layout="wide")
 
 def definir_categoria_global(produto):
 
@@ -2647,14 +2649,16 @@ elif menu == "Pacotes":
                 conn.commit()
                 st.rerun()
 
-st.markdown("---")
 st.subheader("Teste Supabase")
 
-if st.button("Salvar teste"):
+if st.button("Salvar no Supabase"):
     resposta = supabase.table("produtos").insert({
-        "nome": "Coca-Cola",
-        "preco": 5
+        "nome": "Vodka Teste",
+        "tipo": "bebida",
+        "unidade_base": "ml",
+        "rendimento": 1000,
+        "custo_unitario": 50
     }).execute()
 
     st.write(resposta)
-    st.success("Salvou no banco!")
+    st.success("Salvou no Supabase!")
