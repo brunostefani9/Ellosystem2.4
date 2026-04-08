@@ -1,5 +1,11 @@
 import os
 import streamlit as st
+from supabase import create_client
+
+url = "https://enryjijyjvwchnlpeitk.supabase.co"
+key = "sb_publishable_eBDSrzJPdg0Rj90d_8BS_g_Suld76PI"
+
+supabase = create_client(url, key)
 import pandas as pd
 import sqlite3
 from datetime import datetime
@@ -2640,3 +2646,15 @@ elif menu == "Pacotes":
                 cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,))
                 conn.commit()
                 st.rerun()
+
+st.markdown("---")
+st.subheader("Teste Supabase")
+
+if st.button("Salvar teste"):
+    resposta = supabase.table("produtos").insert({
+        "nome": "Coca-Cola",
+        "preco": 5
+    }).execute()
+
+    st.write(resposta)
+    st.success("Salvou no banco!")
