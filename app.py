@@ -2661,7 +2661,6 @@ if st.button("Salvar no Supabase"):
             "custo_unitario": 50
         }).execute()
         st.success("Salvou no Supabase!")
-        st.write(resposta)
     except Exception as e:
         st.error("Erro ao salvar no Supabase!")
-        st.write("Detalhes do erro:", e)
+        st.write(e)
