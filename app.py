@@ -2658,7 +2658,7 @@ if st.button("Salvar no Supabase"):
         "unidade_base": "ml",
         "rendimento": 1000,
         "custo_unitario": 50
-   }).execute()
+    }).execute()
 
     st.write(resposta)
     st.success("Salvou no Supabase!")
