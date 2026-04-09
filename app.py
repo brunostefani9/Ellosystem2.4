@@ -41,25 +41,6 @@ st.set_page_config(page_title="Ellosystem", layout="wide")
 # DATABASE
 # -------------------------
 
-def criar_tabela(nome):
-
-    cursor.execute(f"""
-    CREATE TABLE IF NOT EXISTS {nome}(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tipo TEXT,
-    nome TEXT,
-    quantidade REAL,
-    preco REAL,
-    uso REAL,
-    rendimento REAL,
-    custo REAL
-    )
-    """)
-
-criar_tabela("precos_bebidas")
-criar_tabela("precos_insumos")
-criar_tabela("precos_artesanais")
-
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS estoque(
 produto TEXT,
