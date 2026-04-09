@@ -41,9 +41,6 @@ st.set_page_config(page_title="Ellosystem", layout="wide")
 # DATABASE
 # -------------------------
 
-conn = sqlite3.connect("ellosystem.db", check_same_thread=False)
-cursor = conn.cursor()
-
 def criar_tabela(nome):
 
     cursor.execute(f"""
