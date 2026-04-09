@@ -2652,13 +2652,16 @@ elif menu == "Pacotes":
 st.subheader("Teste Supabase")
 
 if st.button("Salvar no Supabase"):
-    resposta = supabase.table("produtos").insert({
-        "nome": "Vodka Teste",
-        "tipo": "bebida",
-        "unidade_base": "ml",
-        "rendimento": 1000,
-        "custo_unitario": 50
-    }).execute()
-
-    st.write(resposta)
-    st.success("Salvou no Supabase!")
+    try:
+        resposta = supabase.table("produtos").insert({
+            "nome": "Vodka Teste",
+            "tipo": "bebida",
+            "unidade_base": "ml",
+            "rendimento": 1000,
+            "custo_unitario": 50
+        }).execute()
+        st.success("Salvou no Supabase!")
+        st.write(resposta)
+    except Exception as e:
+        st.error("Erro ao salvar no Supabase!")
+        st.write("Detalhes do erro:", e)
