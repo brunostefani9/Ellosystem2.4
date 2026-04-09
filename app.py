@@ -628,9 +628,9 @@ elif menu == "Relatórios":
     # =========================
     # CARREGAR DADOS
     # =========================
-    df_vendas = supabase"SELECT * FROM vendas", conn)
-    df_fin = supabase("SELECT * FROM financeiro", conn)
-    df_itens = supabase("SELECT * FROM evento_itens", conn)
+    df_vendas = pd.read_sql"SELECT * FROM vendas", conn)
+    df_fin = pd.read_sql("SELECT * FROM financeiro", conn)
+    df_itens = pd.read_sql("SELECT * FROM evento_itens", conn)
 
     # converter datas
     if not df_vendas.empty:
