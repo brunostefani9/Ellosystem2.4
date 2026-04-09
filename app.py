@@ -628,7 +628,7 @@ elif menu == "Relatórios":
     # =========================
     # CARREGAR DADOS
     # =========================
-    df_vendas = pd.read_sql"SELECT * FROM vendas", conn)
+    df_vendas = pd.read_sql("SELECT * FROM vendas", conn)
     df_fin = pd.read_sql("SELECT * FROM financeiro", conn)
     df_itens = pd.read_sql("SELECT * FROM evento_itens", conn)
 
