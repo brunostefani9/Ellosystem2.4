@@ -2,7 +2,6 @@ import os
 import streamlit as st
 from supabase import create_client
 import pandas as pd
-import sqlite3
 from datetime import datetime
 
 SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
@@ -552,19 +551,6 @@ elif menu == "Estoque":
 
     st.title("Controle de Estoque")
 
-    # 🔧 GARANTIR COLUNAS
-    try:
-        cursor.execute("ALTER TABLE estoque ADD COLUMN tamanho TEXT")
-    except:
-        pass
-
-    try:
-        cursor.execute("ALTER TABLE estoque ADD COLUMN preco REAL")
-    except:
-        pass
-
-    conn.commit()
-
     tab1, tab2, tab3, tab4 = st.tabs(
         ["Entrada", "Saída", "Estoque físico", "Registros"]
     )
@@ -597,17 +583,23 @@ elif menu == "Estoque":
 
                 if status != "Teste":
 
-                    atual = pd.read_sql(
-                        "SELECT * FROM estoque WHERE produto=? AND marca=? AND tamanho=?",
-                        conn,
-                        params=(produto, marca, tamanho)
-                    )
+                    dados = supabase.table("estoque")\
+                        .select("*")\
+                        .eq("produto", produto)\
+                        .eq("marca", marca)\
+                        .eq("tamanho", tamanho)\
+                        .execute()
+
+                    atual = pd.DataFrame(dados.data)
 
                     if atual.empty:
-                        cursor.execute("""
-                            INSERT INTO estoque (produto, marca, quantidade, tamanho, preco)
-                            VALUES (?, ?, ?, ?, ?)
-                        """, (produto, marca, qtd, tamanho, preco))
+                        supabase.table("estoque").insert({
+                            "produto": produto,
+                            "marca": marca,
+                            "quantidade": qtd,
+                            "tamanho": tamanho,
+                            "preco": preco
+                        }).execute()
 
                     else:
                         qtd_atual = atual.iloc[0]["quantidade"]
@@ -620,31 +612,26 @@ elif menu == "Estoque":
                         else:
                             novo_preco = preco_atual
 
-                        cursor.execute("""
-                            UPDATE estoque
-                            SET quantidade=?, preco=?
-                            WHERE produto=? AND marca=? AND tamanho=?
-                        """, (nova_qtd, novo_preco, produto, marca, tamanho))
+                        supabase.table("estoque").update({
+                            "quantidade": nova_qtd,
+                            "preco": novo_preco
+                        }).eq("produto", produto)\
+                          .eq("marca", marca)\
+                          .eq("tamanho", tamanho)\
+                          .execute()
 
                 else:
                     st.warning("Movimentação de teste não altera estoque")
 
-                # REGISTRO
-                cursor.execute("""
-                    INSERT INTO movimentacoes
-                    VALUES(?,?,?,?,?,?)
-                """,
-                (
-                    datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    produto,
-                    marca,
-                    "Entrada",
-                    qtd,
-                    status
-                )
-                )
+                supabase.table("movimentacoes").insert({
+                    "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "produto": produto,
+                    "marca": marca,
+                    "tipo": "Entrada",
+                    "quantidade": qtd,
+                    "status": status
+                }).execute()
 
-                conn.commit()
                 st.success("Entrada registrada!")
                 st.rerun()
 
@@ -653,7 +640,8 @@ elif menu == "Estoque":
     # =========================
     with tab2:
 
-        estoque = pd.read_sql("SELECT * FROM estoque", conn)
+        dados = supabase.table("estoque").select("*").execute()
+        estoque = pd.DataFrame(dados.data)
 
         if estoque.empty:
             st.info("Estoque vazio")
@@ -661,10 +649,7 @@ elif menu == "Estoque":
         else:
             with st.form("saida_estoque", clear_on_submit=True):
 
-                produto = st.selectbox(
-                    "Produto",
-                    estoque["produto"].unique()
-                )
+                produto = st.selectbox("Produto", estoque["produto"].unique())
 
                 marca = st.selectbox(
                     "Marca",
@@ -676,18 +661,21 @@ elif menu == "Estoque":
                     estoque[
                         (estoque["produto"] == produto) &
                         (estoque["marca"] == marca)
-                    ]["tamanho"].fillna("Sem tamanho").unique()
+                    ]["tamanho"].fillna("").unique()
                 )
 
                 qtd = st.number_input("Quantidade", min_value=1.0)
 
                 if st.form_submit_button("Registrar saída"):
 
-                    atual = pd.read_sql(
-                        "SELECT * FROM estoque WHERE produto=? AND marca=? AND tamanho=?",
-                        conn,
-                        params=(produto, marca, tamanho)
-                    )
+                    dados = supabase.table("estoque")\
+                        .select("*")\
+                        .eq("produto", produto)\
+                        .eq("marca", marca)\
+                        .eq("tamanho", tamanho)\
+                        .execute()
+
+                    atual = pd.DataFrame(dados.data)
 
                     if atual.empty:
                         st.error("Item não encontrado")
@@ -700,27 +688,22 @@ elif menu == "Estoque":
                             st.error("Estoque insuficiente")
 
                         else:
-                            cursor.execute("""
-                                UPDATE estoque
-                                SET quantidade=?
-                                WHERE produto=? AND marca=? AND tamanho=?
-                            """, (nova, produto, marca, tamanho))
+                            supabase.table("estoque").update({
+                                "quantidade": nova
+                            }).eq("produto", produto)\
+                              .eq("marca", marca)\
+                              .eq("tamanho", tamanho)\
+                              .execute()
 
-                            cursor.execute("""
-                                INSERT INTO movimentacoes
-                                VALUES(?,?,?,?,?,?)
-                            """,
-                            (
-                                datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                produto,
-                                marca,
-                                "Saída",
-                                qtd,
-                                "Evento"
-                            )
-                            )
+                            supabase.table("movimentacoes").insert({
+                                "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "produto": produto,
+                                "marca": marca,
+                                "tipo": "Saída",
+                                "quantidade": qtd,
+                                "status": "Evento"
+                            }).execute()
 
-                            conn.commit()
                             st.success("Saída registrada!")
                             st.rerun()
 
@@ -729,10 +712,8 @@ elif menu == "Estoque":
     # =========================
     with tab3:
 
-        df = pd.read_sql(
-            "SELECT * FROM estoque ORDER BY produto",
-            conn
-        )
+        dados = supabase.table("estoque").select("*").execute()
+        df = pd.DataFrame(dados.data)
 
         busca = st.text_input("🔍 Buscar")
 
@@ -743,11 +724,9 @@ elif menu == "Estoque":
             st.info("Estoque vazio")
 
         else:
-
-            # 🔥 LIMPEZA (resolve nan)
             df["produto"] = df["produto"].fillna("Sem produto")
             df["marca"] = df["marca"].fillna("Sem marca")
-            df["tamanho"] = df["tamanho"].fillna("Sem tamanho")
+            df["tamanho"] = df["tamanho"].fillna("")
             df["preco"] = df["preco"].fillna(0)
 
             df["valor_total"] = df["quantidade"] * df["preco"]
@@ -765,9 +744,6 @@ elif menu == "Estoque":
 
             st.metric("💰 Valor total em estoque", f"R$ {total:,.2f}")
 
-            # =========================
-            # EXCLUSÃO SEGURA
-            # =========================
             st.markdown("---")
             st.subheader("🗑 Remover item")
 
@@ -787,32 +763,21 @@ elif menu == "Estoque":
                 marca_sel = row["marca"]
                 tamanho_sel = row["tamanho"]
 
-                cursor.execute("""
-                    INSERT INTO movimentacoes
-                    VALUES(?,?,?,?,?,?)
-                """,
-                (
-                    datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    produto_sel,
-                    marca_sel,
-                    "Exclusão",
-                    row["quantidade"],
-                    "Manual"
-                )
-                )
+                supabase.table("movimentacoes").insert({
+                    "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "produto": produto_sel,
+                    "marca": marca_sel,
+                    "tipo": "Exclusão",
+                    "quantidade": row["quantidade"],
+                    "status": "Manual"
+                }).execute()
 
-                if tamanho_sel == "Sem tamanho":
-                    cursor.execute("""
-                        DELETE FROM estoque
-                        WHERE produto=? AND marca=? AND (tamanho IS NULL OR tamanho='')
-                    """, (produto_sel, marca_sel))
-                else:
-                    cursor.execute("""
-                        DELETE FROM estoque
-                        WHERE produto=? AND marca=? AND tamanho=?
-                    """, (produto_sel, marca_sel, tamanho_sel))
-
-                conn.commit()
+                supabase.table("estoque")\
+                    .delete()\
+                    .eq("produto", produto_sel)\
+                    .eq("marca", marca_sel)\
+                    .eq("tamanho", tamanho_sel)\
+                    .execute()
 
                 st.success("Item removido!")
                 st.rerun()
@@ -822,10 +787,12 @@ elif menu == "Estoque":
     # =========================
     with tab4:
 
-        df = pd.read_sql(
-            "SELECT * FROM movimentacoes ORDER BY data DESC",
-            conn
-        )
+        dados = supabase.table("movimentacoes")\
+            .select("*")\
+            .order("data", desc=True)\
+            .execute()
+
+        df = pd.DataFrame(dados.data)
 
         st.dataframe(df, use_container_width=True)
 
