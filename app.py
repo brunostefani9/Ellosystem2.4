@@ -2649,18 +2649,26 @@ elif menu == "Pacotes":
                 conn.commit()
                 st.rerun()
 
-st.subheader("Teste Supabase")
+st.subheader("Cadastro de Produto")
+
+nome = st.text_input("Nome do produto")
+tipo = st.selectbox("Tipo", ["bebida", "insumo", "fruta", "outros"])
+unidade = st.text_input("Unidade base (ml, g, etc)")
+rendimento = st.number_input("Rendimento", min_value=0.0)
+custo = st.number_input("Custo unitário", min_value=0.0)
 
 if st.button("Salvar no Supabase"):
     try:
-        resposta = supabase.table("produtos").insert({
-            "nome": "Vodka Teste",
-            "tipo": "bebida",
-            "unidade_base": "ml",
-            "rendimento": 1000,
-            "custo_unitario": 50
+        supabase.table("produtos").insert({
+            "nome": nome,
+            "tipo": tipo,
+            "unidade_base": unidade,
+            "rendimento": rendimento,
+            "custo_unitario": custo
         }).execute()
-        st.success("Salvou no Supabase!")
+
+        st.success("Produto salvo com sucesso! ✅")
+
     except Exception as e:
-        st.error("Erro ao salvar no Supabase!")
+        st.error("Erro ao salvar!")
         st.write(e)
