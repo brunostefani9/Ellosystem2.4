@@ -291,21 +291,15 @@ def tela_precificacao(nome_tabela):
                     rendimento = quantidade / uso if uso > 0 else 0
                     custo = preco / rendimento if rendimento > 0 else 0
         
-                    cursor.execute(f"""
-                    INSERT INTO {nome_tabela}
-                    (tipo, nome, quantidade, preco, uso, rendimento, custo)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                    tipo,
-                    normalizar_nome(nome),
-                    quantidade,
-                    preco,
-                    uso,
-                    rendimento,
-                    custo
-                    ))
-        
-                    conn.commit()
+                    supabase.table(nome_tabela).insert({
+                        "tipo": tipo,
+                        "nome": normalizar_nome(nome),
+                        "quantidade": quantidade,
+                        "preco": preco,
+                        "uso": uso,
+                        "rendimento": rendimento,
+                        "custo": custo
+                    }).execute()
                     st.success("Item cadastrado!")
 
     # =========================
@@ -313,7 +307,8 @@ def tela_precificacao(nome_tabela):
     # =========================
     with tab2:
 
-        df = pd.read_sql(f"SELECT * FROM {nome_tabela}", conn)
+        dados = supabase.table(nome_tabela).select("*").execute()
+        df = pd.DataFrame(dados.data)
 
         busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
 
@@ -347,11 +342,11 @@ def tela_precificacao(nome_tabela):
 
                 try:
                     for _, row in df_editado.iterrows():
-
+            
                         quantidade = row["quantidade"]
                         uso = row["uso"]
                         preco = row["preco"]
-                    
+            
                         if uso == 0 or quantidade == 0:
                             rendimento = 0
                             custo = 0
@@ -359,25 +354,19 @@ def tela_precificacao(nome_tabela):
                             quantidade_gramas = quantidade * 1000
                             rendimento = quantidade_gramas / uso
                             custo = preco / rendimento
-                    
-                        cursor.execute("""
-                            UPDATE precos_insumos
-                            SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
-                            WHERE id=?
-                        """, (
-                            row["tipo"],
-                            row["nome"],
-                            quantidade,
-                            preco,
-                            uso,
-                            rendimento,
-                            custo,
-                            row["id"]
-                        ))
-
-                    conn.commit()
+            
+                        supabase.table(nome_tabela).update({
+                            "tipo": row["tipo"],
+                            "nome": row["nome"],
+                            "quantidade": quantidade,
+                            "preco": preco,
+                            "uso": uso,
+                            "rendimento": rendimento,
+                            "custo": custo
+                        }).eq("id", row["id"]).execute()
+            
                     st.success("Alterações salvas!")
-
+            
                 except Exception as e:
                     st.error(f"Erro ao salvar: {e}")
 
@@ -388,8 +377,7 @@ def tela_precificacao(nome_tabela):
 
             if st.button("🗑 Excluir selecionado", key=f"btn_{nome_tabela}"):
 
-                cursor.execute(f"DELETE FROM {nome_tabela} WHERE id = ?", (item,))
-                conn.commit()
+                supabase.table(nome_tabela).delete().eq("id", item).execute()
                 st.rerun()
 
         else:
@@ -448,27 +436,23 @@ def tela_insumos():
                     rendimento = quantidade_gramas / uso
                     custo = preco / rendimento
             
-                    cursor.execute("""
-                    INSERT INTO precos_insumos
-                    VALUES(NULL,?,?,?,?,?,?,?)
-                    """,(
-                        "fruta",
-                        normalizar_nome(nome),
-                        quantidade,   # continua salvando em KG
-                        preco,
-                        uso,
-                        rendimento,
-                        custo
-                    ))
-            
-                    conn.commit()
+                    supabase.table("precos_insumos").insert({
+                        "tipo": "fruta",
+                        "nome": normalizar_nome(nome),
+                        "quantidade": quantidade,
+                        "preco": preco,
+                        "uso": uso,
+                        "rendimento": rendimento,
+                        "custo": custo
+                    }).execute()
                     st.success("Fruta cadastrada corretamente!")
     # -------------------------
     # LISTA / EDIÇÃO
     # -------------------------
     with tab2:
 
-        df = pd.read_sql("SELECT * FROM precos_insumos", conn)
+        dados = supabase.table("precos_insumos").select("*").execute()
+        df = pd.DataFrame(dados.data)
 
         # ✏️ EDITÁVEL + FORMATADO EM R$
         df_editado = st.data_editor(
@@ -516,22 +500,16 @@ def tela_insumos():
 
             try:
                 for _, row in df_editado.iterrows():
-                    cursor.execute("""
-                        UPDATE precos_insumos
-                        SET tipo=?, nome=?, quantidade=?, preco=?, uso=?, rendimento=?, custo=?
-                        WHERE id=?
-                    """, (
-                        row["tipo"],
-                        row["nome"],
-                        row["quantidade"],
-                        row["preco"],
-                        row["uso"],
-                        row["rendimento"],
-                        row["custo"],
-                        row["id"]
-                    ))
+                    supabase.table("precos_insumos").update({
+                    "tipo": row["tipo"],
+                    "nome": row["nome"],
+                    "quantidade": row["quantidade"],
+                    "preco": row["preco"],
+                    "uso": row["uso"],
+                    "rendimento": row["rendimento"],
+                    "custo": row["custo"]
+                }).eq("id", row["id"]).execute()
             
-                conn.commit()
                 st.success("Alterações salvas!")
             
             except Exception as e:
@@ -542,8 +520,7 @@ def tela_insumos():
             item = st.selectbox("Excluir item", df["id"])
 
             if st.button("🗑 Excluir"):
-                cursor.execute("DELETE FROM precos_insumos WHERE id = ?", (item,))
-                conn.commit()
+                supabase.table("precos_insumos").delete().eq("id", item).execute()
                 st.rerun()
 
 # -------------------------
@@ -2648,27 +2625,3 @@ elif menu == "Pacotes":
                 cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,))
                 conn.commit()
                 st.rerun()
-
-st.subheader("Cadastro de Produto")
-
-nome = st.text_input("Nome do produto")
-tipo = st.selectbox("Tipo", ["bebida", "insumo", "fruta", "outros"])
-unidade = st.text_input("Unidade base (ml, g, etc)")
-rendimento = st.number_input("Rendimento", min_value=0.0)
-custo = st.number_input("Custo unitário", min_value=0.0)
-
-if st.button("Salvar no Supabase"):
-    try:
-        supabase.table("produtos").insert({
-            "nome": nome,
-            "tipo": tipo,
-            "unidade_base": unidade,
-            "rendimento": rendimento,
-            "custo_unitario": custo
-        }).execute()
-
-        st.success("Produto salvo com sucesso! ✅")
-
-    except Exception as e:
-        st.error("Erro ao salvar!")
-        st.write(e)
