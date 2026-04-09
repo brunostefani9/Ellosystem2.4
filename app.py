@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime
 
 SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
-SUPABASE_KEY= "sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM"
+SUPABASE_KEY= "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRraWRwb2lyd25vbGd6a25zb2hqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY2NTA5NywiZXhwIjoyMDkxMjQxMDk3fQ.HT6a4zt7MNLjmP-pCXuHA-yXM6G7VPiZLmMxU_kK7y0"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
