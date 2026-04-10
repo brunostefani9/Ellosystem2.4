@@ -1,5 +1,7 @@
 import os
 import streamlit as st
+def normalizar_nome(nome):
+    return str(nome).strip().lower()
 from supabase import create_client
 import pandas as pd
 from datetime import datetime
