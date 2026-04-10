@@ -860,28 +860,22 @@ elif menu == "Receitas":
             else:
 
                 # 🔥 Apaga receita antiga
-                cursor.execute(
-                    "DELETE FROM receitas WHERE drink=?",
-                    (st.session_state["drink_nome"],)
-                )
+                supabase.table("receitas") \
+                    .delete() \
+                    .eq("drink", st.session_state["drink_nome"]) \
+                    .execute()
                 
                 # 🔥 Insere novos ingredientes
                 for item in st.session_state["ingredientes_temp"]:
-                    cursor.execute("""
-                    INSERT INTO receitas(drink, ingrediente, quantidade, unidade)
-                    VALUES(?,?,?,?)
-                    """, (
-                        st.session_state["drink_nome"],
-                        item["ingrediente"],
-                        item["quantidade"],
-                        item["unidade"]
-                    ))
-
-                conn.commit()
-
+                    supabase.table("receitas").insert({
+                        "drink": st.session_state["drink_nome"],
+                        "ingrediente": item["ingrediente"],
+                        "quantidade": item["quantidade"],
+                        "unidade": item["unidade"]
+                    }).execute()
+                
                 st.session_state["msg"] = "🍹 Drink cadastrado com sucesso!"
-
-                # limpa
+                
                 st.session_state["ingredientes_temp"] = []
                 st.session_state["drink_nome"] = ""
                 st.rerun()
@@ -891,7 +885,7 @@ elif menu == "Receitas":
     # =========================
     with aba_lista:
 
-        df = pd.read_sql("SELECT * FROM receitas", conn)
+        df = carregar_tabela("receitas")
 
         if df.empty:
             st.info("Nenhum drink cadastrado")
@@ -915,18 +909,6 @@ elif menu == "Receitas":
                         custo_unitario = 0
                         uso_padrao = 1
 
-                        for tabela in ["precos_bebidas","precos_insumos","precos_artesanais"]:
-                            result = pd.read_sql(
-                                f"SELECT custo, uso FROM {tabela} WHERE nome=?",
-                                conn,
-                                params=(ingrediente,)
-                            )
-
-                            if not result.empty:
-                                custo_unitario = result.iloc[0]["custo"]
-                                uso_padrao = result.iloc[0]["uso"] if result.iloc[0]["uso"] > 0 else 1
-                                break
-
                         custo_total += (quantidade / uso_padrao) * custo_unitario
 
                         st.write(f"- {ingrediente} ({quantidade} {unidade})")
@@ -945,11 +927,10 @@ elif menu == "Receitas":
             drink_excluir = st.selectbox("Selecione o drink", drinks)
 
             if st.button("Excluir drink"):
-                cursor.execute(
-                    "DELETE FROM receitas WHERE drink=?",
-                    (drink_excluir,)
-                )
-                conn.commit()
+                supabase.table("receitas") \
+                    .delete() \
+                    .eq("drink", drink_excluir) \
+                    .execute()
                 st.success(f"{drink_excluir} excluído com sucesso!")
                 st.rerun()
                 
