@@ -628,10 +628,14 @@ elif menu == "Relatórios":
     # =========================
     # CARREGAR DADOS
     # =========================
-    df_vendas = pd.read_sql("SELECT * FROM vendas", conn)
-    df_fin = pd.read_sql("SELECT * FROM financeiro", conn)
-    df_itens = pd.read_sql("SELECT * FROM evento_itens", conn)
-
+    dados_vendas = supabase.table("vendas").select("*").execute()
+    df_vendas = pd.DataFrame(dados_vendas.data if dados_vendas.data else [])
+    
+    dados_fin = supabase.table("financeiro").select("*").execute()
+    df_fin = pd.DataFrame(dados_fin.data if dados_fin.data else [])
+    
+    dados_itens = supabase.table("evento_itens").select("*").execute()
+    df_itens = pd.DataFrame(dados_itens.data if dados_itens.data else [])
     # converter datas
     if not df_vendas.empty:
         df_vendas["data"] = pd.to_datetime(df_vendas["data"])
