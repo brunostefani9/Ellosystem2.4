@@ -637,7 +637,7 @@ elif menu == "Relatórios":
     # CARREGAR DADOS
     # =========================
     df_vendas = carregar_tabela("vendas")
-    df_fin = carregar_tabela("financeiro")
+    df_fin = carregar_tabela("Financeiro")
     df_itens = carregar_tabela("evento_itens")
     
     # converter datas
@@ -1640,7 +1640,7 @@ elif menu == "Orçamentos":
                 
                     # 🔥 LANÇAR NO FINANCEIRO (AUTOMÁTICO)
                     cursor.execute("""
-                    INSERT INTO financeiro (data, tipo, descricao, valor)
+                    INSERT INTO Financeiro (data, tipo, descricao, valor)
                     VALUES (?, ?, ?, ?)
                     """,
                     (
@@ -2062,7 +2062,7 @@ elif menu == "Financeiro":
     # =========================
     with tab1:
 
-        df = pd.read_sql("SELECT * FROM financeiro", conn)
+        df = pd.read_sql("SELECT * FROM Financeiro", conn)
 
         if df.empty:
             entrada = 0
@@ -2147,7 +2147,7 @@ elif menu == "Financeiro":
             if st.form_submit_button("Salvar lançamento"):
 
                 cursor.execute("""
-                INSERT INTO financeiro 
+                INSERT INTO Financeiro 
                 (data, tipo, categoria, forma_pagamento, descricao, valor)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
@@ -2169,7 +2169,7 @@ elif menu == "Financeiro":
     with tab3:
 
         df = pd.read_sql(
-            "SELECT * FROM financeiro ORDER BY data DESC",
+            "SELECT * FROM Financeiro ORDER BY data DESC",
             conn
         )
 
