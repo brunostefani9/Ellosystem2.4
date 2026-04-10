@@ -9,6 +9,14 @@ SUPABASE_KEY= "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJl
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+def carregar_tabela(nome):
+    try:
+        dados = supabase.table(nome).select("*").execute()
+        return pd.DataFrame(dados.data if dados.data else [])
+    except Exception as e:
+        st.error(f"Erro ao carregar {nome}: {e}")
+        return pd.DataFrame()
+
 st.set_page_config(page_title="Ellosystem", layout="wide")
 
 def definir_categoria_global(produto):
@@ -628,20 +636,16 @@ elif menu == "Relatórios":
     # =========================
     # CARREGAR DADOS
     # =========================
-    dados_vendas = supabase.table("vendas").select("*").execute()
-    df_vendas = pd.DataFrame(dados_vendas.data if dados_vendas.data else [])
+    df_vendas = carregar_tabela("vendas")
+    df_fin = carregar_tabela("financeiro")
+    df_itens = carregar_tabela("evento_itens")
     
-    dados_fin = supabase.table("financeiro").select("*").execute()
-    df_fin = pd.DataFrame(dados_fin.data if dados_fin.data else [])
-    
-    dados_itens = supabase.table("evento_itens").select("*").execute()
-    df_itens = pd.DataFrame(dados_itens.data if dados_itens.data else [])
     # converter datas
     if not df_vendas.empty:
-        df_vendas["data"] = pd.to_datetime(df_vendas["data"])
+        df_vendas["data"] = pd.to_datetime(df_vendas["data"], errors="coerce")
 
     if not df_fin.empty:
-        df_fin["data"] = pd.to_datetime(df_fin["data"])
+        df_fin["data"] = pd.to_datetime(df_fin["data"], errors="coerce")
 
     # aplicar filtro
     if data_inicio and data_fim:
