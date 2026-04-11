@@ -1017,7 +1017,8 @@ elif menu == "Orçamentos":
         # =========================
         # RECEITAS
         # =========================
-        df_receitas = pd.read_sql("SELECT * FROM receitas", conn)
+        dados = supabase.table("receitas").select("*").execute()
+        df_receitas = pd.DataFrame(dados.data if dados.data else [])
 
         if df_receitas.empty:
             st.warning("Cadastre receitas primeiro")
@@ -1061,8 +1062,13 @@ elif menu == "Orçamentos":
                 # =========================
                 # DADOS
                 # =========================
-                df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
-                df_insumos = pd.read_sql("SELECT * FROM precos_insumos", conn)
+                df_bebidas = pd.DataFrame(
+                    supabase.table("precos_bebidas").select("*").execute().data or []
+                )
+                
+                df_insumos = pd.DataFrame(
+                    supabase.table("precos_insumos").select("*").execute().data or []
+                )
                 
                 ingredientes_bebidas = {}
                 ingredientes_insumos = {}
@@ -1266,7 +1272,9 @@ elif menu == "Orçamentos":
                 # =========================
                 st.subheader("📦 Serviços Adicionais")
                 
-                df_pacotes = pd.read_sql("SELECT * FROM pacotes", conn)
+                df_pacotes = pd.DataFrame(
+                    supabase.table("pacotes").select("*").execute().data or []
+                )
                 
                 total_pacotes = 0
                 
@@ -1364,33 +1372,23 @@ elif menu == "Orçamentos":
                 # =========================
                 if st.button("💾 Salvar orçamento"):
                 
-                    cursor.execute("""
-                        INSERT INTO eventos (
-                            cliente, data, cidade,
-                            telefone, endereco, tipo_evento,
-                            hora_chegada, hora_inicio, hora_convidados,
-                            convidados,
-                            custo, venda, status
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        nome_cliente,
-                        str(data_evento),
-                        cidade_evento,
-                        telefone,
-                        endereco,
-                        tipo_evento,
-                        str(hora_chegada),
-                        str(hora_inicio),
-                        str(hora_convidados),
-                        num_convidados,
-                        custo_total,
-                        preco_com_desconto,  # ✅ agora salva com desconto
-                        "pendente"
-                    ))
-                
-                    conn.commit()
-                    evento_id = cursor.lastrowid
+                    response = supabase.table("eventos").insert({
+                        "cliente": nome_cliente,
+                        "data": str(data_evento),
+                        "cidade": cidade_evento,
+                        "telefone": telefone,
+                        "endereco": endereco,
+                        "tipo_evento": tipo_evento,
+                        "hora_chegada": str(hora_chegada),
+                        "hora_inicio": str(hora_inicio),
+                        "hora_convidados": str(hora_convidados),
+                        "convidados": num_convidados,
+                        "custo": custo_total,
+                        "venda": preco_com_desconto,
+                        "status": "pendente"
+                    }).execute()
+                    
+                    evento_id = response.data[0]["id"]
                 
                     # =========================
                     # SALVAR BEBIDAS
@@ -1408,37 +1406,26 @@ elif menu == "Orçamentos":
                                 qtd_real = qtd_ml / volume
                                 qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                 
-                                cursor.execute("""
-                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
-                                    VALUES (?, ?, ?, ?, ?)
-                                """, (
-                                    evento_id,
-                                    marca,
-                                    qtd_garrafas,
-                                    "garrafas",
-                                    "Bebidas"
-                                ))
-                
-                    conn.commit()
+                                supabase.table("evento_itens").insert({
+                                    "evento_id": evento_id,
+                                    "produto": marca,
+                                    "quantidade": qtd_garrafas,
+                                    "unidade": "garrafas",
+                                    "categoria": "Bebidas"
+                                }).execute()
                     st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
                     # SALVAR FRUTAS / INSUMOS
                     # =========================
                     for fruta, qtd_gramas in ingredientes_insumos.items():
                     
-                        cursor.execute("""
-                            INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
-                            VALUES (?, ?, ?, ?, ?)
-                        """, (
-                            evento_id,
-                            fruta.capitalize(),
-                            qtd_gramas,
-                            "g",
-                            "Insumos"  # ou "Frutas" se quiser separar depois
-                        ))
-                    
-                    conn.commit()
-                    
+                        supabase.table("evento_itens").insert({
+                            "evento_id": evento_id,
+                            "produto": fruta.capitalize(),
+                            "quantidade": qtd_gramas,
+                            "unidade": "g",
+                            "categoria": "Insumos"
+                        }).execute()
                     st.success("Orçamento salvo com sucesso!")
 
     # =========================
@@ -1448,7 +1435,12 @@ elif menu == "Orçamentos":
 
         st.subheader("📋 Orçamentos Pendentes")
     
-        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='pendente'", conn)
+        df_eventos = pd.DataFrame(
+            supabase.table("eventos")
+            .select("*")
+            .eq("status", "pendente")
+            .execute().data or []
+        )
     
         if df_eventos.empty:
             st.info("Nenhum orçamento pendente")
@@ -1474,9 +1466,12 @@ elif menu == "Orçamentos":
                 # =========================
                 if st.session_state[f"abrir_{row['id']}"]:
                 
-                    itens = pd.read_sql("""
-                        SELECT * FROM evento_itens WHERE evento_id=?
-                    """, conn, params=(row["id"],))
+                    itens = pd.DataFrame(
+                        supabase.table("evento_itens")
+                        .select("*")
+                        .eq("evento_id", row["id"])
+                        .execute().data or []
+                    )
                 
                     st.subheader("📋 Checklist do Evento")
                 
@@ -1567,21 +1562,21 @@ elif menu == "Orçamentos":
                         # =========================
                         if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
     
-                            cursor.execute("DELETE FROM evento_itens WHERE evento_id=?", (row["id"],))
-    
+                            # deletar itens antigos
+                            supabase.table("evento_itens")\
+                                .delete()\
+                                .eq("evento_id", row["id"])\
+                                .execute()
+                            
+                            # inserir novos
                             for _, item in df_editado.iterrows():
-                                cursor.execute("""
-                                    INSERT INTO evento_itens (evento_id, produto, quantidade, unidade, categoria)
-                                    VALUES (?, ?, ?, ?, ?)
-                                """, (
-                                    row["id"],
-                                    item["produto"],
-                                    item["quantidade"],
-                                    item.get("unidade", "un"),
-                                    item["Categoria"]
-                                ))
-    
-                            conn.commit()
+                                supabase.table("evento_itens").insert({
+                                    "evento_id": row["id"],
+                                    "produto": item["produto"],
+                                    "quantidade": item["quantidade"],
+                                    "unidade": item.get("unidade", "un"),
+                                    "categoria": item["Categoria"]
+                                }).execute()
                             st.success("Checklist atualizado!")
     
                 # =========================
@@ -1597,10 +1592,10 @@ elif menu == "Orçamentos":
                 if col1.button(f"✅ Aprovar {row['id']}", key=f"aprovar_{row['id']}"):
 
                     # Atualiza status
-                    cursor.execute(
-                        "UPDATE eventos SET status='aprovado' WHERE id=?",
-                        (row["id"],)
-                    )
+                    supabase.table("eventos")\
+                        .update({"status": "aprovado"})\
+                        .eq("id", row["id"])\
+                        .execute()
                 
                     # 🔥 PEGAR VALORES DO EVENTO
                     valor_venda = row["venda"] if "venda" in row else 0
@@ -1608,32 +1603,22 @@ elif menu == "Orçamentos":
                     lucro = valor_venda - custo
                 
                     # 🔥 SALVAR NA TABELA VENDAS
-                    cursor.execute("""
-                    INSERT INTO vendas (evento_id, cliente, data, valor_venda, custo, lucro)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        row["id"],
-                        row["cliente"],
-                        row["data"],
-                        valor_venda,
-                        custo,
-                        lucro
-                    ))
+                    supabase.table("vendas").insert({
+                        "evento_id": row["id"],
+                        "cliente": row["cliente"],
+                        "data": row["data"],
+                        "valor_venda": valor_venda,
+                        "custo": custo,
+                        "lucro": lucro
+                    }).execute()
                 
                     # 🔥 LANÇAR NO FINANCEIRO (AUTOMÁTICO)
-                    cursor.execute("""
-                    INSERT INTO Financeiro (data, tipo, descricao, valor)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (
-                        datetime.now().strftime("%Y-%m-%d"),
-                        "Entrada",
-                        f"Evento {row['cliente']}",
-                        valor_venda
-                    ))
-                
-                    conn.commit()
+                    supabase.table("Financeiro").insert({
+                        "data": datetime.now().strftime("%Y-%m-%d"),
+                        "tipo": "Entrada",
+                        "descricao": f"Evento {row['cliente']}",
+                        "valor": valor_venda
+                    }).execute()
                     st.success("Evento aprovado e venda registrada!")
                     st.rerun()
                     alertas = []
@@ -1643,10 +1628,11 @@ elif menu == "Orçamentos":
                     
                         qtd_necessaria = dados["quantidade"]
                     
-                        atual = pd.read_sql(
-                            "SELECT * FROM estoque WHERE marca=?",
-                            conn,
-                            params=(marca,)
+                        atual = pd.DataFrame(
+                            supabase.table("estoque")
+                            .select("*")
+                            .eq("marca", marca)
+                            .execute().data or []
                         )
                     
                         if atual.empty:
@@ -1662,35 +1648,20 @@ elif menu == "Orçamentos":
                     
                             nova_qtd = max(0, qtd_atual - qtd_necessaria)
                     
-                            cursor.execute("""
-                                UPDATE estoque
-                                SET quantidade=?
-                                WHERE marca=?
-                            """, (nova_qtd, marca))
+                            supabase.table("estoque")\
+                                .update({"quantidade": nova_qtd})\
+                                .eq("marca", marca)\
+                                .execute()
                     
-                            cursor.execute("""
-                                INSERT INTO movimentacoes
-                                VALUES(?,?,?,?,?,?)
-                            """,
-                            (
-                                datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "bebida",
-                                marca,
-                                "Saída (orçamento aprovado)",
-                                qtd_necessaria,
-                                "Reserva"
-                            )
-                            )
-                    
-                    # 🔥 atualiza status
-                    cursor.execute(
-                        "UPDATE eventos SET status='aprovado' WHERE id=?",
-                        (row["id"],)
-                    )
-                    
-                    conn.commit()
-                    
-                    # feedback
+                            supabase.table("movimentacoes").insert({
+                                "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "tipo": "bebida",
+                                "produto": marca,
+                                "descricao": "Saída (orçamento aprovado)",
+                                "quantidade": qtd_necessaria,
+                                "origem": "Reserva"
+                            }).execute()
+
                     if alertas:
                         st.warning("⚠️ Problemas no estoque:")
                         for a in alertas:
@@ -1704,8 +1675,10 @@ elif menu == "Orçamentos":
                     st.rerun()
     
                 if col2.button(f"🗑 Excluir {row['id']}", key=f"excluir_{row['id']}"):
-                    cursor.execute("DELETE FROM eventos WHERE id=?", (row["id"],))
-                    conn.commit()
+                    supabase.table("eventos")\
+                        .delete()\
+                        .eq("id", row["id"])\
+                        .execute()
                     st.rerun()
     
                 st.divider()
@@ -1717,7 +1690,12 @@ elif menu == "Orçamentos":
     
         st.subheader("✅ Eventos Aprovados")
     
-        df_eventos = pd.read_sql("SELECT * FROM eventos WHERE status='aprovado'", conn)
+        df_eventos = pd.DataFrame(
+            supabase.table("eventos")
+            .select("*")
+            .eq("status", "aprovado")
+            .execute().data or []
+        )
     
         if df_eventos.empty:
             st.info("Nenhum evento aprovado")
@@ -1728,9 +1706,12 @@ elif menu == "Orçamentos":
     
                 if st.button(f"📋 Checklist aprovado {row['id']}", key=f"check_aprov_{row['id']}"):
     
-                    itens = pd.read_sql("""
-                        SELECT * FROM evento_itens WHERE evento_id=?
-                    """, conn, params=(row["id"],))
+                    itens = pd.DataFrame(
+                        supabase.table("evento_itens")
+                        .select("*")
+                        .eq("evento_id", row["id"])
+                        .execute().data or []
+                    )
     
                     st.subheader("📋 Checklist do Evento")
     
@@ -1801,11 +1782,12 @@ elif menu == "Orçamentos":
                 # FINALIZAR EVENTO
                 # =========================
                 if st.button(f"✔ Finalizar {row['id']}", key=f"fin_{row['id']}"):
-                    cursor.execute(
-                        "UPDATE eventos SET status='finalizado' WHERE id=?",
-                        (row["id"],)
-                    )
-                    conn.commit()
+                    supabase.table("eventos")\
+                        .update({"status": "finalizado"})\
+                        .eq("id", row["id"])\
+                        .execute()
+                
+                    st.success("Evento finalizado!")
                     st.rerun()
     
                 st.divider()
@@ -1948,7 +1930,6 @@ elif menu == "Cachês":
                     VALUES (?, ?, ?, ?)
                 """, dados)
 
-            conn.commit()
             st.success("✅ Pagamentos salvos!")
 
     # =========================
@@ -2143,7 +2124,6 @@ elif menu == "Financeiro":
                     valor
                 ))
 
-                conn.commit()
                 st.success("Lançamento registrado!")
 
     # =========================
@@ -2347,8 +2327,6 @@ elif menu == "Pacotes":
             VALUES (?,?,?,?,?)
             """,(nome, tipo, dados, preco, custo))
 
-            conn.commit()
-
             st.success("Pacote salvo!")
             st.session_state["extras_lista"] = []
 
@@ -2397,5 +2375,4 @@ elif menu == "Pacotes":
 
             if st.button("🗑 Excluir pacote"):
                 cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,))
-                conn.commit()
                 st.rerun()
