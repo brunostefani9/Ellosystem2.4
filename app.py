@@ -45,8 +45,6 @@ def definir_categoria_global(produto):
     else:
         return "Outros"
 
-st.set_page_config(page_title="Ellosystem", layout="wide")
-
 # -------------------------
 # SIDEBAR
 # -------------------------
@@ -133,7 +131,7 @@ def tela_precificacao(nome_tabela):
     with tab2:
 
         dados = supabase.table(nome_tabela).select("*").execute()
-        df = pd.DataFrame(dados.data)
+        df = pd.DataFrame(dados.data if dados.data else [])
 
         busca = st.text_input("Pesquisar", key=f"busca_{nome_tabela}")
 
@@ -544,7 +542,7 @@ elif menu == "Estoque":
         busca = st.text_input("🔍 Buscar")
 
         if busca:
-            df = df[df["marca"].str.contains(busca, case=False)]
+            df = df[df["marca"].str.contains(busca, case=False, na=False)]
 
         if df.empty:
             st.info("Estoque vazio")
@@ -1923,14 +1921,28 @@ elif menu == "Cachês":
         # SALVAR
         if st.button("💾 Salvar pagamentos"):
 
+            # 1. cria evento
+            
+            eveto_resp = supabase.table("eventos").insert({
+                "nome": evento_nome
+            }).execute()
+        
+            evento_id = evento_resp.data[0]["id"]
+        
+            # 2. salva cada pessoa
             for dados in dados_pagamento:
-
-                cursor.execute("""
-                    INSERT INTO pagamentos_equipe (evento, nome, funcao, valor)
-                    VALUES (?, ?, ?, ?)
-                """, dados)
-
-            st.success("✅ Pagamentos salvos!")
+        
+                evento, nome, funcao, valor = dados
+        
+                supabase.table("pagamentos_equipe").insert({
+                    "evento_id": evento_id,
+                    "nome": nome,
+                    "funcao": funcao,
+                    "valor": valor
+                }).execute()
+        
+            st.success("✅ Pagamentos salvos no Supabase!")
+        
 
     # =========================
     # 🔹 HISTÓRICO
@@ -1939,19 +1951,23 @@ elif menu == "Cachês":
 
         st.subheader("📊 Histórico de pagamentos")
 
-        df_pagamentos = pd.read_sql(
-            "SELECT * FROM pagamentos_equipe ORDER BY data DESC",
-            conn
-        )
+        df_pagamentos["evento"] = df_pagamentos["eventos"].apply(lambda x: x["nome"] if x else None)
 
+        df_pagamentos = df_pagamentos.drop(columns=["eventos"])
+        
         st.dataframe(df_pagamentos)
-
 
 elif menu == "Vendas":
 
     st.title("📊 Vendas")
 
-    df = pd.read_sql("SELECT * FROM vendas", conn)
+    response = supabase.table("vendas").select("*").execute()
+    df = pd.DataFrame(response.data)
+
+    if not df.empty:
+        df["valor_venda"] = pd.to_numeric(df["valor_venda"])
+        df["custo"] = pd.to_numeric(df["custo"])
+        df["lucro"] = pd.to_numeric(df["lucro"])
 
     # estrutura vazia
     if df.empty:
@@ -1984,7 +2000,7 @@ elif menu == "Vendas":
     cliente = st.text_input("Buscar cliente")
 
     if cliente:
-        df = df[df["cliente"].str.contains(cliente, case=False)]
+        df = df[df["cliente"].str.contains(cliente, case=False, na=False)]
 
     # tabela
     st.dataframe(
@@ -2002,7 +2018,7 @@ elif menu == "Vendas":
     st.subheader("📊 Evolução das vendas")
 
     if not df.empty:
-        df["data"] = pd.to_datetime(df["data"])
+        df["data"] = pd.to_datetime(df["data"], errors="coerce")
         vendas_por_data = df.groupby("data")["valor_venda"].sum()
         st.line_chart(vendas_por_data)
     else:
@@ -2026,8 +2042,12 @@ elif menu == "Financeiro":
     # =========================
     with tab1:
 
-        df = pd.read_sql("SELECT * FROM Financeiro", conn)
+        response = supabase.table("Financeiro").select("*").execute()
+        df = pd.DataFrame(response.data)
 
+        if not df.empty:
+            df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
+        
         if df.empty:
             entrada = 0
             saida = 0
@@ -2049,7 +2069,7 @@ elif menu == "Financeiro":
 
         if not df.empty:
 
-            df["data"] = pd.to_datetime(df["data"])
+            df["data"] = pd.to_datetime(df["data"], errors="coerce")
 
             # 📊 mensal
             df["mes"] = df["data"].dt.to_period("M")
@@ -2110,20 +2130,15 @@ elif menu == "Financeiro":
 
             if st.form_submit_button("Salvar lançamento"):
 
-                cursor.execute("""
-                INSERT INTO Financeiro 
-                (data, tipo, categoria, forma_pagamento, descricao, valor)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    datetime.now().strftime("%Y-%m-%d"),
-                    tipo,
-                    categoria,
-                    forma,
-                    descricao,
-                    valor
-                ))
-
+                supabase.table("Financeiro").insert({
+                    "data": datetime.now().strftime("%Y-%m-%d"),
+                    "tipo": tipo,
+                    "categoria": categoria,
+                    "forma_pagamento": forma,
+                    "descricao": descricao,
+                    "valor": valor
+                }).execute()
+                
                 st.success("Lançamento registrado!")
 
     # =========================
@@ -2131,11 +2146,16 @@ elif menu == "Financeiro":
     # =========================
     with tab3:
 
-        df = pd.read_sql(
-            "SELECT * FROM Financeiro ORDER BY data DESC",
-            conn
-        )
+        response = supabase.table("Financeiro") \
+            .select("*") \
+            .order("data", desc=True) \
+            .execute()
+        
+        df = pd.DataFrame(response.data)
 
+        if not df.empty:
+            df["valor"] = pd.to_numeric(df["valor"], errors="coerce")
+        
         if df.empty:
             st.info("Nenhum lançamento ainda")
         else:
@@ -2178,7 +2198,11 @@ elif menu == "Pacotes":
 
         st.markdown("### 🍸 Bebidas do pacote")
 
-        df_bebidas = pd.read_sql("SELECT * FROM precos_bebidas", conn)
+        response = supabase.table("precos_bebidas").select("*").execute()
+        df_bebidas = pd.DataFrame(response.data)
+
+        if not df_bebidas.empty:
+            df_bebidas["preco"] = pd.to_numeric(df_bebidas["preco"], errors="coerce")
         
         itens_pacote = []
         
@@ -2322,11 +2346,14 @@ elif menu == "Pacotes":
                 "extras": st.session_state["extras_lista"]
             })
 
-            cursor.execute("""
-            INSERT INTO pacotes (nome, tipo, dados, preco, custo)
-            VALUES (?,?,?,?,?)
-            """,(nome, tipo, dados, preco, custo))
-
+            supabase.table("pacotes").insert({
+                "nome": nome,
+                "tipo": tipo,
+                "dados": dados,
+                "preco": preco,
+                "custo": custo
+            }).execute()
+            
             st.success("Pacote salvo!")
             st.session_state["extras_lista"] = []
 
@@ -2342,7 +2369,8 @@ elif menu == "Pacotes":
     # -------------------------
     with tab2:
 
-        df = pd.read_sql("SELECT * FROM pacotes", conn)
+        response = supabase.table("pacotes").select("*").execute()
+        df = pd.DataFrame(response.data)
 
         if df.empty:
             st.info("Nenhum pacote cadastrado")
@@ -2352,7 +2380,7 @@ elif menu == "Pacotes":
 
             pacote = df[df["id"] == id_sel].iloc[0]
 
-            for b in dados.get("bebidas", []):
+            dados = json.loads(pacote["dados"])
                 st.write(f"✔ {b['nome']} - {b['quantidade']} un")
 
             st.subheader(pacote["nome"])
@@ -2374,5 +2402,6 @@ elif menu == "Pacotes":
                 st.write(f"+ {e['nome']} → R$ {e['valor']:,.2f}")
 
             if st.button("🗑 Excluir pacote"):
-                cursor.execute("DELETE FROM pacotes WHERE id = ?", (id_sel,))
+                supabase.table("pacotes").delete().eq("id", id_sel).execute()
+
                 st.rerun()
