@@ -1951,11 +1951,11 @@ elif menu == "Cachês":
 
         st.subheader("📊 Histórico de pagamentos")
 
-        df_pagamentos["evento"] = df_pagamentos["eventos"].apply(lambda x: x["nome"] if x else None)
-
-        df_pagamentos = df_pagamentos.drop(columns=["eventos"])
-        
-        st.dataframe(df_pagamentos)
+            df_pagamentos["evento"] = df_pagamentos["eventos"].apply(lambda x: x["nome"] if x else None)
+    
+            df_pagamentos = df_pagamentos.drop(columns=["eventos"])
+            
+            st.dataframe(df_pagamentos)
 
 elif menu == "Vendas":
 
