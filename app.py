@@ -6,8 +6,8 @@ from supabase import create_client
 import pandas as pd
 from datetime import datetime
 
-SUPABASE_URL = os.getenv("https://tkidpoirwnolgzknsohj.supabase.co")
-SUPABASE_KEY = os.getenv("sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM")
+SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
+SUPABASE_KEY = "sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM"
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
