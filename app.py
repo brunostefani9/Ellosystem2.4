@@ -2381,7 +2381,7 @@ elif menu == "Pacotes":
             pacote = df[df["id"] == id_sel].iloc[0]
 
             dados = json.loads(pacote["dados"])
-                st.write(f"✔ {b['nome']} - {b['quantidade']} un")
+            st.write(f"✔ {b['nome']} - {b['quantidade']} un")
 
             st.subheader(pacote["nome"])
 
