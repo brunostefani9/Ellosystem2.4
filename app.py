@@ -264,16 +264,22 @@ def tela_insumos():
                     rendimento = quantidade_gramas / uso
                     custo = preco / rendimento
             
-                    supabase.table("precos_insumos").insert({
-                        "tipo": "fruta",
-                        "nome": normalizar_nome(nome),
-                        "quantidade": quantidade,
-                        "preco": preco,
-                        "uso": uso,
-                        "rendimento": rendimento,
-                        "custo": custo
-                    }).execute()
-                    st.success("Fruta cadastrada corretamente!")
+                    try:
+                        supabase.table("precos_insumos").insert({
+                            "tipo": "fruta",
+                            "nome": normalizar_nome(nome),
+                            "quantidade": quantidade,
+                            "preco": preco,
+                            "uso": uso,
+                            "rendimento": rendimento,
+                            "custo": custo
+                        }).execute()
+                    
+                        st.success("Fruta cadastrada corretamente!")
+                    
+                    except Exception as e:
+                        st.error(f"Erro real: {e}")
+                        print(e)
     # -------------------------
     # LISTA / EDIÇÃO
     # -------------------------
