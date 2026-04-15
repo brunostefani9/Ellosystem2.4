@@ -6,15 +6,20 @@ from supabase import create_client
 import pandas as pd
 from datetime import datetime
 
-SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
-SUPABASE_KEY= "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRraWRwb2lyd25vbGd6a25zb2hqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY2NTA5NywiZXhwIjoyMDkxMjQxMDk3fQ.HT6a4zt7MNLjmP-pCXuHA-yXM6G7VPiZLmMxU_kK7y0"
+SUPABASE_URL = os.getenv("https://tkidpoirwnolgzknsohj.supabase.co")
+SUPABASE_KEY = os.getenv("sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def carregar_tabela(nome):
     try:
-        dados = supabase.table(nome).select("*").execute()
-        return pd.DataFrame(dados.data if dados.data else [])
+        response = supabase.table(nome).select("*").execute()
+        
+        if response.data:
+            return pd.DataFrame(response.data)
+        
+        return pd.DataFrame()
+
     except Exception as e:
         st.error(f"Erro ao carregar {nome}: {e}")
         return pd.DataFrame()
@@ -553,7 +558,8 @@ elif menu == "Estoque":
             df["tamanho"] = df["tamanho"].fillna("")
             df["preco"] = df["preco"].fillna(0)
 
-            df["valor_total"] = df["quantidade"] * df["preco"]
+            df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
+            df["preco"] = pd.to_numeric(df["preco"], errors="coerce").fillna(0)
 
             total = df["valor_total"].sum()
 
