@@ -1329,17 +1329,38 @@ elif menu == "Orçamentos":
                 
                 st.metric("💰 Custo Total do Evento (Bruto)", f"R$ {custo_total:,.2f}")
                 st.markdown(f"### 💸 Extras: R$ {custo_extras:,.2f}")
-                
-                
+            
                 # =========================
                 # MARGEM
                 # =========================
                 margem = st.slider("Margem de lucro (%)", 0, 300, 100)
-                preco_venda = custo_total * (1 + margem / 100)
                 
+                # preço base (seu lucro)
+                preco_base = custo_total * (1 + margem / 100)
+                
+                # =========================
+                # 🤝 COMISSÃO
+                # =========================
+                st.subheader("🤝 Comissão (Indicação)")
+                
+                col1, col2 = st.columns(2)
+                
+                indicador = col1.text_input("Quem indicou?")
+                comissao_percentual = col2.number_input(
+                    "Comissão (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=10.0
+                )
+                
+                valor_comissao = preco_base * (comissao_percentual / 100)
+                
+                # preço final com comissão embutida
+                preco_venda = preco_base + valor_comissao
+                
+                st.metric("💸 Comissão", f"R$ {valor_comissao:,.2f}")
                 st.metric("💰 Preço Final Sugerido", f"R$ {preco_venda:,.2f}")
-                
-                
+                    
                 # =========================
                 # DESCONTO
                 # =========================
@@ -1361,7 +1382,7 @@ elif menu == "Orçamentos":
                 # =========================
                 # LUCRO
                 # =========================
-                lucro = preco_com_desconto - custo_total
+                lucro = preco_com_desconto - custo_total - valor_comissao
                 
                 if lucro < 0:
                     st.error("⚠️ Atenção: esse desconto gera PREJUÍZO!")
