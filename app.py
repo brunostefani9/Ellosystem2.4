@@ -1581,36 +1581,61 @@ elif menu == "Orçamentos":
                         df_checklist["Fim"] = ""
     
                         # =========================
-                        # EDITOR
+                        # EDITOR (CHECKLIST)
                         # =========================
-                        df_editado = st.data_editor(
-                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]],
-                            num_rows="dynamic",
-                            use_container_width=True,
-                            key=f"editor_{row['id']}"
-                        )
-    
+                        checklist_export = []
+                        
+                        st.subheader("📋 Checklist do Evento")
+                        
+                        for i, item_row in df_checklist.iterrows():
+                        
+                            col1, col2 = st.columns([6,1])
+                        
+                            with col1:
+                                texto = f"{item_row['produto']} - {item_row['quantidade']}"
+                                marcado = st.checkbox(texto, key=f"check_{row['id']}_{i}")
+                        
+                            with col2:
+                                if marcado:
+                                    st.write("✅")
+                        
+                            checklist_export.append({
+                                "produto": item_row["produto"],
+                                "quantidade": item_row["quantidade"],
+                                "ok": marcado
+                            })
+                        
                         # =========================
-                        # SALVAR EDIÇÃO
+                        # 💾 SALVAR CHECKLIST (OPCIONAL)
                         # =========================
-                        if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
-    
-                            # deletar itens antigos
-                            supabase.table("evento_itens")\
-                                .delete()\
-                                .eq("evento_id", row["id"])\
-                                .execute()
-                            
-                            # inserir novos
-                            for _, item in df_editado.iterrows():
-                                supabase.table("evento_itens").insert({
-                                    "evento_id": row["id"],
-                                    "produto": item["produto"],
-                                    "quantidade": item["quantidade"],
-                                    "unidade": item.get("unidade", "un"),
-                                    "categoria": item["Categoria"]
-                                }).execute()
+                        if st.button(f"💾 Salvar checklist {row['id']}"):
+                        
+                            for item in checklist_export:
+                                supabase.table("evento_itens")\
+                                    .update({
+                                        "check_ok": item["ok"]
+                                    })\
+                                    .eq("evento_id", row["id"])\
+                                    .eq("produto", item["produto"])\
+                                    .execute()
+                        
                             st.success("Checklist atualizado!")
+                        
+                        # =========================
+                        # 📥 DOWNLOAD
+                        # =========================
+                        import pandas as pd
+                        
+                        df_export = pd.DataFrame(checklist_export)
+                        
+                        csv = df_export.to_csv(index=False).encode("utf-8")
+                        
+                        st.download_button(
+                            label="📥 Baixar checklist (CSV)",
+                            data=csv,
+                            file_name=f"checklist_evento_{row['id']}.csv",
+                            mime="text/csv"
+                        )
     
                 # =========================
                 # VALOR
