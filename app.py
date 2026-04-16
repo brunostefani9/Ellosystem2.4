@@ -567,6 +567,8 @@ elif menu == "Estoque":
             df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
             df["preco"] = pd.to_numeric(df["preco"], errors="coerce").fillna(0)
 
+            df["valor_total"] = df["quantidade"] * df["preco"]
+            
             total = df["valor_total"].sum()
 
             st.dataframe(
