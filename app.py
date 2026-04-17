@@ -1069,16 +1069,28 @@ elif menu == "Orçamentos":
         
             if selecao:
         
-                # 🔥 LIMITE GLOBAL (CONTROLE REALISTA)
+                # =========================
+                # 🔥 CONTROLES INTELIGENTES
+                # =========================
+        
+                # limite por drink (evita explosão)
                 limite_global = st.slider(
                     "Máximo de drinks por receita",
                     min_value=10,
                     max_value=int(total_drinks),
-                    value=int(total_drinks / len(selecao))
+                    value=max(10, int(total_drinks / len(selecao)))
+                )
+        
+                # margem de segurança (evita falta)
+                margem_seguranca = st.slider(
+                    "Margem de segurança (%)",
+                    0,
+                    50,
+                    15
                 )
         
                 # =========================
-                # PESOS (DISTRIBUIÇÃO)
+                # PESOS (IMPORTÂNCIA DO DRINK)
                 # =========================
                 pesos = {}
                 total_peso = 0
@@ -1096,15 +1108,28 @@ elif menu == "Orçamentos":
                 ingredientes_totais = {}
         
                 # =========================
-                # CÁLCULO COM LIMITE 🔥
+                # 🔥 CÁLCULO FINAL (REALISTA)
                 # =========================
                 for drink in selecao:
         
                     proporcao = pesos[drink] / total_peso
                     qtd_drinks_calculado = total_drinks * proporcao
         
-                    # 🔥 AQUI ESTÁ A MÁGICA
-                    qtd_drinks = min(qtd_drinks_calculado, limite_global)
+                    # aplica limite (controle de exagero)
+                    qtd_base = min(qtd_drinks_calculado, limite_global)
+
+                    # ⚠️ aviso de limite aplicado
+                    avisos = []
+
+                    if qtd_base < qtd_drinks_calculado:
+                        avisos.append(drink)
+                    
+                    # depois do loop
+                    for d in avisos:
+                        st.warning(f"⚠️ {d} foi limitado para evitar excesso")
+        
+                    # aplica margem (segurança)
+                    qtd_drinks = qtd_base * (1 + margem_seguranca / 100)
         
                     receita = df_receitas[df_receitas["drink"] == drink]
         
@@ -1121,17 +1146,19 @@ elif menu == "Orçamentos":
                             ingredientes_totais[ingrediente] = total_ingrediente
         
                 # =========================
-                # 🔍 DEBUG OPCIONAL (pode remover depois)
+                # 🔍 DEBUG (opcional)
                 # =========================
                 with st.expander("🔍 Debug de consumo"):
                     for drink in selecao:
                         proporcao = pesos[drink] / total_peso
                         qtd_calc = total_drinks * proporcao
-                        qtd_final = min(qtd_calc, limite_global)
+                        qtd_base = min(qtd_calc, limite_global)
+                        qtd_final = qtd_base * (1 + margem_seguranca / 100)
         
                         st.write(f"{drink}:")
                         st.write(f"  → calculado: {int(qtd_calc)} drinks")
-                        st.write(f"  → aplicado: {int(qtd_final)} drinks")
+                        st.write(f"  → limitado: {int(qtd_base)} drinks")
+                        st.write(f"  → final c/ margem: {int(qtd_final)} drinks")
 
                 # =========================
                 # DADOS
