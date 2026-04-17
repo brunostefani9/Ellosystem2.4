@@ -1012,28 +1012,34 @@ elif menu == "Orçamentos":
         # CONFIG EVENTO
         # =========================
         st.subheader("Configuração do Evento")
-
+        
         col1, col2, col3 = st.columns(3)
-
+        
         num_convidados = col1.number_input("Convidados", min_value=1, value=50)
         horas = col2.number_input("Horas de evento", min_value=1, value=4)
         drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
-
+        
         if modo_calculo == "Evento inteiro":
             total_drinks = num_convidados * drinks_por_hora
         else:
             total_drinks = num_convidados * horas * drinks_por_hora
-            
+        
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
-
-        # 🔥 RESET AUTOMÁTICO QUANDO MUDAR CONFIG DO EVENTO
+        
+        
+        # =========================
+        # 🔥 RESET INTELIGENTE (CORRIGIDO)
+        # =========================
         config_atual = (num_convidados, horas, drinks_por_hora, modo_calculo)
         
+        # primeira execução → só salva, não compara
         if "ultima_config" not in st.session_state:
             st.session_state["ultima_config"] = config_atual
+            mudou_config = False
+        else:
+            mudou_config = config_atual != st.session_state["ultima_config"]
         
-        mudou_config = config_atual != st.session_state["ultima_config"]
-        
+        # só reseta se realmente mudou
         if mudou_config:
             # limpa inputs dinâmicos (garrafas, frutas, etc)
             for k in list(st.session_state.keys()):
@@ -1044,7 +1050,8 @@ elif menu == "Orçamentos":
             st.session_state["orcamento_bebidas"] = {}
             st.session_state["orcamento_frutas"] = {}
         
-            st.session_state["ultima_config"] = config_atual
+        # 🔥 SEMPRE atualiza no final (fora do if!)
+        st.session_state["ultima_config"] = config_atual
         
         # =========================
         # RECEITAS
