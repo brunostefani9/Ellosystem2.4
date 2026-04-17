@@ -1369,20 +1369,29 @@ elif menu == "Orçamentos":
                 # 🤝 COMISSÃO
                 # =========================
                 st.subheader("🤝 Comissão (Indicação)")
+
+                # 🔥 checkbox para ativar/desativar comissão
+                usar_comissao = st.checkbox("Aplicar comissão?", value=False)
                 
                 col1, col2 = st.columns(2)
                 
                 indicador = col1.text_input("Quem indicou?")
+                
                 comissao_percentual = col2.number_input(
                     "Comissão (%)",
                     min_value=0.0,
                     max_value=100.0,
-                    value=10.0
+                    value=10.0,
+                    disabled=not usar_comissao  # 👈 desativa se não usar
                 )
                 
-                valor_comissao = preco_base * (comissao_percentual / 100)
+                # 🔥 lógica inteligente
+                if usar_comissao:
+                    valor_comissao = preco_base * (comissao_percentual / 100)
+                else:
+                    valor_comissao = 0
                 
-                # preço final com comissão embutida
+                # preço final
                 preco_venda = preco_base + valor_comissao
                 
                 st.metric("💸 Comissão", f"R$ {valor_comissao:,.2f}")
