@@ -1058,45 +1058,80 @@ elif menu == "Orçamentos":
         # =========================
         dados = supabase.table("receitas").select("*").execute()
         df_receitas = pd.DataFrame(dados.data if dados.data else [])
-
+        
         if df_receitas.empty:
             st.warning("Cadastre receitas primeiro")
-
+        
         else:
-
+        
             drinks = df_receitas["drink"].unique()
             selecao = st.multiselect("Selecione os drinks", drinks)
-
+        
             if selecao:
-
+        
+                # 🔥 LIMITE GLOBAL (CONTROLE REALISTA)
+                limite_global = st.slider(
+                    "Máximo de drinks por receita",
+                    min_value=10,
+                    max_value=int(total_drinks),
+                    value=int(total_drinks / len(selecao))
+                )
+        
+                # =========================
+                # PESOS (DISTRIBUIÇÃO)
+                # =========================
                 pesos = {}
                 total_peso = 0
-
+        
                 for drink in selecao:
-                    peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+                    peso = st.number_input(
+                        drink,
+                        min_value=1,
+                        value=1,
+                        key=f"peso_{drink}"
+                    )
                     pesos[drink] = peso
                     total_peso += peso
-
+        
                 ingredientes_totais = {}
-
+        
+                # =========================
+                # CÁLCULO COM LIMITE 🔥
+                # =========================
                 for drink in selecao:
-
+        
                     proporcao = pesos[drink] / total_peso
-                    qtd_drinks = total_drinks * proporcao
-
+                    qtd_drinks_calculado = total_drinks * proporcao
+        
+                    # 🔥 AQUI ESTÁ A MÁGICA
+                    qtd_drinks = min(qtd_drinks_calculado, limite_global)
+        
                     receita = df_receitas[df_receitas["drink"] == drink]
-
+        
                     for _, row in receita.iterrows():
-
+        
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
-
+        
                         total_ingrediente = qtd * qtd_drinks
-
+        
                         if ingrediente in ingredientes_totais:
                             ingredientes_totais[ingrediente] += total_ingrediente
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
+        
+                # =========================
+                # 🔍 DEBUG OPCIONAL (pode remover depois)
+                # =========================
+                with st.expander("🔍 Debug de consumo"):
+                    for drink in selecao:
+                        proporcao = pesos[drink] / total_peso
+                        qtd_calc = total_drinks * proporcao
+                        qtd_final = min(qtd_calc, limite_global)
+        
+                        st.write(f"{drink}:")
+                        st.write(f"  → calculado: {int(qtd_calc)} drinks")
+                        st.write(f"  → aplicado: {int(qtd_final)} drinks")
 
                 # =========================
                 # DADOS
