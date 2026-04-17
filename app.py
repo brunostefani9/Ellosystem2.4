@@ -1026,6 +1026,26 @@ elif menu == "Orçamentos":
             
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
+        # 🔥 RESET AUTOMÁTICO QUANDO MUDAR CONFIG DO EVENTO
+        config_atual = (num_convidados, horas, drinks_por_hora, modo_calculo)
+        
+        if "ultima_config" not in st.session_state:
+            st.session_state["ultima_config"] = config_atual
+        
+        mudou_config = config_atual != st.session_state["ultima_config"]
+        
+        if mudou_config:
+            # limpa inputs dinâmicos (garrafas, frutas, etc)
+            for k in list(st.session_state.keys()):
+                if k.startswith("qtd_"):
+                    del st.session_state[k]
+        
+            # limpa orçamentos salvos
+            st.session_state["orcamento_bebidas"] = {}
+            st.session_state["orcamento_frutas"] = {}
+        
+            st.session_state["ultima_config"] = config_atual
+        
         # =========================
         # RECEITAS
         # =========================
