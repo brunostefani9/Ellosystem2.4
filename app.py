@@ -1066,29 +1066,49 @@ elif menu == "Orçamentos":
         
             drinks = df_receitas["drink"].unique()
             selecao = st.multiselect("Selecione os drinks", drinks)
-        
+            
             if selecao:
         
                 # =========================
-                # PESOS (IMPORTÂNCIA DO DRINK)
+                # VOLUME DE SAÍDA DOS DRINKS
                 # =========================
+                st.divider()
+                
+                st.subheader("📊 Volume de saída por drink")
+                st.caption("Defina a proporção de saída dos drinks. Ex: 2 = dobro de consumo.")
+                
                 pesos = {}
                 total_peso = 0
-        
-                for drink in selecao:
-                    peso = st.number_input(
-                        drink,
-                        min_value=1,
-                        value=1,
-                        key=f"peso_{drink}"
-                    )
-                    pesos[drink] = peso
-                    total_peso += peso
-        
+                
+                for i in range(0, len(selecao), 3):
+                    cols = st.columns(3)
+                    for j in range(3):
+                        if i + j < len(selecao):
+                            drink = selecao[i + j]
+                            with cols[j]:
+                                peso = st.number_input(
+                                    drink,
+                                    min_value=1,
+                                    value=1,
+                                    key=f"peso_{drink}"
+                                )
+                                pesos[drink] = peso
+                                total_peso += peso
+                
+                # =========================
+                # CÁLCULO DOS INGREDIENTES
+                # =========================
+                
+                # 🔥 validação ANTES de tudo
+                if total_peso == 0:
+                    st.warning("Defina o volume dos drinks")
+                    st.stop()
+                
                 ingredientes_totais = {}
                 
                 for drink in selecao:
                 
+                    # 🔥 cálculo correto
                     proporcao = pesos[drink] / total_peso
                     qtd_drinks = total_drinks * proporcao
                 
@@ -1106,15 +1126,21 @@ elif menu == "Orçamentos":
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
                 
+                # =========================
+                # DEBUG (OPCIONAL)
+                # =========================
                 with st.expander("🔍 Debug de consumo"):
                     for drink in selecao:
                         proporcao = pesos[drink] / total_peso
                         qtd_calc = total_drinks * proporcao
                 
                         st.write(f"{drink}: {int(qtd_calc)} drinks")
-
+                
+                # =========================
+                # RESUMO VISUAL
+                # =========================
                 st.subheader("📊 Distribuição de Drinks")
-
+                
                 for drink in selecao:
                     proporcao = pesos[drink] / total_peso
                     qtd = total_drinks * proporcao
