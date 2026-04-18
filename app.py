@@ -1108,42 +1108,47 @@ elif menu == "Orçamentos":
                 ingredientes_totais = {}
         
                 # =========================
-                # 🔥 CÁLCULO FINAL (REALISTA)
+                # 🔥 CÁLCULO FINAL (REALISTA) - CORRIGIDO
                 # =========================
+                
+                ingredientes_totais = {}
+                avisos = []  # 🔥 agora fica FORA do loop
+                
                 for drink in selecao:
-        
+                
                     proporcao = pesos[drink] / total_peso
                     qtd_drinks_calculado = total_drinks * proporcao
-        
+                
                     # aplica limite (controle de exagero)
                     qtd_base = min(qtd_drinks_calculado, limite_global)
-
-                    # ⚠️ aviso de limite aplicado
-                    avisos = []
-
+                
+                    # ⚠️ guarda aviso corretamente
                     if qtd_base < qtd_drinks_calculado:
                         avisos.append(drink)
-                    
-                    # depois do loop
-                    for d in avisos:
-                        st.warning(f"⚠️ {d} foi limitado para evitar excesso")
-        
+                
                     # aplica margem (segurança)
                     qtd_drinks = qtd_base * (1 + margem_seguranca / 100)
-        
+                
                     receita = df_receitas[df_receitas["drink"] == drink]
-        
+                
                     for _, row in receita.iterrows():
-        
+                
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
-        
+                
                         total_ingrediente = qtd * qtd_drinks
-        
+                
                         if ingrediente in ingredientes_totais:
                             ingredientes_totais[ingrediente] += total_ingrediente
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
+                
+                
+                # =========================
+                # ⚠️ AVISOS (AGORA FUNCIONA)
+                # =========================
+                for d in avisos:
+                    st.warning(f"⚠️ {d} foi limitado para evitar excesso")
         
                 # =========================
                 # 🔍 DEBUG (opcional)
@@ -1246,16 +1251,24 @@ elif menu == "Orçamentos":
                 
                             with col2:
                                 key_qtd = f"qtd_{marca}"
-
-                            # se ainda não existe, cria valor inicial
-                            if key_qtd not in st.session_state:
-                                st.session_state[key_qtd] = qtd_garrafas
-                            
-                            qtd_editavel = st.number_input(
-                                "Garrafas",
-                                min_value=0,
-                                key=key_qtd
-                            )
+                                
+                                key_manual = f"manual_{marca}"
+                                
+                                qtd_calculada = qtd_garrafas
+                                
+                                # cria valor inicial
+                                if key_manual not in st.session_state:
+                                    st.session_state[key_manual] = qtd_calculada
+                                
+                                # atualiza automaticamente se cálculo mudou
+                                if abs(st.session_state[key_manual] - qtd_calculada) > 1:
+                                    st.session_state[key_manual] = qtd_calculada
+                                
+                                qtd_editavel = st.number_input(
+                                    "Garrafas",
+                                    min_value=0,
+                                    key=key_manual
+                                )
                 
                             with col3:
                                 custo_item = qtd_editavel * preco
