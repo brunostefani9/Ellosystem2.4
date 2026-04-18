@@ -1052,7 +1052,7 @@ elif menu == "Orçamentos":
         
         # 🔥 SEMPRE atualiza no final (fora do if!)
         st.session_state["ultima_config"] = config_atual
-        
+
         # =========================
         # RECEITAS
         # =========================
@@ -1065,15 +1065,17 @@ elif menu == "Orçamentos":
         else:
         
             drinks = df_receitas["drink"].unique()
-            selecao = st.multiselect("Selecione os drinks", drinks)
-            
+            selecao = st.multiselect("🍸 Selecione os drinks do evento", drinks)
+        
             if selecao:
+        
+                # 🔥 SEPARAÇÃO VISUAL (AQUI ESTÁ O SEGREDO)
+                st.markdown("---")
+                st.markdown("## ⚙️ Configuração de consumo")
         
                 # =========================
                 # VOLUME DE SAÍDA DOS DRINKS
                 # =========================
-                st.divider()
-                
                 st.subheader("📊 Volume de saída por drink")
                 st.caption("Defina a proporção de saída dos drinks. Ex: 2 = dobro de consumo.")
                 
