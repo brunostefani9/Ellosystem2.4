@@ -1070,26 +1070,6 @@ elif menu == "Orçamentos":
             if selecao:
         
                 # =========================
-                # 🔥 CONTROLES INTELIGENTES
-                # =========================
-        
-                # limite por drink (evita explosão)
-                limite_global = st.slider(
-                    "Máximo de drinks por receita",
-                    min_value=10,
-                    max_value=int(total_drinks),
-                    value=max(10, int(total_drinks / len(selecao)))
-                )
-        
-                # margem de segurança (evita falta)
-                margem_seguranca = st.slider(
-                    "Margem de segurança (%)",
-                    0,
-                    50,
-                    15
-                )
-        
-                # =========================
                 # PESOS (IMPORTÂNCIA DO DRINK)
                 # =========================
                 pesos = {}
@@ -1106,28 +1086,11 @@ elif menu == "Orçamentos":
                     total_peso += peso
         
                 ingredientes_totais = {}
-        
-                # =========================
-                # 🔥 CÁLCULO FINAL (REALISTA) - CORRIGIDO
-                # =========================
-                
-                ingredientes_totais = {}
-                avisos = []  # 🔥 agora fica FORA do loop
                 
                 for drink in selecao:
                 
                     proporcao = pesos[drink] / total_peso
-                    qtd_drinks_calculado = total_drinks * proporcao
-                
-                    # aplica limite (controle de exagero)
-                    qtd_base = min(qtd_drinks_calculado, limite_global)
-                
-                    # ⚠️ guarda aviso corretamente
-                    if qtd_base < qtd_drinks_calculado:
-                        avisos.append(drink)
-                
-                    # aplica margem (segurança)
-                    qtd_drinks = qtd_base * (1 + margem_seguranca / 100)
+                    qtd_drinks = total_drinks * proporcao
                 
                     receita = df_receitas[df_receitas["drink"] == drink]
                 
@@ -1143,27 +1106,20 @@ elif menu == "Orçamentos":
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
                 
-                
-                # =========================
-                # ⚠️ AVISOS (AGORA FUNCIONA)
-                # =========================
-                for d in avisos:
-                    st.warning(f"⚠️ {d} foi limitado para evitar excesso")
-        
-                # =========================
-                # 🔍 DEBUG (opcional)
-                # =========================
                 with st.expander("🔍 Debug de consumo"):
                     for drink in selecao:
                         proporcao = pesos[drink] / total_peso
                         qtd_calc = total_drinks * proporcao
-                        qtd_base = min(qtd_calc, limite_global)
-                        qtd_final = qtd_base * (1 + margem_seguranca / 100)
-        
-                        st.write(f"{drink}:")
-                        st.write(f"  → calculado: {int(qtd_calc)} drinks")
-                        st.write(f"  → limitado: {int(qtd_base)} drinks")
-                        st.write(f"  → final c/ margem: {int(qtd_final)} drinks")
+                
+                        st.write(f"{drink}: {int(qtd_calc)} drinks")
+
+                st.subheader("📊 Distribuição de Drinks")
+
+                for drink in selecao:
+                    proporcao = pesos[drink] / total_peso
+                    qtd = total_drinks * proporcao
+                
+                    st.write(f"{drink}: {int(qtd)} drinks")
 
                 # =========================
                 # DADOS
@@ -1250,8 +1206,7 @@ elif menu == "Orçamentos":
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-                                key_qtd = f"qtd_{marca}"
-                                
+        
                                 key_manual = f"manual_{marca}"
                                 
                                 qtd_calculada = qtd_garrafas
