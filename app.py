@@ -950,6 +950,24 @@ elif menu == "Receitas":
                 
 elif menu == "Orçamentos":
 
+    if "orcamento" not in st.session_state:
+        st.session_state["orcamento"] = {
+            "cliente": "",
+            "data": None,
+            "cidade": "",
+            "telefone": "",
+            "endereco": "",
+            "tipo_evento": "",
+            "convidados": 50,
+            "horas": 4,
+            "drinks_por_hora": 2.0,
+            "drinks_selecionados": [],
+            "bebidas": {},
+            "frutas": {}
+        }
+    
+    orc = st.session_state["orcamento"]
+    
     if "orcamento_bebidas" not in st.session_state:
         st.session_state["orcamento_bebidas"] = {}
 
@@ -974,8 +992,16 @@ elif menu == "Orçamentos":
 
         col1, col2, col3 = st.columns(3)
 
-        nome_cliente = col1.text_input("Nome do cliente")
-        data_evento = col2.date_input("Data do evento")
+        nome_cliente = col1.text_input(
+            "Nome do cliente",
+            value=orc["cliente"]
+        )
+        orc["cliente"] = nome_cliente
+        data_evento = col2.date_input(
+            "Data do evento",
+            value=orc["data"]
+        )
+        orc["data"] = data_evento
         cidade_evento = col3.text_input("Cidade / Local")
 
         telefone = st.text_input("📞 Telefone")
@@ -1039,13 +1065,6 @@ elif menu == "Orçamentos":
         else:
             mudou_config = config_atual != st.session_state["ultima_config"]
         
-        # só reseta se realmente mudou
-        if mudou_config:
-            # limpa inputs dinâmicos (garrafas, frutas, etc)
-            for k in list(st.session_state.keys()):
-                if k.startswith("qtd_"):
-                    del st.session_state[k]
-        
             # limpa orçamentos salvos
             st.session_state["orcamento_bebidas"] = {}
             st.session_state["orcamento_frutas"] = {}
@@ -1065,7 +1084,13 @@ elif menu == "Orçamentos":
         else:
         
             drinks = df_receitas["drink"].unique()
-            selecao = st.multiselect("🍸 Selecione os drinks do evento", drinks)
+            selecao = st.multiselect(
+                "🍸 Selecione os drinks do evento",
+                drinks,
+                default=orc.get("drinks", [])
+            )
+            
+            orc["drinks"] = selecao
         
             if selecao:
         
@@ -1240,12 +1265,8 @@ elif menu == "Orçamentos":
                                 qtd_calculada = qtd_garrafas
                                 
                                 # cria valor inicial
-                                if key_manual not in st.session_state:
-                                    st.session_state[key_manual] = qtd_calculada
-                                
-                                # atualiza automaticamente se cálculo mudou
-                                if abs(st.session_state[key_manual] - qtd_calculada) > 1:
-                                    st.session_state[key_manual] = qtd_calculada
+                                if key_manual not in st.session_state or mudou_config:
+                                st.session_state[key_manual] = qtd_calculada
                                 
                                 qtd_editavel = st.number_input(
                                     "Garrafas",
