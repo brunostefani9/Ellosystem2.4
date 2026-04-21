@@ -66,6 +66,7 @@ menu = st.sidebar.radio(
 "Orçamentos",
 "Cachês",
 "Vendas",
+"CMV",    
 "Financeiro",
 "Pacotes"
 ]
@@ -1084,6 +1085,7 @@ elif menu == "Orçamentos":
         else:
         
             drinks = df_receitas["drink"].unique()
+            
             selecao = st.multiselect(
                 "🍸 Selecione os drinks do evento",
                 drinks,
@@ -1961,8 +1963,7 @@ elif menu == "Orçamentos":
                         .execute()
                 
                     st.success("Evento finalizado!")
-                    st.rerun()
-    
+                    st.rerun()            
                 st.divider()
 
 elif menu == "Cachês":
@@ -2201,6 +2202,146 @@ elif menu == "Vendas":
 
     if df.empty:
         st.warning("Nenhuma venda registrada ainda — aparecerá ao aprovar eventos.")
+        
+
+elif menu == "CMV":
+
+    st.title("📊 Controle de CMV")
+    
+    tab1, tab2 = st.tabs([
+        "📋 Por Evento",
+        "📊 Análise"
+    ])
+
+    with tab1:
+    
+        df_eventos = pd.DataFrame(
+            supabase.table("eventos")
+            .select("*")
+            .eq("status", "aprovado")
+            .execute().data or []
+        )
+    
+        if df_eventos.empty:
+            st.info("Nenhum evento aprovado")
+        else:
+    
+            for _, row in df_eventos.iterrows():
+    
+                st.subheader(f"{row['cliente']} - {row['data']}")
+    
+                valor_venda = row.get("venda", 0)
+                custo_previsto = row.get("custo", 0)
+    
+                # =========================
+                # BUSCAR CUSTOS
+                # =========================
+                custos = pd.DataFrame(
+                    supabase.table("evento_custos")
+                    .select("*")
+                    .eq("evento_id", row["id"])
+                    .execute().data or []
+                )
+    
+                total_real = custos["valor"].sum() if not custos.empty else 0
+                lucro_real = valor_venda - total_real
+    
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Venda", f"R$ {valor_venda:,.2f}")
+                col2.metric("Previsto", f"R$ {custo_previsto:,.2f}")
+                col3.metric("Real", f"R$ {total_real:,.2f}")
+    
+                st.metric("Lucro Real", f"R$ {lucro_real:,.2f}")
+    
+                # =========================
+                # LANÇAR CUSTO
+                # =========================
+                st.markdown("### ➕ Lançar custo")
+    
+                descricao = st.text_input(
+                    "Descrição",
+                    key=f"desc_{row['id']}"
+                )
+    
+                valor = st.number_input(
+                    "Valor",
+                    min_value=0.0,
+                    key=f"valor_{row['id']}"
+                )
+    
+                if st.button(f"Adicionar {row['id']}"):
+                    supabase.table("evento_custos").insert({
+                        "evento_id": row["id"],
+                        "descricao": descricao,
+                        "valor": valor
+                    }).execute()
+    
+                    st.success("Custo adicionado")
+                    st.rerun()
+    
+                # =========================
+                # LISTA
+                # =========================
+                st.markdown("### 📋 Custos")
+    
+                if custos.empty:
+                    st.info("Sem custos lançados")
+                else:
+                    for _, c in custos.iterrows():
+                        st.write(f"{c['descricao']} → R$ {c['valor']:,.2f}")
+    
+                st.divider()
+    
+    with tab2:
+    
+        df_eventos = pd.DataFrame(
+            supabase.table("eventos")
+            .select("*")
+            .eq("status", "aprovado")
+            .execute().data or []
+        )
+    
+        resumo = []
+    
+        for _, row in df_eventos.iterrows():
+    
+            custos = pd.DataFrame(
+                supabase.table("evento_custos")
+                .select("*")
+                .eq("evento_id", row["id"])
+                .execute().data or []
+            )
+    
+            total_real = custos["valor"].sum() if not custos.empty else 0
+            lucro = row.get("venda", 0) - total_real
+    
+            resumo.append({
+                "Cliente": row["cliente"],
+                "Venda": row.get("venda", 0),
+                "Previsto": row.get("custo", 0),
+                "Real": total_real,
+                "Lucro": lucro
+            })
+    
+        df_resumo = pd.DataFrame(resumo)
+    
+        if df_resumo.empty:
+            st.info("Sem dados")
+        else:
+    
+            st.dataframe(df_resumo)
+    
+            total_venda = df_resumo["Venda"].sum()
+            total_custo = df_resumo["Real"].sum()
+            total_lucro = df_resumo["Lucro"].sum()
+    
+            st.metric("Total Venda", f"R$ {total_venda:,.2f}")
+            st.metric("Total Custo", f"R$ {total_custo:,.2f}")
+            st.metric("Total Lucro", f"R$ {total_lucro:,.2f}")
+    
+            if total_venda > 0:
+                cmv_medio = (total_custo / total_venda) * 100
+                st.metric("CMV Médio", f"{cmv_medio:.2f}%")
 
 elif menu == "Financeiro":
 
