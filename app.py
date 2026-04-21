@@ -1266,7 +1266,7 @@ elif menu == "Orçamentos":
                                 
                                 # cria valor inicial
                                 if key_manual not in st.session_state or mudou_config:
-                                st.session_state[key_manual] = qtd_calculada
+                                    st.session_state[key_manual] = qtd_calculada
                                 
                                 qtd_editavel = st.number_input(
                                     "Garrafas",
