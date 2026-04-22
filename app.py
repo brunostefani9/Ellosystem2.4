@@ -1084,14 +1084,20 @@ elif menu == "Orçamentos":
         
         else:
         
-            drinks = df_receitas["drink"].unique()
+            # chave única
+            key_drinks = "drinks_selecionados"
+            
+            # inicializa só uma vez
+            if key_drinks not in st.session_state:
+                st.session_state[key_drinks] = orc.get("drinks", [])
             
             selecao = st.multiselect(
                 "🍸 Selecione os drinks do evento",
                 drinks,
-                default=orc.get("drinks", [])
+                key=key_drinks
             )
             
+            # salva no orcamento
             orc["drinks"] = selecao
         
             if selecao:
