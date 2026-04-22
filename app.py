@@ -1279,14 +1279,18 @@ elif menu == "Orçamentos":
                                 qtd_final = qtd_calculada * st.session_state[key_ajuste]
                 
                                 # controla input
+                                valor_esperado = int(round(qtd_final))
+
+                                # 🔥 atualiza sempre que cálculo mudar
                                 if key_input not in st.session_state:
-                                    st.session_state[key_input] = int(round(qtd_final))
+                                    st.session_state[key_input] = valor_esperado
                                 else:
-                                    valor_atual = st.session_state[key_input]
-                                    valor_esperado = int(round(qtd_final))
-                
-                                    if abs(valor_atual - valor_esperado) <= 1:
+                                    if st.session_state[key_input] == valor_esperado:
                                         st.session_state[key_input] = valor_esperado
+                                    else:
+                                        # se usuário NÃO mexeu manualmente (igual ao cálculo anterior)
+                                        if abs(st.session_state[key_input] - qtd_calculada) <= 1:
+                                            st.session_state[key_input] = valor_esperado
                 
                                 novo_valor = st.number_input(
                                     "Garrafas",
