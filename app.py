@@ -1041,6 +1041,31 @@ elif menu == "Orçamentos":
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
 
         # =========================
+        # ALERTA DE DISTRIBUIÇÃO
+        # =========================
+        
+        media_por_drink = total_drinks / len(selecao) if selecao else 0
+        
+        st.markdown("### 📊 Análise de Consumo")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        col1.metric("Total Drinks", int(total_drinks))
+        col2.metric("Tipos de Drinks", len(selecao))
+        col3.metric("Média por Drink", int(media_por_drink))
+        
+        if selecao:
+        
+            if media_por_drink > 300:
+                st.warning(f"⚠️ Média muito alta por drink: {int(media_por_drink)}")
+        
+            elif media_por_drink < 50:
+                st.info(f"ℹ️ Média baixa: {int(media_por_drink)} por drink")
+        
+            else:
+                st.success(f"✔️ Distribuição equilibrada")
+
+        # =========================
         # RECEITAS
         # =========================
         dados = supabase.table("receitas").select("*").execute()
@@ -1123,26 +1148,63 @@ elif menu == "Orçamentos":
                 # BEBIDAS
                 # =========================
                 st.subheader("🍸 Bebidas")
-                
+
                 custo_bebidas = 0
                 escolhas_marcas = {}
                 
                 for item, dados in ingredientes_bebidas.items():
                     tipo = dados["tipo"]
                 
-                    # Mostra todas as bebidas do mesmo tipo para escolha de marca
                     opcoes = df_bebidas[df_bebidas["tipo"].str.lower() == tipo.lower()]
-                
-                    # Caso não encontre, mostra todas as bebidas
                     if opcoes.empty:
                         opcoes = df_bebidas
                 
-                    escolha = st.selectbox(
-                        f"{item} - Escolha a marca",
-                        opcoes["nome"],
-                        key=f"marca_{item}"
-                    )
-                    escolhas_marcas[item] = escolha
+                    col1, col2, col3, col4, col5 = st.columns([2,2,3,2,2])
+                
+                    with col1:
+                        st.write(f"**{item.capitalize()}**")
+                
+                    with col2:
+                        st.write(tipo)
+                
+                    with col3:
+                        escolha = st.selectbox(
+                            "Marca",
+                            opcoes["nome"],
+                            key=f"marca_{item}"
+                        )
+                        escolhas_marcas[item] = escolha
+                
+                    result = df_bebidas[df_bebidas["nome"] == escolha]
+                
+                    if not result.empty:
+                        preco = result.iloc[0]["preco"]
+                        volume = result.iloc[0]["quantidade"]
+                
+                        qtd_ml = dados["qtd"]
+                
+                        if volume > 0:
+                            qtd_real = qtd_ml / volume
+                            qtd_base = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+                
+                            key_qtd = f"qtd_{item}_{escolha}"
+                
+                            if key_qtd not in st.session_state:
+                                st.session_state[key_qtd] = qtd_base
+                
+                            with col4:
+                                qtd_editavel = st.number_input(
+                                    "Garrafas",
+                                    min_value=0,
+                                    key=key_qtd
+                                )
+                
+                            custo_item = qtd_editavel * preco
+                
+                            with col5:
+                                st.write(f"💰 R$ {custo_item:,.2f}")
+                
+                            custo_bebidas += custo_item
                 
                 # =========================
                 # Cálculo do custo das bebidas
@@ -1371,6 +1433,56 @@ elif menu == "Orçamentos":
                     f"R$ {valor_desconto:,.2f}",
                     f"{desconto}%"
                 )
+
+                st.subheader("🧠 Análise Inteligente do Orçamento")
+                
+                alertas = []
+                
+                # =========================
+                # 1. DRINKS POR PESSOA
+                # =========================
+                drinks_por_pessoa = total_drinks / num_convidados if num_convidados > 0 else 0
+                
+                if drinks_por_pessoa > 10:
+                    alertas.append(f"🚨 Muito alto: {drinks_por_pessoa:.1f} drinks por pessoa")
+                elif drinks_por_pessoa > 6:
+                    alertas.append(f"⚠️ Alto: {drinks_por_pessoa:.1f} drinks por pessoa")
+                else:
+                    st.success(f"✔️ Consumo normal: {drinks_por_pessoa:.1f} drinks por pessoa")
+                
+                
+                # =========================
+                # 2. CUSTO POR CONVIDADO
+                # =========================
+                custo_por_convidado = custo_total / num_convidados if num_convidados > 0 else 0
+                
+                if custo_por_convidado > 300:
+                    alertas.append(f"🚨 Custo muito alto por convidado: R$ {custo_por_convidado:.2f}")
+                elif custo_por_convidado > 180:
+                    alertas.append(f"⚠️ Custo elevado por convidado: R$ {custo_por_convidado:.2f}")
+                else:
+                    st.success(f"✔️ Custo saudável por convidado: R$ {custo_por_convidado:.2f}")
+                
+                
+                # =========================
+                # 3. TIPO DE EVENTO (AJUSTE DE EXPECTATIVA)
+                # =========================
+                if tipo_evento == "Corporativo" and drinks_por_pessoa > 5:
+                    alertas.append("⚠️ Evento corporativo normalmente consome menos drinks")
+                
+                if tipo_evento == "Casamento" and drinks_por_pessoa < 4:
+                    alertas.append("ℹ️ Casamentos normalmente têm maior consumo de bebidas")
+                
+                
+                # =========================
+                # MOSTRAR ALERTAS
+                # =========================
+                if alertas:
+                    st.warning("⚠️ Atenção aos pontos abaixo:")
+                    for a in alertas:
+                        st.write(a)
+                else:
+                    st.success("✅ Orçamento dentro do padrão esperado")
                 
                 # =========================
                 # LUCRO
