@@ -1020,6 +1020,19 @@ elif menu == "Orçamentos":
         horas = col2.number_input("Horas de evento", min_value=1, value=4)
         drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
 
+        config_hash = f"{num_convidados}_{horas}_{drinks_por_hora}_{modo_calculo}"
+        
+        if "ultima_config" not in st.session_state:
+            st.session_state["ultima_config"] = config_hash
+        
+        # Se mudou qualquer coisa → limpa quantidades
+        if st.session_state["ultima_config"] != config_hash:
+            for key in list(st.session_state.keys()):
+                if key.startswith("qtd_") or key.startswith("qtd_fruta_"):
+                    del st.session_state[key]
+        
+            st.session_state["ultima_config"] = config_hash
+        
         if modo_calculo == "Evento inteiro":
             total_drinks = num_convidados * drinks_por_hora
         else:
@@ -1157,11 +1170,11 @@ elif menu == "Orçamentos":
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-                                key_qtd = f"qtd_{marca}"
+                                key_qtd = f"qtd_{item}_{marca}"
 
                             # se ainda não existe, cria valor inicial
                             if key_qtd not in st.session_state:
-                                st.session_state[key_qtd] = qtd_garrafas
+                                st.session_state[key_qtd] = int(qtd_garrafas)
                             
                             qtd_editavel = st.number_input(
                                 "Garrafas",
@@ -1417,7 +1430,8 @@ elif menu == "Orçamentos":
                 
                             if volume > 0:
                                 qtd_real = qtd_ml / volume
-                                qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+                                key_qtd = f"qtd_{item}_{marca}"
+                                qtd_garrafas = st.session_state.get(key_qtd, 0)
                 
                                 supabase.table("evento_itens").insert({
                                     "evento_id": evento_id,
