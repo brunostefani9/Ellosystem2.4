@@ -1166,7 +1166,7 @@ elif menu == "Orçamentos":
                     st.markdown(f"**🍸 {item}**")
                 
                 with col2:
-                    st.caption(dados["tipo"])
+                    st.caption(info["tipo"])
                 
                 with col3:
                     escolha = st.selectbox(
