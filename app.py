@@ -1083,7 +1083,8 @@ elif menu == "Orçamentos":
             st.warning("Cadastre receitas primeiro")
         
         else:
-        
+
+            drinks = df_receitas["drink"].unique()
             # chave única
             key_drinks = "drinks_selecionados"
             
