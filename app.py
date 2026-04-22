@@ -1241,7 +1241,7 @@ elif menu == "Orçamentos":
                         key=f"marca_{item}"
                     )
                     escolhas_marcas[item] = escolha
-                
+        
                 # =========================
                 # Cálculo do custo das bebidas
                 # =========================
@@ -1261,35 +1261,39 @@ elif menu == "Orçamentos":
                             qtd_real = qtd_ml / volume
                             qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                 
-                            # 🔥 INTERFACE EDITÁVEL
-                            col1, col2, col3 = st.columns([4,2,2])
+                            col1, col2, col3 = st.columns([4, 2, 2])
                 
                             with col1:
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-        
-                                key_manual = f"manual_{marca}"
-                                
+    
+                                key_ajuste = f"ajuste_{marca}_{item}"
+                                key_input = f"input_{marca}_{item}"
+                            
                                 qtd_calculada = qtd_garrafas
-                                
-                                # cria valor inicial
-                                if key_manual not in st.session_state or mudou_config:
-                                    st.session_state[key_manual] = qtd_calculada
-                                
-                                qtd_editavel = st.number_input(
+                            
+                                if key_ajuste not in st.session_state:
+                                    st.session_state[key_ajuste] = 0
+                            
+                                qtd_final = qtd_calculada + st.session_state[key_ajuste]
+                            
+                                novo_valor = st.number_input(
                                     "Garrafas",
                                     min_value=0,
-                                    key=key_manual
+                                    value=int(qtd_final),
+                                    key=key_input
                                 )
+                            
+                                st.session_state[key_ajuste] = novo_valor - qtd_calculada
                 
                             with col3:
-                                custo_item = qtd_editavel * preco
+                                custo_item = novo_valor * preco
                                 st.write(f"💰 R$ {custo_item:,.2f}")
                 
                             # salva estado
                             st.session_state["orcamento_bebidas"][marca] = {
-                                "quantidade": qtd_editavel,
+                                "quantidade": novo_valor,
                                 "preco": preco
                             }
                 
