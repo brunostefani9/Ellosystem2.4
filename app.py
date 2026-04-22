@@ -1158,64 +1158,54 @@ elif menu == "Orçamentos":
                 # =========================
                 # BEBIDAS
                 # =========================
-                st.subheader("🍸 Bebidas")
+                st.markdown("---")
 
-                custo_bebidas = 0
-                escolhas_marcas = {}
+                col1, col2, col3, col4, col5 = st.columns([2,2,3,2,2])
                 
-                for item, dados in ingredientes_bebidas.items():
-                    tipo = dados["tipo"]
+                with col1:
+                    st.markdown(f"**🍸 {item}**")
                 
-                    opcoes = df_bebidas[df_bebidas["tipo"].str.lower() == tipo.lower()]
-                    if opcoes.empty:
-                        opcoes = df_bebidas
+                with col2:
+                    st.caption(tipo)
                 
-                    col1, col2, col3, col4, col5 = st.columns([2,2,3,2,2])
+                with col3:
+                    escolha = st.selectbox(
+                        "Marca",
+                        opcoes["nome"],
+                        key=f"marca_{i}_{item}"
+                    )
+                    escolhas_marcas[item] = escolha
                 
-                    with col1:
-                        st.write(f"**{item.capitalize()}**")
+                result = df_bebidas[df_bebidas["nome"] == escolha]
                 
-                    with col2:
-                        st.write(tipo)
+                if not result.empty:
+                    preco = result.iloc[0]["preco"]
+                    volume = result.iloc[0]["quantidade"]
                 
-                    with col3:
-                        escolha = st.selectbox(
-                            "Marca",
-                            opcoes["nome"],
-                            key=f"marca_{item}"
-                        )
-                        escolhas_marcas[item] = escolha
+                    qtd_ml = dados["qtd"]
                 
-                    result = df_bebidas[df_bebidas["nome"] == escolha]
+                    if volume > 0:
+                        qtd_real = qtd_ml / volume
+                        qtd_base = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                 
-                    if not result.empty:
-                        preco = result.iloc[0]["preco"]
-                        volume = result.iloc[0]["quantidade"]
+                        key_qtd = f"qtd_{i}_{item}_{escolha}"
                 
-                        qtd_ml = dados["qtd"]
+                        if key_qtd not in st.session_state:
+                            st.session_state[key_qtd] = qtd_base
                 
-                        if volume > 0:
-                            qtd_real = qtd_ml / volume
-                            qtd_base = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+                        with col4:
+                            qtd_editavel = st.number_input(
+                                "Garrafas",
+                                min_value=0,
+                                key=key_qtd
+                            )
                 
-                            key_qtd = f"qtd_{item}_{escolha}"
+                        custo_item = qtd_editavel * preco
                 
-                            if key_qtd not in st.session_state:
-                                st.session_state[key_qtd] = qtd_base
+                        with col5:
+                            st.markdown(f"💰 **R$ {custo_item:,.2f}**")
                 
-                            with col4:
-                                qtd_editavel = st.number_input(
-                                    "Garrafas",
-                                    min_value=0,
-                                    key=key_qtd
-                                )
-                
-                            custo_item = qtd_editavel * preco
-                
-                            with col5:
-                                st.write(f"💰 R$ {custo_item:,.2f}")
-                
-                            custo_bebidas += custo_item
+                        custo_bebidas += custo_item
                 
                 # =========================
                 # Cálculo do custo das bebidas
