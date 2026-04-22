@@ -1044,7 +1044,15 @@ elif menu == "Orçamentos":
         # ALERTA DE DISTRIBUIÇÃO
         # =========================
         
-        media_por_drink = total_drinks / len(selecao) if selecao else 0
+        # segurança: garante que selecao sempre é uma lista válida
+        if 'selecao' not in locals():
+            selecao = []
+        
+        media_por_drink = (
+            total_drinks / len(selecao)
+            if len(selecao) > 0
+            else 0
+        )
         
         st.markdown("### 📊 Análise de Consumo")
         
@@ -1078,6 +1086,9 @@ elif menu == "Orçamentos":
 
             drinks = df_receitas["drink"].unique()
             selecao = st.multiselect("Selecione os drinks", drinks)
+
+            if not selecao:
+                selecao = []
 
             if selecao:
 
@@ -1433,6 +1444,60 @@ elif menu == "Orçamentos":
                     f"R$ {valor_desconto:,.2f}",
                     f"{desconto}%"
                 )            
+
+                st.subheader("🧠 Análise Inteligente do Orçamento")
+
+                # proteção geral do bloco
+                selecao = selecao if 'selecao' in locals() else []
+                
+                alertas = []
+                
+                # =========================
+                # 1. DRINKS POR PESSOA
+                # =========================
+                drinks_por_pessoa = total_drinks / num_convidados if num_convidados > 0 else 0
+                
+                if drinks_por_pessoa > 10:
+                    alertas.append(f"🚨 Muito alto: {drinks_por_pessoa:.1f} drinks por pessoa")
+                elif drinks_por_pessoa > 6:
+                    alertas.append(f"⚠️ Alto: {drinks_por_pessoa:.1f} drinks por pessoa")
+                else:
+                    st.success(f"✔️ Consumo normal: {drinks_por_pessoa:.1f} drinks por pessoa")
+                
+                
+                # =========================
+                # 2. CUSTO POR CONVIDADO
+                # =========================
+                custo_por_convidado = custo_total / num_convidados if num_convidados > 0 else 0
+                
+                if custo_por_convidado > 300:
+                    alertas.append(f"🚨 Custo muito alto por convidado: R$ {custo_por_convidado:.2f}")
+                elif custo_por_convidado > 180:
+                    alertas.append(f"⚠️ Custo elevado por convidado: R$ {custo_por_convidado:.2f}")
+                else:
+                    st.success(f"✔️ Custo saudável por convidado: R$ {custo_por_convidado:.2f}")
+                
+                
+                # =========================
+                # 3. TIPO DE EVENTO (AJUSTE DE EXPECTATIVA)
+                # =========================
+                if tipo_evento == "Corporativo" and drinks_por_pessoa > 5:
+                    alertas.append("⚠️ Evento corporativo normalmente consome menos drinks")
+                
+                if tipo_evento == "Casamento" and drinks_por_pessoa < 4:
+                    alertas.append("ℹ️ Casamentos normalmente têm maior consumo de bebidas")
+                
+                
+                # =========================
+                # MOSTRAR ALERTAS
+                # =========================
+                if alertas:
+                    st.warning("⚠️ Atenção aos pontos abaixo:")
+                    for a in alertas:
+                        st.write(a)
+                else:
+                    st.success("✅ Orçamento dentro do padrão esperado")
+                
                 # =========================
                 # LUCRO
                 # =========================
