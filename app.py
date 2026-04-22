@@ -1267,36 +1267,35 @@ elif menu == "Orçamentos":
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-                                key_ajuste = f"ajuste_{marca}_{item}"
                                 key_input = f"input_{marca}_{item}"
-                
+                                key_manual_flag = f"manual_{marca}_{item}"
+                            
                                 qtd_calculada = qtd_garrafas
-                
-                                # inicializa proporção
-                                if key_ajuste not in st.session_state:
-                                    st.session_state[key_ajuste] = 1.0
-                
-                                qtd_final = qtd_calculada * st.session_state[key_ajuste]
-                
-                                # controla input
-                                valor_esperado = int(round(qtd_final))
-
-                                # 🔥 atualiza sempre que cálculo mudar
-                                if key_input not in st.session_state:
-                                    st.session_state[key_input] = valor_esperado
-                                else:
-                                    if st.session_state[key_input] == valor_esperado:
-                                        st.session_state[key_input] = valor_esperado
-                                    else:
-                                        # se usuário NÃO mexeu manualmente (igual ao cálculo anterior)
-                                        if abs(st.session_state[key_input] - qtd_calculada) <= 1:
-                                            st.session_state[key_input] = valor_esperado
-                
-                                novo_valor = st.number_input(
-                                    "Garrafas",
-                                    min_value=0,
-                                    key=key_input
+                            
+                                # checkbox para ativar ajuste manual
+                                manual = st.checkbox(
+                                    "Manual",
+                                    key=key_manual_flag
                                 )
+                            
+                                # valor automático
+                                if not manual:
+                                    st.write(f"{qtd_calculada} garrafas")
+                                    novo_valor = qtd_calculada
+                            
+                                    # atualiza session_state
+                                    st.session_state[key_input] = novo_valor
+                            
+                                else:
+                                    # inicializa se não existir
+                                    if key_input not in st.session_state:
+                                        st.session_state[key_input] = qtd_calculada
+                            
+                                    novo_valor = st.number_input(
+                                        "Garrafas",
+                                        min_value=0,
+                                        key=key_input
+                                    )
                 
                                 # atualiza proporção
                                 if qtd_calculada > 0:
