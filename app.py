@@ -1267,33 +1267,42 @@ elif menu == "Orçamentos":
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-    
                                 key_ajuste = f"ajuste_{marca}_{item}"
                                 key_input = f"input_{marca}_{item}"
-                            
+                
                                 qtd_calculada = qtd_garrafas
-                            
+                
+                                # inicializa proporção
                                 if key_ajuste not in st.session_state:
-                                    st.session_state[key_ajuste] = 0
-                            
+                                    st.session_state[key_ajuste] = 1.0
+                
                                 qtd_final = qtd_calculada * st.session_state[key_ajuste]
-                            
+                
+                                # controla input
+                                if key_input not in st.session_state:
+                                    st.session_state[key_input] = int(round(qtd_final))
+                                else:
+                                    valor_atual = st.session_state[key_input]
+                                    valor_esperado = int(round(qtd_final))
+                
+                                    if abs(valor_atual - valor_esperado) <= 1:
+                                        st.session_state[key_input] = valor_esperado
+                
                                 novo_valor = st.number_input(
                                     "Garrafas",
                                     min_value=0,
-                                    value=int(qtd_final),
                                     key=key_input
                                 )
-                            
+                
+                                # atualiza proporção
                                 if qtd_calculada > 0:
                                     st.session_state[key_ajuste] = novo_valor / qtd_calculada
-                                else:
-                                    st.session_state[key_ajuste] = 1
+                
                             with col3:
                                 custo_item = novo_valor * preco
                                 st.write(f"💰 R$ {custo_item:,.2f}")
                 
-                            # salva estado
+                            # 🔥 ESSENCIAL
                             st.session_state["orcamento_bebidas"][marca] = {
                                 "quantidade": novo_valor,
                                 "preco": preco
