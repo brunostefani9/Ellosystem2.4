@@ -951,24 +951,6 @@ elif menu == "Receitas":
                 
 elif menu == "Orçamentos":
 
-    if "orcamento" not in st.session_state:
-        st.session_state["orcamento"] = {
-            "cliente": "",
-            "data": None,
-            "cidade": "",
-            "telefone": "",
-            "endereco": "",
-            "tipo_evento": "",
-            "convidados": 50,
-            "horas": 4,
-            "drinks_por_hora": 2.0,
-            "drinks_selecionados": [],
-            "bebidas": {},
-            "frutas": {}
-        }
-    
-    orc = st.session_state["orcamento"]
-    
     if "orcamento_bebidas" not in st.session_state:
         st.session_state["orcamento_bebidas"] = {}
 
@@ -993,16 +975,8 @@ elif menu == "Orçamentos":
 
         col1, col2, col3 = st.columns(3)
 
-        nome_cliente = col1.text_input(
-            "Nome do cliente",
-            value=orc["cliente"]
-        )
-        orc["cliente"] = nome_cliente
-        data_evento = col2.date_input(
-            "Data do evento",
-            value=orc["data"]
-        )
-        orc["data"] = data_evento
+        nome_cliente = col1.text_input("Nome do cliente")
+        data_evento = col2.date_input("Data do evento")
         cidade_evento = col3.text_input("Cidade / Local")
 
         telefone = st.text_input("📞 Telefone")
@@ -1039,149 +1013,64 @@ elif menu == "Orçamentos":
         # CONFIG EVENTO
         # =========================
         st.subheader("Configuração do Evento")
-        
+
         col1, col2, col3 = st.columns(3)
-        
+
         num_convidados = col1.number_input("Convidados", min_value=1, value=50)
         horas = col2.number_input("Horas de evento", min_value=1, value=4)
         drinks_por_hora = col3.number_input("Drinks por pessoa/hora", min_value=0.5, value=2.0)
-        
+
         if modo_calculo == "Evento inteiro":
             total_drinks = num_convidados * drinks_por_hora
         else:
             total_drinks = num_convidados * horas * drinks_por_hora
-        
+            
         st.info(f"Total estimado de drinks: {int(total_drinks)}")
-        
-        
-        # =========================
-        # 🔥 RESET INTELIGENTE (CORRIGIDO)
-        # =========================
-        config_atual = (num_convidados, horas, drinks_por_hora, modo_calculo)
-        
-        # primeira execução → só salva, não compara
-        if "ultima_config" not in st.session_state:
-            st.session_state["ultima_config"] = config_atual
-            mudou_config = False
-        else:
-            mudou_config = config_atual != st.session_state["ultima_config"]
-        
-            # limpa orçamentos salvos
-            st.session_state["orcamento_bebidas"] = {}
-            st.session_state["orcamento_frutas"] = {}
-        
-        # 🔥 SEMPRE atualiza no final (fora do if!)
-        st.session_state["ultima_config"] = config_atual
 
         # =========================
         # RECEITAS
         # =========================
         dados = supabase.table("receitas").select("*").execute()
         df_receitas = pd.DataFrame(dados.data if dados.data else [])
-        
+
         if df_receitas.empty:
             st.warning("Cadastre receitas primeiro")
-        
+
         else:
 
             drinks = df_receitas["drink"].unique()
-            # chave única
-            key_drinks = "drinks_selecionados"
-            
-            # inicializa só uma vez
-            if key_drinks not in st.session_state:
-                st.session_state[key_drinks] = orc.get("drinks", [])
-            
-            selecao = st.multiselect(
-                "🍸 Selecione os drinks do evento",
-                drinks,
-                key=key_drinks
-            )
-            
-            # salva no orcamento
-            orc["drinks"] = selecao
-        
+            selecao = st.multiselect("Selecione os drinks", drinks)
+
             if selecao:
-        
-                # 🔥 SEPARAÇÃO VISUAL (AQUI ESTÁ O SEGREDO)
-                st.markdown("---")
-                st.markdown("## ⚙️ Configuração de consumo")
-        
-                # =========================
-                # VOLUME DE SAÍDA DOS DRINKS
-                # =========================
-                st.subheader("📊 Volume de saída por drink")
-                st.caption("Defina a proporção de saída dos drinks. Ex: 2 = dobro de consumo.")
-                
+
                 pesos = {}
                 total_peso = 0
-                
-                for i in range(0, len(selecao), 3):
-                    cols = st.columns(3)
-                    for j in range(3):
-                        if i + j < len(selecao):
-                            drink = selecao[i + j]
-                            with cols[j]:
-                                peso = st.number_input(
-                                    drink,
-                                    min_value=1,
-                                    value=1,
-                                    key=f"peso_{drink}"
-                                )
-                                pesos[drink] = peso
-                                total_peso += peso
-                
-                # =========================
-                # CÁLCULO DOS INGREDIENTES
-                # =========================
-                
-                # 🔥 validação ANTES de tudo
-                if total_peso == 0:
-                    st.warning("Defina o volume dos drinks")
-                    st.stop()
-                
-                ingredientes_totais = {}
-                
+
                 for drink in selecao:
-                
-                    # 🔥 cálculo correto
+                    peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+                    pesos[drink] = peso
+                    total_peso += peso
+
+                ingredientes_totais = {}
+
+                for drink in selecao:
+
                     proporcao = pesos[drink] / total_peso
                     qtd_drinks = total_drinks * proporcao
-                
+
                     receita = df_receitas[df_receitas["drink"] == drink]
-                
+
                     for _, row in receita.iterrows():
-                
+
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
-                
+
                         total_ingrediente = qtd * qtd_drinks
-                
+
                         if ingrediente in ingredientes_totais:
                             ingredientes_totais[ingrediente] += total_ingrediente
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
-                
-                # =========================
-                # DEBUG (OPCIONAL)
-                # =========================
-                with st.expander("🔍 Debug de consumo"):
-                    for drink in selecao:
-                        proporcao = pesos[drink] / total_peso
-                        qtd_calc = total_drinks * proporcao
-                
-                        st.write(f"{drink}: {int(qtd_calc)} drinks")
-                
-                # =========================
-                # RESUMO VISUAL
-                # =========================
-                st.subheader("📊 Distribuição de Drinks")
-                
-                for drink in selecao:
-                    proporcao = pesos[drink] / total_peso
-                    qtd = total_drinks * proporcao
-                
-                    st.write(f"{drink}: {int(qtd)} drinks")
 
                 # =========================
                 # DADOS
@@ -1241,7 +1130,7 @@ elif menu == "Orçamentos":
                         key=f"marca_{item}"
                     )
                     escolhas_marcas[item] = escolha
-        
+                
                 # =========================
                 # Cálculo do custo das bebidas
                 # =========================
@@ -1261,53 +1150,32 @@ elif menu == "Orçamentos":
                             qtd_real = qtd_ml / volume
                             qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                 
-                            col1, col2, col3 = st.columns([4, 2, 2])
+                            # 🔥 INTERFACE EDITÁVEL
+                            col1, col2, col3 = st.columns([4,2,2])
                 
                             with col1:
                                 st.write(f"✔ {marca}")
                 
                             with col2:
-                                key_input = f"input_{marca}_{item}"
-                                key_manual_flag = f"manual_{marca}_{item}"
+                                key_qtd = f"qtd_{marca}"
+
+                            # se ainda não existe, cria valor inicial
+                            if key_qtd not in st.session_state:
+                                st.session_state[key_qtd] = qtd_garrafas
                             
-                                qtd_calculada = qtd_garrafas
-                            
-                                # checkbox para ativar ajuste manual
-                                manual = st.checkbox(
-                                    "Manual",
-                                    key=key_manual_flag
-                                )
-                            
-                                # valor automático
-                                if not manual:
-                                    st.write(f"{qtd_calculada} garrafas")
-                                    novo_valor = qtd_calculada
-                            
-                                    # atualiza session_state
-                                    st.session_state[key_input] = novo_valor
-                            
-                                else:
-                                    # inicializa se não existir
-                                    if key_input not in st.session_state:
-                                        st.session_state[key_input] = qtd_calculada
-                            
-                                    novo_valor = st.number_input(
-                                        "Garrafas",
-                                        min_value=0,
-                                        key=key_input
-                                    )
-                
-                                # atualiza proporção
-                                if qtd_calculada > 0:
-                                    st.session_state[key_ajuste] = novo_valor / qtd_calculada
+                            qtd_editavel = st.number_input(
+                                "Garrafas",
+                                min_value=0,
+                                key=key_qtd
+                            )
                 
                             with col3:
-                                custo_item = novo_valor * preco
+                                custo_item = qtd_editavel * preco
                                 st.write(f"💰 R$ {custo_item:,.2f}")
                 
-                            # 🔥 ESSENCIAL
+                            # salva estado
                             st.session_state["orcamento_bebidas"][marca] = {
-                                "quantidade": novo_valor,
+                                "quantidade": qtd_editavel,
                                 "preco": preco
                             }
                 
@@ -1462,47 +1330,17 @@ elif menu == "Orçamentos":
                 
                 st.metric("💰 Custo Total do Evento (Bruto)", f"R$ {custo_total:,.2f}")
                 st.markdown(f"### 💸 Extras: R$ {custo_extras:,.2f}")
-            
+                
+                
                 # =========================
                 # MARGEM
                 # =========================
                 margem = st.slider("Margem de lucro (%)", 0, 300, 100)
+                preco_venda = custo_total * (1 + margem / 100)
                 
-                # preço base (seu lucro)
-                preco_base = custo_total * (1 + margem / 100)
-                
-                # =========================
-                # 🤝 COMISSÃO
-                # =========================
-                st.subheader("🤝 Comissão (Indicação)")
-
-                # 🔥 checkbox para ativar/desativar comissão
-                usar_comissao = st.checkbox("Aplicar comissão?", value=False)
-                
-                col1, col2 = st.columns(2)
-                
-                indicador = col1.text_input("Quem indicou?")
-                
-                comissao_percentual = col2.number_input(
-                    "Comissão (%)",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=10.0,
-                    disabled=not usar_comissao  # 👈 desativa se não usar
-                )
-                
-                # 🔥 lógica inteligente
-                if usar_comissao:
-                    valor_comissao = preco_base * (comissao_percentual / 100)
-                else:
-                    valor_comissao = 0
-                
-                # preço final
-                preco_venda = preco_base + valor_comissao
-                
-                st.metric("💸 Comissão", f"R$ {valor_comissao:,.2f}")
                 st.metric("💰 Preço Final Sugerido", f"R$ {preco_venda:,.2f}")
-                    
+                
+                
                 # =========================
                 # DESCONTO
                 # =========================
@@ -1524,7 +1362,7 @@ elif menu == "Orçamentos":
                 # =========================
                 # LUCRO
                 # =========================
-                lucro = preco_com_desconto - custo_total - valor_comissao
+                lucro = preco_com_desconto - custo_total
                 
                 if lucro < 0:
                     st.error("⚠️ Atenção: esse desconto gera PREJUÍZO!")
@@ -1723,61 +1561,36 @@ elif menu == "Orçamentos":
                         df_checklist["Fim"] = ""
     
                         # =========================
-                        # EDITOR (CHECKLIST)
+                        # EDITOR
                         # =========================
-                        checklist_export = []
-                        
-                        st.subheader("📋 Checklist do Evento")
-                        
-                        for i, item_row in df_checklist.iterrows():
-                        
-                            col1, col2 = st.columns([6,1])
-                        
-                            with col1:
-                                texto = f"{item_row['produto']} - {item_row['quantidade']}"
-                                marcado = st.checkbox(texto, key=f"check_{row['id']}_{i}")
-                        
-                            with col2:
-                                if marcado:
-                                    st.write("✅")
-                        
-                            checklist_export.append({
-                                "produto": item_row["produto"],
-                                "quantidade": item_row["quantidade"],
-                                "ok": marcado
-                            })
-                        
-                        # =========================
-                        # 💾 SALVAR CHECKLIST (OPCIONAL)
-                        # =========================
-                        if st.button(f"💾 Salvar checklist {row['id']}"):
-                        
-                            for item in checklist_export:
-                                supabase.table("evento_itens")\
-                                    .update({
-                                        "check_ok": item["ok"]
-                                    })\
-                                    .eq("evento_id", row["id"])\
-                                    .eq("produto", item["produto"])\
-                                    .execute()
-                        
-                            st.success("Checklist atualizado!")
-                        
-                        # =========================
-                        # 📥 DOWNLOAD
-                        # =========================
-                        import pandas as pd
-                        
-                        df_export = pd.DataFrame(checklist_export)
-                        
-                        csv = df_export.to_csv(index=False).encode("utf-8")
-                        
-                        st.download_button(
-                            label="📥 Baixar checklist (CSV)",
-                            data=csv,
-                            file_name=f"checklist_evento_{row['id']}.csv",
-                            mime="text/csv"
+                        df_editado = st.data_editor(
+                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]],
+                            num_rows="dynamic",
+                            use_container_width=True,
+                            key=f"editor_{row['id']}"
                         )
+    
+                        # =========================
+                        # SALVAR EDIÇÃO
+                        # =========================
+                        if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
+    
+                            # deletar itens antigos
+                            supabase.table("evento_itens")\
+                                .delete()\
+                                .eq("evento_id", row["id"])\
+                                .execute()
+                            
+                            # inserir novos
+                            for _, item in df_editado.iterrows():
+                                supabase.table("evento_itens").insert({
+                                    "evento_id": row["id"],
+                                    "produto": item["produto"],
+                                    "quantidade": item["quantidade"],
+                                    "unidade": item.get("unidade", "un"),
+                                    "categoria": item["Categoria"]
+                                }).execute()
+                            st.success("Checklist atualizado!")
     
                 # =========================
                 # VALOR
@@ -1988,7 +1801,8 @@ elif menu == "Orçamentos":
                         .execute()
                 
                     st.success("Evento finalizado!")
-                    st.rerun()            
+                    st.rerun()
+    
                 st.divider()
 
 elif menu == "Cachês":
