@@ -2314,34 +2314,44 @@ elif menu == "CMV":
     
             total_real = custos["valor"].sum() if not custos.empty else 0
             lucro = row.get("venda", 0) - total_real
+
+            valor_venda = row.get("venda", 0)
+            cmv = (total_real / valor_venda) * 100 if valor_venda > 0 else 0
     
             resumo.append({
                 "Cliente": row["cliente"],
                 "Venda": row.get("venda", 0),
                 "Previsto": row.get("custo", 0),
                 "Real": total_real,
-                "Lucro": lucro
+                "Lucro": lucro,
+                "CMV (%)": round(cmv, 2)
             })
-    
+            
         df_resumo = pd.DataFrame(resumo)
-    
-        if df_resumo.empty:
-            st.info("Sem dados")
-        else:
-    
-            st.dataframe(df_resumo)
-    
-            total_venda = df_resumo["Venda"].sum()
-            total_custo = df_resumo["Real"].sum()
-            total_lucro = df_resumo["Lucro"].sum()
-    
-            st.metric("Total Venda", f"R$ {total_venda:,.2f}")
-            st.metric("Total Custo", f"R$ {total_custo:,.2f}")
-            st.metric("Total Lucro", f"R$ {total_lucro:,.2f}")
-    
-            if total_venda > 0:
-                cmv_medio = (total_custo / total_venda) * 100
-                st.metric("CMV Médio", f"{cmv_medio:.2f}%")
+
+        st.dataframe(df_resumo)
+        
+        # 🔥 ALERTAS DE CMV
+        for _, r in df_resumo.iterrows():
+            if r["CMV (%)"] > 50:
+                st.error(f"🚨 {r['Cliente']} com CMV crítico: {r['CMV (%)']}%")
+            elif r["CMV (%)"] > 40:
+                st.warning(f"⚠️ {r['Cliente']} com CMV alto: {r['CMV (%)']}%")
+        
+        # =========================
+        # MÉTRICAS GERAIS
+        # =========================
+        total_venda = df_resumo["Venda"].sum()
+        total_custo = df_resumo["Real"].sum()
+        total_lucro = df_resumo["Lucro"].sum()
+        
+        st.metric("Total Venda", f"R$ {total_venda:,.2f}")
+        st.metric("Total Custo", f"R$ {total_custo:,.2f}")
+        st.metric("Total Lucro", f"R$ {total_lucro:,.2f}")
+        
+        if total_venda > 0:
+            cmv_medio = (total_custo / total_venda) * 100
+            st.metric("CMV Médio", f"{cmv_medio:.2f}%")
 
 elif menu == "Financeiro":
 
