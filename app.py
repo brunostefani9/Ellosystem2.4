@@ -2329,29 +2329,32 @@ elif menu == "CMV":
             
         df_resumo = pd.DataFrame(resumo)
 
-        st.dataframe(df_resumo)
+        if df_resumo.empty:
+            st.info("Sem dados")
+        else:
+            st.dataframe(df_resumo)
         
-        # 🔥 ALERTAS DE CMV
-        for _, r in df_resumo.iterrows():
-            if r["CMV (%)"] > 50:
-                st.error(f"🚨 {r['Cliente']} com CMV crítico: {r['CMV (%)']}%")
-            elif r["CMV (%)"] > 40:
-                st.warning(f"⚠️ {r['Cliente']} com CMV alto: {r['CMV (%)']}%")
+            # 🔥 ALERTAS DE CMV
+            for _, r in df_resumo.iterrows():
+                if r["CMV (%)"] > 50:
+                    st.error(f"🚨 {r['Cliente']} com CMV crítico: {r['CMV (%)']}%")
+                elif r["CMV (%)"] > 40:
+                    st.warning(f"⚠️ {r['Cliente']} com CMV alto: {r['CMV (%)']}%")
         
-        # =========================
-        # MÉTRICAS GERAIS
-        # =========================
-        total_venda = df_resumo["Venda"].sum()
-        total_custo = df_resumo["Real"].sum()
-        total_lucro = df_resumo["Lucro"].sum()
+            # =========================
+            # MÉTRICAS GERAIS
+            # =========================
+            total_venda = df_resumo["Venda"].sum()
+            total_custo = df_resumo["Real"].sum()
+            total_lucro = df_resumo["Lucro"].sum()
         
-        st.metric("Total Venda", f"R$ {total_venda:,.2f}")
-        st.metric("Total Custo", f"R$ {total_custo:,.2f}")
-        st.metric("Total Lucro", f"R$ {total_lucro:,.2f}")
+            st.metric("Total Venda", f"R$ {total_venda:,.2f}")
+            st.metric("Total Custo", f"R$ {total_custo:,.2f}")
+            st.metric("Total Lucro", f"R$ {total_lucro:,.2f}")
         
-        if total_venda > 0:
-            cmv_medio = (total_custo / total_venda) * 100
-            st.metric("CMV Médio", f"{cmv_medio:.2f}%")
+            if total_venda > 0:
+                cmv_medio = (total_custo / total_venda) * 100
+                st.metric("CMV Médio", f"{cmv_medio:.2f}%")
 
 elif menu == "Financeiro":
 
