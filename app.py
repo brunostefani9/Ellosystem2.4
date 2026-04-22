@@ -1276,7 +1276,7 @@ elif menu == "Orçamentos":
                                 if key_ajuste not in st.session_state:
                                     st.session_state[key_ajuste] = 0
                             
-                                qtd_final = qtd_calculada + st.session_state[key_ajuste]
+                                qtd_final = qtd_calculada * st.session_state[key_ajuste]
                             
                                 novo_valor = st.number_input(
                                     "Garrafas",
@@ -1285,8 +1285,10 @@ elif menu == "Orçamentos":
                                     key=key_input
                                 )
                             
-                                st.session_state[key_ajuste] = novo_valor - qtd_calculada
-                
+                                if qtd_calculada > 0:
+                                    st.session_state[key_ajuste] = novo_valor / qtd_calculada
+                                else:
+                                    st.session_state[key_ajuste] = 1
                             with col3:
                                 custo_item = novo_valor * preco
                                 st.write(f"💰 R$ {custo_item:,.2f}")
