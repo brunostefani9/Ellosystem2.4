@@ -1143,7 +1143,18 @@ elif menu == "Orçamentos":
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
         
-                        total_ingrediente = qtd * qtd_drinks
+                        # consumo base (receita)
+                        base = qtd * qtd_drinks
+                        
+                        # guarnição (somente frutas)
+                        if any(p in ingrediente.lower() for p in [
+                            "limao", "limão", "laranja", "morango", "abacaxi", "kiwi", "maracuja", "maracujá"
+                        ]):
+                            garnish = 10 * qtd_drinks
+                        else:
+                            garnish = 0
+                        
+                        total_ingrediente = base + garnish
         
                         if ingrediente in ingredientes_totais:
                             ingredientes_totais[ingrediente] += total_ingrediente
@@ -1183,6 +1194,21 @@ elif menu == "Orçamentos":
                         }
                     else:
                         ingredientes_insumos[item] = qtd
+
+                # =========================
+                # SEPARAÇÃO INSUMOS
+                # =========================
+                ingredientes_frutas = {}
+                ingredientes_artesanais = {}
+                
+                for item, qtd in ingredientes_insumos.items():
+                
+                    nome = item.lower()
+                
+                    if any(p in nome for p in ["xarope", "espuma", "pure", "purê", "mix", "base"]):
+                        ingredientes_artesanais[item] = qtd
+                    else:
+                        ingredientes_frutas[item] = qtd
                 
                 # =========================
                 # BEBIDAS
@@ -1301,7 +1327,7 @@ elif menu == "Orçamentos":
                     st.session_state["orcamento_frutas"] = {}
                 custo_frutas = 0
                 
-                for fruta, qtd_gramas in ingredientes_insumos.items():
+                for fruta, qtd_gramas in ingredientes_frutas.items():
                 
                     encontrado = df_insumos[
                         df_insumos["nome"].str.lower().str.strip() == fruta.lower()
@@ -1358,6 +1384,55 @@ elif menu == "Orçamentos":
                     total = qtd * preco
                 
                     st.write(f"✔ {fruta.capitalize()} → {qtd:.0f} g | 💰 R$ {total:,.2f}")
+
+                # =========================
+                # ARTESANAIS
+                # =========================
+                st.subheader("🧪 Produção Artesanal")
+                
+                custo_artesanais = 0
+                
+                for item, qtd in ingredientes_artesanais.items():
+                
+                    encontrado = df_insumos[
+                        df_insumos["nome"].str.lower().str.strip() == item.lower()
+                    ]
+                
+                    if encontrado.empty:
+                        encontrado = df_insumos[
+                            df_insumos["tipo"].str.lower().str.contains(item.lower())
+                        ]
+                
+                    if not encontrado.empty:
+                
+                        preco_unit = encontrado.iloc[0]["preco"]
+                
+                        col1, col2, col3, col4 = st.columns([3,2,2,2])
+                
+                        with col1:
+                            st.markdown(f"**{item.capitalize()}**")
+                
+                        with col2:
+                            key_qtd = f"qtd_art_{item}"
+                
+                            if key_qtd not in st.session_state:
+                                st.session_state[key_qtd] = float(qtd)
+                
+                            qtd_editavel = st.number_input(
+                                "Quantidade",
+                                min_value=0.0,
+                                key=key_qtd
+                            )
+                
+                        with col3:
+                            st.write(f"R$ {preco_unit:,.2f}")
+                            st.caption("Custo unit.")
+                
+                        with col4:
+                            total = qtd_editavel * preco_unit
+                            st.write(f"**R$ {total:,.2f}**")
+                
+                        custo_artesanais += total
                 
                 # =========================
                 # CUSTOS EXTRAS
@@ -1425,7 +1500,7 @@ elif menu == "Orçamentos":
                 # =========================
                 # TOTAL
                 # =========================
-                custo_total = custo_bebidas + custo_frutas + custo_extras + total_pacotes
+                custo_total = custo_bebidas + custo_frutas + custo_artesanais + custo_extras + total_pacotes
                 
                 st.divider()
                 
