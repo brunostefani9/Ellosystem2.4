@@ -1413,6 +1413,8 @@ elif menu == "Orçamentos":
                 # ARTESANAIS
                 # =========================
                 st.subheader("🧪 Produção Artesanal")
+
+                st.write("DEBUG ARTESANAIS:", ingredientes_artesanais)
                 
                 if "orcamento_artesanais" not in st.session_state:
                     st.session_state["orcamento_artesanais"] = {}
