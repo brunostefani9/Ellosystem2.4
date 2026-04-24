@@ -1221,29 +1221,28 @@ elif menu == "Orçamentos":
                         ingredientes_insumos[item] = qtd
 
                 # =========================
-                # SEPARAÇÃO CORRETA (BASEADA NO BANCO)
+                # SEPARAÇÃO INSUMOS (FRUTAS vs ARTESANAIS)
                 # =========================
                 ingredientes_frutas = {}
                 ingredientes_artesanais = {}
                 
                 for item, qtd in ingredientes_insumos.items():
                 
-                    encontrado = df_insumos[
-                        df_insumos["nome"].str.lower().str.strip().str.contains(item.lower())
-                    ]
+                    nome = item.lower()
                 
-                    if not encontrado.empty:
-                
-                        tipo = str(encontrado.iloc[0]["tipo"]).lower().strip()
-                
-                        if "artesanal" in tipo:
-                            ingredientes_artesanais[item] = qtd
-                        else:
-                            ingredientes_frutas[item] = qtd
-                
+                    # 🔥 REGRA SIMPLES E FUNCIONAL
+                    if any(p in nome for p in [
+                        "charope", "xarope", "espuma", "suco"
+                    ]):
+                        ingredientes_artesanais[item] = qtd
                     else:
-                        # fallback → assume fruta
                         ingredientes_frutas[item] = qtd
+
+                # =========================
+                # DEBUG (PODE REMOVER DEPOIS)
+                # =========================
+                st.write("BEBIDAS:", ingredientes_bebidas)
+                st.write("FRUTAS:", ingredientes_frutas)
                 st.write("ARTESANAIS:", ingredientes_artesanais)
                 
                 # =========================
