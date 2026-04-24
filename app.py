@@ -1420,29 +1420,37 @@ elif menu == "Orçamentos":
                 
                 custo_artesanais = 0
                 
+                def normalizar(texto):
+                    return (
+                        texto.lower()
+                        .replace("ç","c")
+                        .replace("ã","a")
+                        .replace("á","a")
+                        .replace("é","e")
+                        .replace("í","i")
+                        .replace("ó","o")
+                        .replace("ú","u")
+                        .strip()
+                    )
+                
                 for item, qtd_ml in ingredientes_artesanais.items():
                 
-                    def normalizar(texto):
-                        return (
-                            texto.lower()
-                            .replace("ç","c")
-                            .replace("ã","a")
-                            .replace("á","a")
-                            .replace("é","e")
-                            .replace("í","i")
-                            .replace("ó","o")
-                            .replace("ú","u")
-                            .strip()
-                        )
-                    
                     encontrado = df_insumos[
                         df_insumos["nome"].apply(normalizar).str.contains(normalizar(item))
                     ]
-                                        # 🔥 fallback caso não encontre no banco
+                
                     if not encontrado.empty:
-                        preco = encontrado.iloc[0]["preco"]
+                        linha = encontrado.iloc[0]
+                
+                        custo_base = linha["custo"] if "custo" in linha else 0
+                        rendimento = linha["rendimento"] if "rendimento" in linha else 0
+                
+                        if rendimento > 0:
+                            preco = custo_base / rendimento
+                        else:
+                            preco = 0
                     else:
-                        preco = 0  # ou coloca um valor padrão se quiser
+                        preco = 0
                 
                     col1, col2, col3 = st.columns([4,2,2])
                 
