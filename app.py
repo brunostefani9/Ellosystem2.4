@@ -1296,12 +1296,10 @@ elif menu == "Orçamentos":
                 # FRUTAS
                 # =========================
                 st.subheader("🍋 Frutas")
-
-                st.session_state["orcamento_frutas"] = {}
                 
                 if "orcamento_frutas" not in st.session_state:
-                
-                custo_frutas = 0
+                    st.session_state["orcamento_frutas"] = {}
+                    custo_frutas = 0
                 
                 for fruta, qtd_gramas in ingredientes_insumos.items():
                 
