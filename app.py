@@ -1413,8 +1413,7 @@ elif menu == "Orçamentos":
                 # ARTESANAIS
                 # =========================
                 st.subheader("🧪 Produção Artesanal")
-
-                st.write("DEBUG ARTESANAIS:", ingredientes_artesanais)
+                st.caption("Itens produzidos manualmente (xaropes, espumas, bases, etc.)")
                 
                 if "orcamento_artesanais" not in st.session_state:
                     st.session_state["orcamento_artesanais"] = {}
@@ -1427,37 +1426,41 @@ elif menu == "Orçamentos":
                         df_insumos["nome"].str.lower().str.contains(item.lower())
                     ]
                 
+                    # 🔥 fallback caso não encontre no banco
                     if not encontrado.empty:
-                
                         preco = encontrado.iloc[0]["preco"]
+                    else:
+                        preco = 0  # ou coloca um valor padrão se quiser
                 
-                        col1, col2, col3 = st.columns([4,2,2])
+                    col1, col2, col3 = st.columns([4,2,2])
                 
-                        with col1:
-                            st.write(f"✔ {item}")
+                    with col1:
+                        st.write(f"✔ {item}")
                 
-                        with col2:
-                            key_qtd = f"qtd_art_{item}"
+                    with col2:
+                        key_qtd = f"qtd_art_{item}"
                 
-                            if key_qtd not in st.session_state:
-                                st.session_state[key_qtd] = float(qtd_ml)
+                        if key_qtd not in st.session_state:
+                            st.session_state[key_qtd] = float(qtd_ml)
                 
-                            qtd_editavel = st.number_input(
-                                "ML",
-                                min_value=0.0,
-                                key=key_qtd
-                            )
+                        qtd_editavel = st.number_input(
+                            "ML",
+                            min_value=0.0,
+                            key=key_qtd
+                        )
                 
-                        with col3:
-                            custo_item = qtd_editavel * preco
-                            st.write(f"💰 R$ {custo_item:,.2f}")
+                    with col3:
+                        custo_item = qtd_editavel * preco
+                        st.write(f"💰 R$ {custo_item:,.2f}")
                 
-                        st.session_state["orcamento_artesanais"][item] = {
-                            "quantidade": qtd_editavel,
-                            "preco": preco
-                        }
+                    st.session_state["orcamento_artesanais"][item] = {
+                        "quantidade": qtd_editavel,
+                        "preco": preco
+                    }
                 
-                        custo_artesanais += custo_item
+                    custo_artesanais += custo_item
+                
+                st.markdown(f"### 💰 Subtotal Artesanais: R$ {custo_artesanais:,.2f}")
                 
                 # =========================
                 # 📋 RESUMO
