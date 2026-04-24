@@ -1202,15 +1202,18 @@ elif menu == "Orçamentos":
                 
                 for item, qtd in ingredientes_insumos.items():
                 
-                    nome = item.lower()
+                    encontrado = df_insumos[
+                        df_insumos["nome"].str.lower().str.strip() == item.lower()
+                    ]
+                
+                    if encontrado.empty:
+                        encontrado = df_insumos[
+                            df_insumos["tipo"].str.lower().str.contains(item.lower())
+                        ]
                 
                     tipo = encontrado.iloc[0]["tipo"].lower() if not encontrado.empty else ""
-
+                
                     if tipo in ["xarope", "espuma", "artesanal", "pure", "mix"]:
-                        ingredientes_artesanais[item] = qtd
-                    else:
-                        ingredientes_frutas[item] = qtd
-                    
                         ingredientes_artesanais[item] = qtd
                     else:
                         ingredientes_frutas[item] = qtd
