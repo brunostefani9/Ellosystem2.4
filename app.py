@@ -1238,12 +1238,6 @@ elif menu == "Orçamentos":
                     else:
                         ingredientes_frutas[item] = qtd
 
-                # =========================
-                # DEBUG (PODE REMOVER DEPOIS)
-                # =========================
-                st.write("BEBIDAS:", ingredientes_bebidas)
-                st.write("FRUTAS:", ingredientes_frutas)
-                st.write("ARTESANAIS:", ingredientes_artesanais)
                 
                 # =========================
                 # BEBIDAS
@@ -1421,62 +1415,52 @@ elif menu == "Orçamentos":
                     st.write(f"✔ {fruta.capitalize()} → {qtd:.0f} g | 💰 R$ {total:,.2f}")
 
                 # =========================
-                # 🧪 PRODUÇÃO ARTESANAL
+                # ARTESANAIS
                 # =========================
-                st.markdown("## 🧪 Produção Artesanal")
-                st.caption("Itens produzidos manualmente (xaropes, espumas, bases, etc.)")
+                st.subheader("🧪 Produção Artesanal")
+                
+                if "orcamento_artesanais" not in st.session_state:
+                    st.session_state["orcamento_artesanais"] = {}
                 
                 custo_artesanais = 0
                 
-                if ingredientes_artesanais:
+                for item, qtd_ml in ingredientes_artesanais.items():
                 
-                    if "orcamento_artesanais" not in st.session_state:
-                        st.session_state["orcamento_artesanais"] = {}
+                    encontrado = df_insumos[
+                        df_insumos["nome"].str.lower().str.contains(item.lower())
+                    ]
                 
-                    for item, qtd in ingredientes_artesanais.items():
+                    if not encontrado.empty:
                 
-                        encontrado = df_insumos[
-                            df_insumos["nome"].str.lower().str.strip() == item.lower()
-                        ]
+                        preco = encontrado.iloc[0]["preco"]
                 
-                        if not encontrado.empty:
+                        col1, col2, col3 = st.columns([4,2,2])
                 
-                            preco_base = encontrado.iloc[0]["preco"]
-                            custo_unitario = preco_base / 1000  # gramas
+                        with col1:
+                            st.write(f"✔ {item}")
                 
-                            # 🔥 CARD VISUAL
-                            with st.container():
+                        with col2:
+                            key_qtd = f"qtd_art_{item}"
                 
-                                col1, col2, col3 = st.columns([5,2,2])
+                            if key_qtd not in st.session_state:
+                                st.session_state[key_qtd] = float(qtd_ml)
                 
-                                with col1:
-                                    st.markdown(f"**✔ {item.capitalize()}**")
+                            qtd_editavel = st.number_input(
+                                "ML",
+                                min_value=0.0,
+                                key=key_qtd
+                            )
                 
-                                with col2:
-                                    key_qtd = f"qtd_art_{item.lower().strip()}"
+                        with col3:
+                            custo_item = qtd_editavel * preco
+                            st.write(f"💰 R$ {custo_item:,.2f}")
                 
-                                    if key_qtd not in st.session_state:
-                                        st.session_state[key_qtd] = float(qtd)
+                        st.session_state["orcamento_artesanais"][item] = {
+                            "quantidade": qtd_editavel,
+                            "preco": preco
+                        }
                 
-                                    qtd_editavel = st.number_input(
-                                        "Gramas",
-                                        min_value=0.0,
-                                        key=key_qtd,
-                                        label_visibility="collapsed"
-                                    )
-                
-                                with col3:
-                                    custo_item = qtd_editavel * custo_unitario
-                                    st.markdown(f"💰 **R$ {custo_item:,.2f}**")
-                
-                                st.session_state["orcamento_artesanais"][item] = {
-                                    "quantidade": qtd_editavel,
-                                    "preco_unitario": custo_unitario
-                                }
-                
-                                custo_artesanais += custo_item
-                
-                                st.divider()
+                        custo_artesanais += custo_item
                 
                 # =========================
                 # 📋 RESUMO
