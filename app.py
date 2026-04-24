@@ -1179,12 +1179,7 @@ elif menu == "Orçamentos":
                             ingredientes_totais[ingrediente] += total_ingrediente
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
-                
-                
-                # =========================
-                # 🔍 DEBUG FINAL (AGORA NO LUGAR CERTO)
-                # =========================
-                st.write("INGREDIENTES TOTAIS FINAL:", ingredientes_totais)
+            
 
                 # =========================
                 # DADOS
