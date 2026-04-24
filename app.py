@@ -1466,13 +1466,15 @@ elif menu == "Orçamentos":
                 # 📋 RESUMO
                 # =========================
                 st.markdown("### 📋 Resumo Produção Artesanal")
+
+                for item, dados in st.session_state["orcamento_artesanais"].items():
                 
-                for item, data in st.session_state.get("orcamento_artesanais", {}).items():
-                    qtd = data["quantidade"]
-                    preco = data["preco_unitario"]
-                    custo = qtd * preco
+                    qtd = dados["quantidade"]
+                    preco = dados["preco"]  # 🔥 CORRIGIDO AQUI
                 
-                    st.write(f"✔ {item} → {qtd:.0f} g | 💰 R$ {custo:,.2f}")
+                    total = qtd * preco
+                
+                    st.write(f"✔ {item} → {qtd:.0f} ml | 💰 R$ {total:,.2f}")
                 
                 # =========================
                 # CUSTOS EXTRAS
