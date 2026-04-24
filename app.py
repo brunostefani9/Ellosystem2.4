@@ -1144,13 +1144,12 @@ elif menu == "Orçamentos":
                         qtd = row["quantidade"]
         
                         # consumo base (receita)
-                        base = qtd * qtd_drinks
-                        
-                        # guarnição (somente frutas)
+                        base = (qtd * qtd_drinks) * 0.7
+
                         if any(p in ingrediente.lower() for p in [
                             "limao", "limão", "laranja", "morango", "abacaxi", "kiwi", "maracuja", "maracujá"
                         ]):
-                            garnish = 10 * qtd_drinks
+                            garnish = 5 * qtd_drinks
                         else:
                             garnish = 0
                         
@@ -1205,7 +1204,13 @@ elif menu == "Orçamentos":
                 
                     nome = item.lower()
                 
-                    if any(p in nome for p in ["xarope", "espuma", "pure", "purê", "mix", "base"]):
+                    tipo = encontrado.iloc[0]["tipo"].lower() if not encontrado.empty else ""
+
+                    if tipo in ["xarope", "espuma", "artesanal", "pure", "mix"]:
+                        ingredientes_artesanais[item] = qtd
+                    else:
+                        ingredientes_frutas[item] = qtd
+                    
                         ingredientes_artesanais[item] = qtd
                     else:
                         ingredientes_frutas[item] = qtd
@@ -1388,6 +1393,8 @@ elif menu == "Orçamentos":
                 # =========================
                 # ARTESANAIS
                 # =========================
+                st.write(ingredientes_artesanais)
+                
                 st.subheader("🧪 Produção Artesanal")
                 
                 custo_artesanais = 0
