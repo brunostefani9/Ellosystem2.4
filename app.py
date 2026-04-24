@@ -1409,6 +1409,7 @@ elif menu == "Orçamentos":
                 
                     st.write(f"✔ {fruta.capitalize()} → {qtd:.0f} g | 💰 R$ {total:,.2f}")
 
+                
                 # =========================
                 # ARTESANAIS
                 # =========================
@@ -1420,6 +1421,7 @@ elif menu == "Orçamentos":
                 
                 custo_artesanais = 0
                 
+                # 🔥 função fora do loop
                 def normalizar(texto):
                     return (
                         texto.lower()
@@ -1435,10 +1437,12 @@ elif menu == "Orçamentos":
                 
                 for item, qtd_ml in ingredientes_artesanais.items():
                 
+                    # 🔍 busca no banco
                     encontrado = df_insumos[
                         df_insumos["nome"].apply(normalizar).str.contains(normalizar(item))
                     ]
                 
+                    # 💰 cálculo custo por ml
                     if not encontrado.empty:
                         linha = encontrado.iloc[0]
                 
@@ -1446,12 +1450,13 @@ elif menu == "Orçamentos":
                         rendimento = linha["rendimento"] if "rendimento" in linha else 0
                 
                         if rendimento > 0:
-                            preco = custo_base / rendimento
+                            preco_unitario = custo_base / rendimento
                         else:
-                            preco = 0
+                            preco_unitario = 0
                     else:
-                        preco = 0
+                        preco_unitario = 0
                 
+                    # 🎨 layout
                     col1, col2, col3 = st.columns([4,2,2])
                 
                     with col1:
@@ -1470,16 +1475,18 @@ elif menu == "Orçamentos":
                         )
                 
                     with col3:
-                        custo_item = qtd_editavel * preco
+                        custo_item = qtd_editavel * preco_unitario
                         st.write(f"💰 R$ {custo_item:,.2f}")
                 
+                    # 💾 salvar no estado
                     st.session_state["orcamento_artesanais"][item] = {
                         "quantidade": qtd_editavel,
-                        "preco": preco
+                        "preco": preco_unitario
                     }
                 
                     custo_artesanais += custo_item
                 
+                # 💰 subtotal
                 st.markdown(f"### 💰 Subtotal Artesanais: R$ {custo_artesanais:,.2f}")
                 
                 # =========================
