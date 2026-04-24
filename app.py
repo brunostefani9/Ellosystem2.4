@@ -1221,7 +1221,7 @@ elif menu == "Orçamentos":
                 
                     # 🔥 REGRA SIMPLES E CONFIÁVEL
                     if any(p in nome for p in [
-                        "xarope", "charope", " artesanal", "espuma", "pure", "purê", "mix", "base", "cordial", " mix"
+                        "xarope", "charope", "artesanal a", "artesanal fv", "artesanal g", "espuma", "pure", "purê", "mix", "base", "cordial", " mix"
                     ]):
                         ingredientes_artesanais[item] = qtd
                     else:
