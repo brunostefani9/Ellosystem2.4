@@ -1423,15 +1423,21 @@ elif menu == "Orçamentos":
                 for item, qtd_ml in ingredientes_artesanais.items():
                 
                     encontrado = df_insumos[
-                        df_insumos["nome"].str.lower().str.normalize('NFKD')\
-                        .str.encode('ascii', errors='ignore')\
-                        .str.decode('utf-8')\
+                        df_insumos["nome"]
+                        .str.lower()
+                        .str.replace("ç","c")
+                        .str.replace("ã","a")
+                        .str.replace("á","a")
+                        .str.replace("é","e")
                         .str.contains(
                             item.lower()
-                            .encode('ascii', errors='ignore')
-                            .decode('utf-8')
+                            .replace("ç","c")
+                            .replace("ã","a")
+                            .replace("á","a")
+                            .replace("é","e")
                         )
-                    # 🔥 fallback caso não encontre no banco
+                    ]
+                                        # 🔥 fallback caso não encontre no banco
                     if not encontrado.empty:
                         preco = encontrado.iloc[0]["preco"]
                     else:
