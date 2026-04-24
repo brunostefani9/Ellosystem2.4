@@ -1229,7 +1229,7 @@ elif menu == "Orçamentos":
                 for item, qtd in ingredientes_insumos.items():
                 
                     encontrado = df_insumos[
-                        df_insumos["nome"].str.lower().str.strip() == item.lower().strip()
+                        df_insumos["nome"].str.lower().str.strip().str.contains(item.lower())
                     ]
                 
                     if not encontrado.empty:
