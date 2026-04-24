@@ -1299,7 +1299,7 @@ elif menu == "Orçamentos":
                 
                 if "orcamento_frutas" not in st.session_state:
                     st.session_state["orcamento_frutas"] = {}
-                    custo_frutas = 0
+                custo_frutas = 0
                 
                 for fruta, qtd_gramas in ingredientes_insumos.items():
                 
