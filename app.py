@@ -1045,41 +1045,106 @@ elif menu == "Orçamentos":
         # =========================
         dados = supabase.table("receitas").select("*").execute()
         df_receitas = pd.DataFrame(dados.data if dados.data else [])
-
+        
         if df_receitas.empty:
             st.warning("Cadastre receitas primeiro")
-
+        
         else:
-
+        
+            st.markdown("### 🍹 Seleção de Drinks")
+        
             drinks = df_receitas["drink"].unique()
-            selecao = st.multiselect("Selecione os drinks", drinks)
-
+        
+            selecao = st.multiselect(
+                "Escolha os drinks do evento",
+                drinks
+            )
+        
             if selecao:
 
+                # =========================
+                # 📊 DISTRIBUIÇÃO MÉDIA (NOVO)
+                # =========================
+                st.divider()
+            
+                st.markdown("### 📊 Distribuição estimada de consumo")
+                st.caption("Baseado no total de drinks do evento")
+            
+                qtd_drinks_total = int(total_drinks)
+                qtd_tipos = len(selecao)
+            
+                if qtd_tipos > 0:
+                    media_por_drink = round(qtd_drinks_total / qtd_tipos)
+            
+                    st.info(
+                        f"Total de {qtd_drinks_total} drinks → média de {media_por_drink} por tipo"
+                    )
+            
+                    for drink in selecao:
+                        st.write(f"• {drink}: ~{media_por_drink} drinks")
+                
+                st.divider()
+        
+                # =========================
+                # PESO DOS DRINKS (NOVO VISUAL)
+                # =========================
+                st.markdown("### ⚖️ Volume de saída dos drinks")
+                st.caption("Defina quais drinks terão maior saída (peso relativo)")
+                st.caption("Ex: peso 2 = esse drink sai o dobro dos outros")
+        
                 pesos = {}
                 total_peso = 0
-
-                for drink in selecao:
-                    peso = st.number_input(drink, min_value=1, value=1, key=f"peso_{drink}")
+        
+                colunas = st.columns(2)  # 🔥 muda pra 3 se quiser mais compacto
+        
+                for i, drink in enumerate(selecao):
+                    col = colunas[i % 2]
+        
+                    with col:
+                        peso = st.number_input(
+                            f"{drink}",
+                            min_value=1,
+                            value=1,
+                            key=f"peso_{drink}"
+                        )
+        
                     pesos[drink] = peso
                     total_peso += peso
+        
+                st.divider()
 
-                ingredientes_totais = {}
-
+                # =========================
+                # 📈 DISTRIBUIÇÃO REAL (NOVO)
+                # =========================
+                st.markdown("### 📈 Distribuição real (baseada nos pesos)")
+                
                 for drink in selecao:
-
-                    proporcao = pesos[drink] / total_peso
+                    proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
+                    qtd_real = int(total_drinks * proporcao)
+                
+                    st.write(f"• {drink}: ~{qtd_real} drinks")
+                
+                st.divider()
+                
+                # =========================
+                # CÁLCULO DOS INGREDIENTES
+                # =========================
+                ingredientes_totais = {}
+        
+                for drink in selecao:
+        
+                    proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
                     qtd_drinks = total_drinks * proporcao
-
+        
                     receita = df_receitas[df_receitas["drink"] == drink]
-
+        
                     for _, row in receita.iterrows():
-
+        
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
-
+        
                         total_ingrediente = qtd * qtd_drinks
-
+        
                         if ingrediente in ingredientes_totais:
                             ingredientes_totais[ingrediente] += total_ingrediente
                         else:
@@ -1124,80 +1189,98 @@ elif menu == "Orçamentos":
                 # =========================
                 st.subheader("🍸 Bebidas")
                 
+                # 🔥 limpa estado (resolve bug de marcas duplicadas)
+                st.session_state["orcamento_bebidas"] = {}
+                
                 custo_bebidas = 0
                 escolhas_marcas = {}
+                
+                # =========================
+                # ESCOLHA DAS MARCAS
+                # =========================
+                st.markdown("### 🏷️ Escolha das marcas")
                 
                 for item, dados in ingredientes_bebidas.items():
                     tipo = dados["tipo"]
                 
-                    # Mostra todas as bebidas do mesmo tipo para escolha de marca
                     opcoes = df_bebidas[df_bebidas["tipo"].str.lower() == tipo.lower()]
                 
-                    # Caso não encontre, mostra todas as bebidas
                     if opcoes.empty:
                         opcoes = df_bebidas
                 
                     escolha = st.selectbox(
-                        f"{item} - Escolha a marca",
+                        f"{item}",
                         opcoes["nome"],
                         key=f"marca_{item}"
                     )
+                
                     escolhas_marcas[item] = escolha
                 
+                st.divider()
+                
                 # =========================
-                # Cálculo do custo das bebidas
+                # AJUSTE FINO (NOVO VISUAL)
                 # =========================
-                custo_bebidas = 0
+                st.markdown("### ⚙️ Ajuste fino das quantidades")
+                st.caption("Aqui você pode corrigir manualmente as quantidades calculadas")
                 
                 for item, dados in ingredientes_bebidas.items():
-                    qtd_ml = dados["qtd"]
+                
                     marca = escolhas_marcas[item]
                 
                     result = df_bebidas[df_bebidas["nome"] == marca]
                 
                     if not result.empty:
+                
                         preco = result.iloc[0]["preco"]
                         volume = result.iloc[0]["quantidade"]
                 
-                        if volume > 0:
-                            qtd_real = qtd_ml / volume
-                            qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
+                        qtd_ml = dados["qtd"]
                 
-                            # 🔥 INTERFACE EDITÁVEL
-                            col1, col2, col3 = st.columns([4,2,2])
+                        qtd_real = qtd_ml / volume if volume > 0 else 0
+                        qtd_garrafas = int(qtd_real) + (1 if qtd_real % 1 > 0 else 0)
                 
-                            with col1:
-                                st.write(f"✔ {marca}")
+                        key_qtd = f"qtd_{item}_{marca}"
                 
-                            with col2:
-                                key_qtd = f"qtd_{item}_{marca}"
-
-                            # se ainda não existe, cria valor inicial
-                            if key_qtd not in st.session_state:
-                                st.session_state[key_qtd] = int(qtd_garrafas)
-                            
+                        if key_qtd not in st.session_state:
+                            st.session_state[key_qtd] = int(qtd_garrafas)
+                
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
+                
+                        with col1:
+                            st.markdown(f"**{marca}**")
+                            st.caption(f"Base: {item}")
+                
+                        with col2:
                             qtd_editavel = st.number_input(
                                 "Garrafas",
                                 min_value=0,
                                 key=key_qtd
                             )
                 
-                            with col3:
-                                custo_item = qtd_editavel * preco
-                                st.write(f"💰 R$ {custo_item:,.2f}")
+                        with col3:
+                            st.write(f"R$ {preco:,.2f}")
+                            st.caption("Preço unit.")
                 
-                            # salva estado
-                            st.session_state["orcamento_bebidas"][marca] = {
-                                "quantidade": qtd_editavel,
-                                "preco": preco
-                            }
+                        with col4:
+                            total = qtd_editavel * preco
+                            st.write(f"**R$ {total:,.2f}**")
+                            st.caption("Total")
                 
-                            custo_bebidas += custo_item
+                        # salva no estado
+                        st.session_state["orcamento_bebidas"][marca] = {
+                            "quantidade": qtd_editavel,
+                            "preco": preco
+                        }
+                
+                        custo_bebidas += total
+                
+                st.divider()
                 
                 st.markdown(f"### 💰 Subtotal Bebidas: R$ {custo_bebidas:,.2f}")
-                                
+                
                 # =========================
-                # 📋 RESUMO BEBIDAS
+                # RESUMO
                 # =========================
                 st.markdown("### 📋 Resumo Bebidas")
                 
@@ -1213,17 +1296,24 @@ elif menu == "Orçamentos":
                 # FRUTAS
                 # =========================
                 st.subheader("🍋 Frutas")
+
+                st.session_state["orcamento_frutas"] = {}
                 
                 if "orcamento_frutas" not in st.session_state:
-                    st.session_state["orcamento_frutas"] = {}
                 
                 custo_frutas = 0
                 
                 for fruta, qtd_gramas in ingredientes_insumos.items():
                 
                     encontrado = df_insumos[
-                        df_insumos["nome"].str.lower() == fruta
+                        df_insumos["nome"].str.lower().str.strip() == fruta.lower()
                     ]
+                    
+                    # 🔥 fallback por tipo (igual bebidas)
+                    if encontrado.empty:
+                        encontrado = df_insumos[
+                            df_insumos["tipo"].str.lower().str.contains(fruta.lower())
+                        ]
                 
                     if not encontrado.empty:
                 
