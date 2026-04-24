@@ -1130,24 +1130,26 @@ elif menu == "Orçamentos":
                 # CÁLCULO DOS INGREDIENTES
                 # =========================
                 ingredientes_totais = {}
-        
+                
                 for drink in selecao:
-        
+                
                     proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
                     qtd_drinks = total_drinks * proporcao
-        
+                
                     receita = df_receitas[df_receitas["drink"] == drink]
-        
+                
                     for _, row in receita.iterrows():
-        
+                
+                        # 🔥 ESSENCIAL (estava faltando)
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
-    
-                        # rendimento por ingrediente (não é fixo, é regra técnica)
+                
+                        # =========================
+                        # RENDIMENTO REAL DAS FRUTAS
+                        # =========================
                         rendimento = 1
-
                         nome = ingrediente.lower()
-                        
+                
                         if "limao" in nome or "limão" in nome:
                             rendimento = 0.6
                         elif "laranja" in nome:
@@ -1158,22 +1160,31 @@ elif menu == "Orçamentos":
                             rendimento = 0.4
                         elif "morango" in nome:
                             rendimento = 0.8
-                        
+                
                         base = (qtd * qtd_drinks) / rendimento
-
-                        if any(p in ingrediente.lower() for p in [
+                
+                        # =========================
+                        # GARNISH (DECORAÇÃO)
+                        # =========================
+                        if any(p in nome for p in [
                             "limao", "limão", "laranja", "morango", "abacaxi", "kiwi", "maracuja", "maracujá"
                         ]):
                             garnish = 3 * qtd_drinks
                         else:
                             garnish = 0
-                        
+                
                         total_ingrediente = base + garnish
-        
+                
                         if ingrediente in ingredientes_totais:
                             ingredientes_totais[ingrediente] += total_ingrediente
                         else:
                             ingredientes_totais[ingrediente] = total_ingrediente
+                
+                
+                # =========================
+                # 🔍 DEBUG FINAL (AGORA NO LUGAR CERTO)
+                # =========================
+                st.write("INGREDIENTES TOTAIS FINAL:", ingredientes_totais)
 
                 # =========================
                 # DADOS
@@ -1210,7 +1221,7 @@ elif menu == "Orçamentos":
                         ingredientes_insumos[item] = qtd
 
                 # =========================
-                # SEPARAÇÃO ARTESANAL (CORRETO)
+                # SEPARAÇÃO CORRETA (BASEADA NO BANCO)
                 # =========================
                 ingredientes_frutas = {}
                 ingredientes_artesanais = {}
@@ -1218,18 +1229,22 @@ elif menu == "Orçamentos":
                 for item, qtd in ingredientes_insumos.items():
                 
                     encontrado = df_insumos[
-                        df_insumos["nome"].str.lower().str.strip() == item.lower()
+                        df_insumos["nome"].str.lower().str.strip() == item.lower().strip()
                     ]
                 
                     if not encontrado.empty:
-                        tipo = str(encontrado.iloc[0]["tipo"]).lower()
+                
+                        tipo = str(encontrado.iloc[0]["tipo"]).lower().strip()
                 
                         if "artesanal" in tipo:
                             ingredientes_artesanais[item] = qtd
                         else:
                             ingredientes_frutas[item] = qtd
+                
                     else:
+                        # fallback → assume fruta
                         ingredientes_frutas[item] = qtd
+                st.write("ARTESANAIS:", ingredientes_artesanais)
                 
                 # =========================
                 # BEBIDAS
