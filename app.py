@@ -1423,9 +1423,14 @@ elif menu == "Orçamentos":
                 for item, qtd_ml in ingredientes_artesanais.items():
                 
                     encontrado = df_insumos[
-                        df_insumos["nome"].str.lower().str.contains(item.lower())
-                    ]
-                
+                        df_insumos["nome"].str.lower().str.normalize('NFKD')\
+                        .str.encode('ascii', errors='ignore')\
+                        .str.decode('utf-8')\
+                        .str.contains(
+                            item.lower()
+                            .encode('ascii', errors='ignore')
+                            .decode('utf-8')
+                        )
                     # 🔥 fallback caso não encontre no banco
                     if not encontrado.empty:
                         preco = encontrado.iloc[0]["preco"]
