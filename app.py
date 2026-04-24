@@ -1209,31 +1209,19 @@ elif menu == "Orçamentos":
                     else:
                         ingredientes_insumos[item] = qtd
 
-                st.write("INSUMOS:", ingredientes_insumos)
-
                 # =========================
-                # SEPARAÇÃO INSUMOS
+                # SEPARAÇÃO INSUMOS (CORRETO)
                 # =========================
                 ingredientes_frutas = {}
                 ingredientes_artesanais = {}
                 
                 for item, qtd in ingredientes_insumos.items():
                 
-                    encontrado = df_insumos[
-                        df_insumos["nome"].str.lower().str.strip() == item.lower()
-                    ]
-                
-                    if encontrado.empty:
-                        encontrado = df_insumos[
-                            df_insumos["tipo"].str.lower().str.contains(item.lower())
-                        ]
-                
-                    tipo = encontrado.iloc[0]["tipo"].lower() if not encontrado.empty else ""
-                
                     nome = item.lower()
-
+                
+                    # 🔥 REGRA SIMPLES E CONFIÁVEL
                     if any(p in nome for p in [
-                        "xarope", "espuma", "pure", "purê", "mix", "base"
+                        "xarope", "charope", "espuma", "pure", "purê", "mix", "base", "cordial", " mix"
                     ]):
                         ingredientes_artesanais[item] = qtd
                     else:
@@ -1464,6 +1452,8 @@ elif menu == "Orçamentos":
                             st.write(f"**R$ {total:,.2f}**")
                 
                         custo_artesanais += total
+
+                st.write("ARTESANAIS:", ingredientes_artesanais)
                 
                 # =========================
                 # CUSTOS EXTRAS
