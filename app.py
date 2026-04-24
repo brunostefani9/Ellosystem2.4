@@ -1142,14 +1142,29 @@ elif menu == "Orçamentos":
         
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
-        
-                        # consumo base (receita)
-                        base = (qtd * qtd_drinks) * 0.7
+    
+                        # rendimento por ingrediente (não é fixo, é regra técnica)
+                        rendimento = 1
+
+                        nome = ingrediente.lower()
+                        
+                        if "limao" in nome or "limão" in nome:
+                            rendimento = 0.6
+                        elif "laranja" in nome:
+                            rendimento = 0.7
+                        elif "abacaxi" in nome:
+                            rendimento = 0.5
+                        elif "maracuja" in nome or "maracujá" in nome:
+                            rendimento = 0.4
+                        elif "morango" in nome:
+                            rendimento = 0.8
+                        
+                        base = (qtd * qtd_drinks) / rendimento
 
                         if any(p in ingrediente.lower() for p in [
                             "limao", "limão", "laranja", "morango", "abacaxi", "kiwi", "maracuja", "maracujá"
                         ]):
-                            garnish = 5 * qtd_drinks
+                            garnish = 3 * qtd_drinks
                         else:
                             garnish = 0
                         
@@ -1194,6 +1209,8 @@ elif menu == "Orçamentos":
                     else:
                         ingredientes_insumos[item] = qtd
 
+                st.write("INSUMOS:", ingredientes_insumos)
+
                 # =========================
                 # SEPARAÇÃO INSUMOS
                 # =========================
@@ -1213,7 +1230,11 @@ elif menu == "Orçamentos":
                 
                     tipo = encontrado.iloc[0]["tipo"].lower() if not encontrado.empty else ""
                 
-                    if tipo in ["xarope", "espuma", "artesanal", "pure", "mix"]:
+                    nome = item.lower()
+
+                    if any(p in nome for p in [
+                        "xarope", "espuma", "pure", "purê", "mix", "base"
+                    ]):
                         ingredientes_artesanais[item] = qtd
                     else:
                         ingredientes_frutas[item] = qtd
