@@ -1201,12 +1201,6 @@ elif menu == "Orçamentos":
                         df_bebidas["nome"].str.lower().str.strip() == item.lower()
                     ]
                 
-                    # Se não encontrar pelo nome, busca pelo tipo
-                    if resultado.empty:
-                        resultado = df_bebidas[
-                            df_bebidas["tipo"].str.lower().str.contains(item.lower())
-                        ]
-                
                     if not resultado.empty:
                         ingredientes_bebidas[item] = {
                             "qtd": qtd,
@@ -1444,7 +1438,7 @@ elif menu == "Orçamentos":
                     nome_item = normalizar(item)
                 
                     encontrado = df_insumos[
-                        df_insumos["nome_normalizado"].str.contains(nome_item)
+                        df_insumos["nome_normalizado"] == nome_item
                     ]
                 
                     # 💰 cálculo correto
