@@ -167,23 +167,29 @@ def tela_precificacao(nome_tabela):
             # =========================
             # SALVAR ALTERAÇÕES (SEGURO)
             # =========================
-            quantidade = row["quantidade"]
-            uso = row["uso"]
-            preco = row["preco"]
+            if st.button("💾 Salvar alterações", key=f"save_{nome_tabela}"):
             
-            if uso == 0 or quantidade == 0:
-                rendimento = 0
-                custo = 0
-            else:
-                # 🔥 DIFERENCIA AUTOMATICAMENTE
-                if nome_tabela == "precos_insumos":
-                    quantidade_real = quantidade * 1000  # fruta (kg → g)
-                else:
-                    quantidade_real = quantidade  # artesanal (ml direto)
+                try:
+                    for _, row in df_editado.iterrows():
             
-                rendimento = quantidade_real / uso
-                custo = preco / rendimento
+                        quantidade = row["quantidade"]
+                        uso = row["uso"]
+                        preco = row["preco"]
             
+                        if uso == 0 or quantidade == 0:
+                            rendimento = 0
+                            custo = 0
+                        else:
+                            # 🔥 DIFERENCIA AUTOMATICAMENTE
+                            if nome_tabela == "precos_insumos":
+                                quantidade_real = quantidade * 1000  # fruta (kg → g)
+                            else:
+                                quantidade_real = quantidade  # artesanal (ml direto)
+            
+                            rendimento = quantidade_real / uso
+                            custo = preco / rendimento
+            
+                        # 🔥 ISSO ESTAVA COM INDENTAÇÃO ERRADA
                         supabase.table(nome_tabela).update({
                             "tipo": row["tipo"],
                             "nome": row["nome"],
