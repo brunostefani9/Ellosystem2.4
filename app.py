@@ -167,22 +167,22 @@ def tela_precificacao(nome_tabela):
             # =========================
             # SALVAR ALTERAÇÕES (SEGURO)
             # =========================
-            if st.button("💾 Salvar alterações", key=f"save_{nome_tabela}"):
-
-                try:
-                    for _, row in df_editado.iterrows():
+            quantidade = row["quantidade"]
+            uso = row["uso"]
+            preco = row["preco"]
             
-                        quantidade = row["quantidade"]
-                        uso = row["uso"]
-                        preco = row["preco"]
+            if uso == 0 or quantidade == 0:
+                rendimento = 0
+                custo = 0
+            else:
+                # 🔥 DIFERENCIA AUTOMATICAMENTE
+                if nome_tabela == "precos_insumos":
+                    quantidade_real = quantidade * 1000  # fruta (kg → g)
+                else:
+                    quantidade_real = quantidade  # artesanal (ml direto)
             
-                        if uso == 0 or quantidade == 0:
-                            rendimento = 0
-                            custo = 0
-                        else:
-                            quantidade_gramas = quantidade * 1000
-                            rendimento = quantidade_gramas / uso
-                            custo = preco / rendimento
+                rendimento = quantidade_real / uso
+                custo = preco / rendimento
             
                         supabase.table(nome_tabela).update({
                             "tipo": row["tipo"],
@@ -1197,8 +1197,12 @@ elif menu == "Orçamentos":
                 
                 for item, qtd in ingredientes_totais.items():
                     # Primeiro, busca exata pelo nome
+                    nome_item = item.lower().strip()
+
+                    df_bebidas["nome_normalizado"] = df_bebidas["nome"].str.lower().str.strip()
+                    
                     resultado = df_bebidas[
-                        df_bebidas["nome"].str.lower().str.strip() == item.lower()
+                        df_bebidas["nome_normalizado"] == nome_item
                     ]
                 
                     if not resultado.empty:
@@ -1219,17 +1223,23 @@ elif menu == "Orçamentos":
                 
                     nome = item.lower()
                 
-                    # 🔥 REGRA SIMPLES E FUNCIONAL
-                    if any(p in nome for p in ["charope", "xarope", "espuma", "suco"]):
-                        ingredientes_artesanais[item] = qtd
-                    elif any(p in nome for p in [
-                        "limao", "limão", "laranja", "morango", "abacaxi", "kiwi", "maracuja", "maracujá"
+                    # 🚫 PRIMEIRO: BLOQUEIA BEBIDAS (ESSENCIAL)
+                    if item in ingredientes_bebidas:
+                        continue
+                
+                    # 🧪 ARTESANAIS (bem específico)
+                    if any(p in nome for p in [
+                        "charope", "xarope", "espuma"
                     ]):
+                        ingredientes_artesanais[item] = qtd
+                
+                    # 🍋 SUCOS NATURAIS (considera como artesanal só se quiser)
+                    elif "suco" in nome:
+                        ingredientes_artesanais[item] = qtd
+                
+                    # 🍊 RESTO = FRUTA
+                    else:
                         ingredientes_frutas[item] = qtd
-                        
-                st.write("DEBUG FRUTAS:", ingredientes_frutas)
-                st.write("DEBUG ARTESANAIS:", ingredientes_artesanais)
-                                
                 # =========================
                 # BEBIDAS
                 # =========================
