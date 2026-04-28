@@ -1203,13 +1203,15 @@ elif menu == "Orçamentos":
                 
                 for item, qtd in ingredientes_totais.items():
                     # Primeiro, busca exata pelo nome
-                    nome_item = item.lower().strip()
-
-                    df_bebidas["nome_normalizado"] = df_bebidas["nome"].str.lower().str.strip()
-                    
                     resultado = df_bebidas[
-                        df_bebidas["nome_normalizado"] == nome_item
+                        df_bebidas["nome"].str.lower().str.strip() == item.lower()
                     ]
+                
+                    # Se não encontrar pelo nome, busca pelo tipo
+                    if resultado.empty:
+                        resultado = df_bebidas[
+                            df_bebidas["tipo"].str.lower().str.contains(item.lower())
+                        ]
                 
                     if not resultado.empty:
                         ingredientes_bebidas[item] = {
@@ -1229,31 +1231,22 @@ elif menu == "Orçamentos":
                 
                     nome = item.lower()
                 
-                    # 🚫 PRIMEIRO: BLOQUEIA BEBIDAS (ESSENCIAL)
-                    if item in ingredientes_bebidas:
-                        continue
-                
-                    # 🧪 ARTESANAIS (bem específico)
+                    # 🔥 REGRA SIMPLES E FUNCIONAL
                     if any(p in nome for p in [
-                        "charope", "xarope", "espuma"
+                        "charope", "xarope", "espuma", "suco"
                     ]):
                         ingredientes_artesanais[item] = qtd
-                
-                    # 🍋 SUCOS NATURAIS (considera como artesanal só se quiser)
-                    elif "suco" in nome:
-                        ingredientes_artesanais[item] = qtd
-                
-                    # 🍊 RESTO = FRUTA
                     else:
                         ingredientes_frutas[item] = qtd
+
+                
                 # =========================
                 # BEBIDAS
                 # =========================
                 st.subheader("🍸 Bebidas")
                 
                 # 🔥 limpa estado (resolve bug de marcas duplicadas)
-                if "orcamento_bebidas" not in st.session_state:
-                    st.session_state["orcamento_bebidas"] = {}
+                st.session_state["orcamento_bebidas"] = {}
                 
                 custo_bebidas = 0
                 escolhas_marcas = {}
@@ -1433,43 +1426,17 @@ elif menu == "Orçamentos":
                 
                 custo_artesanais = 0
                 
-                def normalizar(texto):
-                    return (
-                        texto.lower()
-                        .replace("ç","c")
-                        .replace("ã","a")
-                        .replace("á","a")
-                        .replace("é","e")
-                        .replace("í","i")
-                        .replace("ó","o")
-                        .replace("ú","u")
-                        .strip()
-                    )
-                
-                # 🔥 cria coluna normalizada uma vez só
-                df_insumos["nome_normalizado"] = df_insumos["nome"].apply(normalizar)
-                
                 for item, qtd_ml in ingredientes_artesanais.items():
                 
-                    nome_item = normalizar(item)
-                
                     encontrado = df_insumos[
-                        df_insumos["nome_normalizado"] == nome_item
+                        df_insumos["nome"].str.lower().str.contains(item.lower())
                     ]
                 
-                    # 💰 cálculo correto
+                    # 🔥 fallback caso não encontre no banco
                     if not encontrado.empty:
-                        linha = encontrado.iloc[0]
-                
-                        custo_base = linha.get("custo", 0)
-                        rendimento = linha.get("rendimento", 0)
-                
-                        if rendimento > 0:
-                            preco_unitario = custo_base / rendimento
-                        else:
-                            preco_unitario = 0
+                        preco = encontrado.iloc[0]["preco"]
                     else:
-                        preco_unitario = 0
+                        preco = 0  # ou coloca um valor padrão se quiser
                 
                     col1, col2, col3 = st.columns([4,2,2])
                 
@@ -1477,7 +1444,7 @@ elif menu == "Orçamentos":
                         st.write(f"✔ {item}")
                 
                     with col2:
-                        key_qtd = f"qtd_art_{item}_{i}"
+                        key_qtd = f"qtd_art_{item}"
                 
                         if key_qtd not in st.session_state:
                             st.session_state[key_qtd] = float(qtd_ml)
@@ -1489,12 +1456,12 @@ elif menu == "Orçamentos":
                         )
                 
                     with col3:
-                        custo_item = qtd_editavel * preco_unitario
+                        custo_item = qtd_editavel * preco
                         st.write(f"💰 R$ {custo_item:,.2f}")
                 
                     st.session_state["orcamento_artesanais"][item] = {
                         "quantidade": qtd_editavel,
-                        "preco": preco_unitario
+                        "preco": preco
                     }
                 
                     custo_artesanais += custo_item
@@ -1502,13 +1469,14 @@ elif menu == "Orçamentos":
                 st.markdown(f"### 💰 Subtotal Artesanais: R$ {custo_artesanais:,.2f}")
                 
                 # =========================
-                # RESUMO
+                # 📋 RESUMO
                 # =========================
                 st.markdown("### 📋 Resumo Produção Artesanal")
-                
+
                 for item, dados in st.session_state["orcamento_artesanais"].items():
+                
                     qtd = dados["quantidade"]
-                    preco = dados["preco"]
+                    preco = dados["preco"]  # 🔥 CORRIGIDO AQUI
                 
                     total = qtd * preco
                 
@@ -1687,26 +1655,15 @@ elif menu == "Orçamentos":
                     # =========================
                     # SALVAR FRUTAS / INSUMOS
                     # =========================
-                    for fruta, qtd_gramas in ingredientes_frutas.items():
-
+                    for fruta, qtd_gramas in ingredientes_insumos.items():
+                    
                         supabase.table("evento_itens").insert({
                             "evento_id": evento_id,
                             "produto": fruta.capitalize(),
                             "quantidade": qtd_gramas,
                             "unidade": "g",
-                            "categoria": "Frutas"
+                            "categoria": "Insumos"
                         }).execute()
-
-                    for item, qtd_ml in ingredientes_artesanais.items():
-
-                        supabase.table("evento_itens").insert({
-                            "evento_id": evento_id,
-                            "produto": item.capitalize(),
-                            "quantidade": qtd_ml,
-                            "unidade": "ml",
-                            "categoria": "Artesanais"
-                        }).execute()
-
                     st.success("Orçamento salvo com sucesso!")
 
     # =========================
