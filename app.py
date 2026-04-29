@@ -1202,32 +1202,47 @@ elif menu == "Orçamentos":
                 ingredientes_insumos = {}
                 
                 for item, qtd in ingredientes_totais.items():
-
-                    # busca exata
+                
+                    item_lower = item.lower().strip()
+                
+                    # =========================
+                    # 1. BUSCA POR NOME EXATO
+                    # =========================
                     resultado = df_bebidas[
-                        df_bebidas["nome"].str.lower().str.strip() == item.lower()
+                        df_bebidas["nome"].str.lower().str.strip() == item_lower
                     ]
                 
-                    # fallback (se quiser manter)
+                    # =========================
+                    # 2. BUSCA POR TIPO (ESSENCIAL)
+                    # =========================
                     if resultado.empty:
                         resultado = df_bebidas[
-                            df_bebidas["nome"].str.lower().str.strip() == item.lower()
+                            df_bebidas["tipo"].str.lower().str.contains(item_lower)
                         ]
                 
-                    # 👉 SE É BEBIDA
+                    # =========================
+                    # 3. SE FOR BEBIDA
+                    # =========================
                     if not resultado.empty:
+                
+                        tipo = resultado.iloc[0]["tipo"]
                 
                         if item in ingredientes_bebidas:
                             ingredientes_bebidas[item]["qtd"] += qtd
                         else:
                             ingredientes_bebidas[item] = {
                                 "qtd": qtd,
-                                "tipo": resultado.iloc[0]["tipo"]
+                                "tipo": tipo
                             }
                 
-                    # 👉 SE NÃO É BEBIDA
+                    # =========================
+                    # 4. SE FOR INSUMO
+                    # =========================
                     else:
-                        ingredientes_insumos[item] = qtd
+                        if item in ingredientes_insumos:
+                            ingredientes_insumos[item] += qtd
+                        else:
+                            ingredientes_insumos[item] = qtd
 
                 # =========================
                 # SEPARAÇÃO INSUMOS (FRUTAS vs ARTESANAIS)
