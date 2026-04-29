@@ -1205,21 +1205,38 @@ elif menu == "Orçamentos":
                 
                     item_key = item.lower().strip()
 
-                    # 🔥 lista de palavras que indicam bebida
-                    palavras_bebidas = [
-                        "vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaca"
-                    ]
+                    # =========================
+                    # 🔎 BUSCA NO BANCO
+                    # =========================
                     
-                    # busca no banco
-                    resultado = df_bebidas[
+                    # 1. tenta achar por nome exato
+                    resultado_nome = df_bebidas[
                         df_bebidas["nome"].str.lower().str.strip() == item_key
                     ]
                     
-                    # 🔥 se não achou, mas é bebida conhecida → busca por tipo
-                    if resultado.empty and any(p in item_key for p in palavras_bebidas):
-                        resultado = df_bebidas[
-                            df_bebidas["tipo"].str.lower().str.contains(item_key)
-                        ]
+                    # 2. tenta achar por tipo
+                    resultado_tipo = df_bebidas[
+                        df_bebidas["tipo"].str.lower().str.contains(item_key)
+                    ]
+                    
+                    # =========================
+                    # 🧠 DECISÃO INTELIGENTE
+                    # =========================
+                    
+                    if not resultado_nome.empty:
+                        resultado = resultado_nome
+                    
+                    elif not resultado_tipo.empty:
+                        resultado = resultado_tipo
+                    
+                    # 🔥 fallback inteligente (palavras-chave de bebida)
+                    elif any(p in item_key for p in [
+                        "vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "espumante", "vinho"
+                    ]):
+                        resultado = resultado_tipo
+                    
+                    else:
+                        resultado = pd.DataFrame()  # vazio
                     
                     # =========================
                     # 🍸 BEBIDAS
