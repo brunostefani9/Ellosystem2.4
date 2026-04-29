@@ -1210,10 +1210,12 @@ elif menu == "Orçamentos":
                     # Se não encontrar pelo nome, busca pelo tipo
                     if resultado.empty:
                         resultado = df_bebidas[
-                            df_bebidas["tipo"].str.lower().str.contains(item.lower())
+                            df_bebidas["nome"].str.lower().str.strip() == item.lower()
                         ]
-                
-                    if not resultado.empty:
+                    
+                    if item in ingredientes_bebidas:
+                        ingredientes_bebidas[item]["qtd"] += qtd
+                    else:
                         ingredientes_bebidas[item] = {
                             "qtd": qtd,
                             "tipo": resultado.iloc[0]["tipo"]
