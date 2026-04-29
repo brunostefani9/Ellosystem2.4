@@ -1205,18 +1205,29 @@ elif menu == "Orçamentos":
                 
                     item_key = item.lower().strip()
 
-                    # busca bebida apenas pelo nome exato
+                    # 🔥 lista de palavras que indicam bebida
+                    palavras_bebidas = [
+                        "vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaca"
+                    ]
+                    
+                    # busca no banco
                     resultado = df_bebidas[
                         df_bebidas["nome"].str.lower().str.strip() == item_key
                     ]
-                
+                    
+                    # 🔥 se não achou, mas é bebida conhecida → busca por tipo
+                    if resultado.empty and any(p in item_key for p in palavras_bebidas):
+                        resultado = df_bebidas[
+                            df_bebidas["tipo"].str.lower().str.contains(item_key)
+                        ]
+                    
                     # =========================
                     # 🍸 BEBIDAS
                     # =========================
                     if not resultado.empty:
-                
+                    
                         tipo = resultado.iloc[0]["tipo"]
-                
+                    
                         if item_key in ingredientes_bebidas:
                             ingredientes_bebidas[item_key]["qtd"] += qtd
                         else:
@@ -1224,9 +1235,9 @@ elif menu == "Orçamentos":
                                 "qtd": qtd,
                                 "tipo": tipo
                             }
-                
+                    
                     # =========================
-                    # 🍋 INSUMOS (frutas + artesanais)
+                    # 🍋 INSUMOS
                     # =========================
                     else:
                         if item_key in ingredientes_insumos:
