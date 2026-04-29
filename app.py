@@ -1227,14 +1227,16 @@ elif menu == "Orçamentos":
                 
                         tipo = resultado.iloc[0]["tipo"]
                 
-                        if item in ingredientes_bebidas:
-                            ingredientes_bebidas[item]["qtd"] += qtd
+                        # 🔥 FORÇA AGRUPAMENTO POR NOME (ignora tipo duplicado)
+                        item_key = item.lower().strip()
+                        
+                        if item_key in ingredientes_bebidas:
+                            ingredientes_bebidas[item_key]["qtd"] += qtd
                         else:
-                            ingredientes_bebidas[item] = {
+                            ingredientes_bebidas[item_key] = {
                                 "qtd": qtd,
-                                "tipo": tipo
+                                "tipo": tipo  # mantém o primeiro tipo
                             }
-                
                     # =========================
                     # 4. SE FOR INSUMO
                     # =========================
