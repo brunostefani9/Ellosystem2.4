@@ -1202,24 +1202,30 @@ elif menu == "Orçamentos":
                 ingredientes_insumos = {}
                 
                 for item, qtd in ingredientes_totais.items():
-                    # Primeiro, busca exata pelo nome
+
+                    # busca exata
                     resultado = df_bebidas[
                         df_bebidas["nome"].str.lower().str.strip() == item.lower()
                     ]
                 
-                    # Se não encontrar pelo nome, busca pelo tipo
+                    # fallback (se quiser manter)
                     if resultado.empty:
                         resultado = df_bebidas[
                             df_bebidas["nome"].str.lower().str.strip() == item.lower()
                         ]
-                    
-                    if item in ingredientes_bebidas:
-                        ingredientes_bebidas[item]["qtd"] += qtd
-                    else:
-                        ingredientes_bebidas[item] = {
-                            "qtd": qtd,
-                            "tipo": resultado.iloc[0]["tipo"]
-                        }
+                
+                    # 👉 SE É BEBIDA
+                    if not resultado.empty:
+                
+                        if item in ingredientes_bebidas:
+                            ingredientes_bebidas[item]["qtd"] += qtd
+                        else:
+                            ingredientes_bebidas[item] = {
+                                "qtd": qtd,
+                                "tipo": resultado.iloc[0]["tipo"]
+                            }
+                
+                    # 👉 SE NÃO É BEBIDA
                     else:
                         ingredientes_insumos[item] = qtd
 
