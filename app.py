@@ -1135,12 +1135,22 @@ elif menu == "Orçamentos":
                 # =========================
                 # CÁLCULO DOS INGREDIENTES
                 # =========================
+                qtd_por_drink = {}
+                if not qtd_por_drink:
+                    qtd_por_drink = {
+                        drink: total_drinks * (pesos[drink] / total_peso) if total_peso > 0 else 0
+                        for drink in selecao
+                    }
+                
                 ingredientes_totais = {}
                 
                 for drink in selecao:
                 
                     proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
-                    qtd_drinks = qtd_por_drink[drink]
+                    qtd_drinks = qtd_por_drink.get(
+                        drink,
+                        total_drinks * (pesos[drink] / total_peso) if total_peso > 0 else 0
+                    )
                 
                     receita = df_receitas[df_receitas["drink"] == drink]
                 
