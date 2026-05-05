@@ -1140,7 +1140,7 @@ elif menu == "Orçamentos":
                 for drink in selecao:
                 
                     proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
-                    qtd_drinks = total_drinks * proporcao
+                    qtd_drinks = qtd_por_drink[drink]
                 
                     receita = df_receitas[df_receitas["drink"] == drink]
                 
@@ -1274,7 +1274,7 @@ elif menu == "Orçamentos":
                 
                     # 🔥 REGRA SIMPLES E FUNCIONAL
                     if any(p in nome for p in [
-                        "charope", "xarope", "espuma", "suco"
+                        "xarope", "charope", "espuma", "syrup", "cordial"
                     ]):
                         ingredientes_artesanais[item] = qtd
                     else:
@@ -1312,8 +1312,37 @@ elif menu == "Orçamentos":
                     )
                 
                     escolhas_marcas[item] = escolha
-                
+
                 st.divider()
+                
+                st.markdown("### 🎯 Quantidade real por drink (editável)")
+                st.caption("Defina exatamente quantos drinks de cada tipo você quer levar")
+                
+                qtd_por_drink = {}
+                
+                for drink in selecao:
+                
+                    key = f"qtd_drink_{drink}"
+                
+                    sugerido = int(total_drinks * (pesos[drink] / total_peso)) if total_peso > 0 else 0
+                
+                    qtd_input = st.number_input(
+                        f"{drink}",
+                        min_value=0,
+                        value=sugerido,
+                        key=key
+                    )
+                
+                    qtd_por_drink[drink] = qtd_input
+                
+                
+                # 🔍 Validação
+                soma_real = sum(qtd_por_drink.values())
+                
+                st.info(f"Total definido: {soma_real} drinks")
+                
+                if soma_real != int(total_drinks):
+                    st.warning("⚠️ Total diferente da estimativa inicial")
                 
                 # =========================
                 # AJUSTE FINO (NOVO VISUAL)
@@ -1694,18 +1723,30 @@ elif menu == "Orçamentos":
                                 }).execute()
                     st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
-                    # SALVAR FRUTAS / INSUMOS
+                    # SALVAR FRUTAS
                     # =========================
-                    for fruta, qtd_gramas in ingredientes_insumos.items():
+                    for fruta, qtd_gramas in ingredientes_frutas.items():
                     
                         supabase.table("evento_itens").insert({
                             "evento_id": evento_id,
                             "produto": fruta.capitalize(),
                             "quantidade": qtd_gramas,
                             "unidade": "g",
-                            "categoria": "Insumos"
+                            "categoria": "Frutas"
                         }).execute()
-                    st.success("Orçamento salvo com sucesso!")
+                    
+                    # =========================
+                    # SALVAR ARTESANAIS
+                    # =========================
+                    for item, qtd_ml in ingredientes_artesanais.items():
+                    
+                        supabase.table("evento_itens").insert({
+                            "evento_id": evento_id,
+                            "produto": item.capitalize(),
+                            "quantidade": qtd_ml,
+                            "unidade": "ml",
+                            "categoria": "Artesanais"
+                        }).execute()
 
     # =========================
     # ABA 2 - PENDENTES
@@ -1818,7 +1859,7 @@ elif menu == "Orçamentos":
                             else:
                                 return "Outros"
     
-                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria_global)
+                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
     
                         # =========================
                         # COLUNAS OPERACIONAIS
@@ -1947,9 +1988,6 @@ elif menu == "Orçamentos":
                             st.write(a)
                     else:
                         st.success("✅ Evento aprovado e estoque atualizado!")
-                    
-                    # limpa memória
-                    st.session_state["orcamento_bebidas"] = {}
                     
                     st.rerun()
     
