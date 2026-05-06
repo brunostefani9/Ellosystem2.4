@@ -1151,23 +1151,38 @@ elif menu == "Orçamentos":
                     if drink not in st.session_state["qtd_por_drink"]:
                         st.session_state["qtd_por_drink"][drink] = sugerido
                 
+                    valor_atual = st.session_state["qtd_por_drink"][drink]
+
+                    # quanto ainda pode usar
+                    soma_sem_esse = soma_real - valor_atual
+                    max_permitido = int(total_drinks) - soma_sem_esse
+                    
                     qtd_input = st.number_input(
                         f"{drink}",
                         min_value=0,
+                        max_value=max_permitido,
                         key=key,
-                        value=st.session_state["qtd_por_drink"][drink]
+                        value=valor_atual
                     )
                 
                     # salva alteração
                     st.session_state["qtd_por_drink"][drink] = qtd_input
                 
                 # validação
-                soma_real = sum(qtd_por_drink.values())
-                
+                soma_real = sum(st.session_state["qtd_por_drink"].values())
+
                 st.info(f"Total definido: {soma_real} drinks")
                 
-                if soma_real != int(total_drinks):
-                    st.warning("⚠️ Total diferente da estimativa inicial")
+                restante = int(total_drinks) - soma_real
+                
+                if restante > 0:
+                    st.warning(f"⚠️ Faltam {restante} drinks para completar o total")
+                
+                elif restante < 0:
+                    st.error(f"🚫 Você ultrapassou em {abs(restante)} drinks")
+                
+                else:
+                    st.success("✅ Total perfeito (bate com o evento)")
                 
                 # =========================
                 # CÁLCULO DOS INGREDIENTES
