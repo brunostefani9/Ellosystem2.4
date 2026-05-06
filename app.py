@@ -1136,22 +1136,30 @@ elif menu == "Orçamentos":
                 st.markdown("### 🎯 Quantidade real por drink (editável)")
                 st.caption("Defina exatamente quantos drinks de cada tipo você quer levar")
                 
-                qtd_por_drink = {}
+                # 🔥 cria no session_state (só uma vez)
+                if "qtd_por_drink" not in st.session_state:
+                    st.session_state["qtd_por_drink"] = {}
                 
                 for drink in selecao:
                 
                     key = f"qtd_drink_{drink}"
                 
-                    sugerido = int(total_drinks * (pesos[drink] / total_peso)) if total_peso > 0 else 0
+                    proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
+                    sugerido = int(total_drinks * proporcao)
+                
+                    # define valor inicial só uma vez
+                    if drink not in st.session_state["qtd_por_drink"]:
+                        st.session_state["qtd_por_drink"][drink] = sugerido
                 
                     qtd_input = st.number_input(
                         f"{drink}",
                         min_value=0,
-                        value=sugerido,
-                        key=key
+                        key=key,
+                        value=st.session_state["qtd_por_drink"][drink]
                     )
                 
-                    qtd_por_drink[drink] = qtd_input
+                    # salva alteração
+                    st.session_state["qtd_por_drink"][drink] = qtd_input
                 
                 # validação
                 soma_real = sum(qtd_por_drink.values())
@@ -1170,7 +1178,7 @@ elif menu == "Orçamentos":
                 for drink in selecao:
                 
                     # 🔥 USA DIRETAMENTE O VALOR EDITADO
-                    qtd_drinks = qtd_por_drink.get(drink, 0)
+                    qtd_drinks = st.session_state["qtd_por_drink"].get(drink, 0)
                 
                     receita = df_receitas[df_receitas["drink"] == drink]
                 
