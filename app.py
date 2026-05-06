@@ -1123,7 +1123,7 @@ elif menu == "Orçamentos":
                 # 📈 DISTRIBUIÇÃO REAL (NOVO)
                 # =========================
                 st.markdown("### 📈 Distribuição real (baseada nos pesos)")
-                
+
                 for drink in selecao:
                     proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
                     qtd_real = int(total_drinks * proporcao)
@@ -1132,11 +1132,11 @@ elif menu == "Orçamentos":
                 
                 st.divider()
                 
-                # 🎯 AQUI
+                # 🎯 QUANTIDADE EDITÁVEL
                 st.markdown("### 🎯 Quantidade real por drink (editável)")
                 st.caption("Defina exatamente quantos drinks de cada tipo você quer levar")
                 
-                # 🔥 cria no session_state (só uma vez)
+                # 🔥 cria no session_state (uma única vez)
                 if "qtd_por_drink" not in st.session_state:
                     st.session_state["qtd_por_drink"] = {}
                 
@@ -1152,15 +1152,10 @@ elif menu == "Orçamentos":
                         st.session_state["qtd_por_drink"][drink] = sugerido
                 
                     valor_atual = st.session_state["qtd_por_drink"][drink]
-
-                    # quanto ainda pode usar
-                    soma_sem_esse = soma_real - valor_atual
-                    max_permitido = int(total_drinks) - soma_sem_esse
-                    
+                
                     qtd_input = st.number_input(
                         f"{drink}",
                         min_value=0,
-                        max_value=max_permitido,
                         key=key,
                         value=valor_atual
                     )
@@ -1168,9 +1163,10 @@ elif menu == "Orçamentos":
                     # salva alteração
                     st.session_state["qtd_por_drink"][drink] = qtd_input
                 
-                # validação
+                
+                # 🔥 AGORA SIM — calcula depois (CORRETO)
                 soma_real = sum(st.session_state["qtd_por_drink"].values())
-
+                
                 st.info(f"Total definido: {soma_real} drinks")
                 
                 restante = int(total_drinks) - soma_real
