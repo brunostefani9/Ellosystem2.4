@@ -1132,31 +1132,50 @@ elif menu == "Orçamentos":
                 
                 st.divider()
                 
+                # 🎯 AQUI
+                st.markdown("### 🎯 Quantidade real por drink (editável)")
+                st.caption("Defina exatamente quantos drinks de cada tipo você quer levar")
+                
+                qtd_por_drink = {}
+                
+                for drink in selecao:
+                
+                    key = f"qtd_drink_{drink}"
+                
+                    sugerido = int(total_drinks * (pesos[drink] / total_peso)) if total_peso > 0 else 0
+                
+                    qtd_input = st.number_input(
+                        f"{drink}",
+                        min_value=0,
+                        value=sugerido,
+                        key=key
+                    )
+                
+                    qtd_por_drink[drink] = qtd_input
+                
+                # validação
+                soma_real = sum(qtd_por_drink.values())
+                
+                st.info(f"Total definido: {soma_real} drinks")
+                
+                if soma_real != int(total_drinks):
+                    st.warning("⚠️ Total diferente da estimativa inicial")
+                
                 # =========================
                 # CÁLCULO DOS INGREDIENTES
                 # =========================
-                qtd_por_drink = {}
-                if not qtd_por_drink:
-                    qtd_por_drink = {
-                        drink: total_drinks * (pesos[drink] / total_peso) if total_peso > 0 else 0
-                        for drink in selecao
-                    }
                 
                 ingredientes_totais = {}
                 
                 for drink in selecao:
                 
-                    proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
-                    qtd_drinks = qtd_por_drink.get(
-                        drink,
-                        total_drinks * (pesos[drink] / total_peso) if total_peso > 0 else 0
-                    )
+                    # 🔥 USA DIRETAMENTE O VALOR EDITADO
+                    qtd_drinks = qtd_por_drink.get(drink, 0)
                 
                     receita = df_receitas[df_receitas["drink"] == drink]
                 
                     for _, row in receita.iterrows():
                 
-                        # 🔥 ESSENCIAL (estava faltando)
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
                 
@@ -1324,35 +1343,6 @@ elif menu == "Orçamentos":
                     escolhas_marcas[item] = escolha
 
                 st.divider()
-                
-                st.markdown("### 🎯 Quantidade real por drink (editável)")
-                st.caption("Defina exatamente quantos drinks de cada tipo você quer levar")
-                
-                qtd_por_drink = {}
-                
-                for drink in selecao:
-                
-                    key = f"qtd_drink_{drink}"
-                
-                    sugerido = int(total_drinks * (pesos[drink] / total_peso)) if total_peso > 0 else 0
-                
-                    qtd_input = st.number_input(
-                        f"{drink}",
-                        min_value=0,
-                        value=sugerido,
-                        key=key
-                    )
-                
-                    qtd_por_drink[drink] = qtd_input
-                
-                
-                # 🔍 Validação
-                soma_real = sum(qtd_por_drink.values())
-                
-                st.info(f"Total definido: {soma_real} drinks")
-                
-                if soma_real != int(total_drinks):
-                    st.warning("⚠️ Total diferente da estimativa inicial")
                 
                 # =========================
                 # AJUSTE FINO (NOVO VISUAL)
