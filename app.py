@@ -1123,7 +1123,7 @@ elif menu == "Orçamentos":
                 # 📈 DISTRIBUIÇÃO REAL (NOVO)
                 # =========================
                 st.markdown("### 📈 Distribuição real (baseada nos pesos)")
-
+                
                 for drink in selecao:
                     proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
                     qtd_real = int(total_drinks * proporcao)
@@ -1132,69 +1132,21 @@ elif menu == "Orçamentos":
                 
                 st.divider()
                 
-                # 🎯 QUANTIDADE EDITÁVEL
-                st.markdown("### 🎯 Quantidade real por drink (editável)")
-                st.caption("Defina exatamente quantos drinks de cada tipo você quer levar")
-                
-                # 🔥 cria no session_state (uma única vez)
-                if "qtd_por_drink" not in st.session_state:
-                    st.session_state["qtd_por_drink"] = {}
-                
-                for drink in selecao:
-                
-                    key = f"qtd_drink_{drink}"
-                
-                    proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
-                    sugerido = int(total_drinks * proporcao)
-                
-                    # define valor inicial só uma vez
-                    if drink not in st.session_state["qtd_por_drink"]:
-                        st.session_state["qtd_por_drink"][drink] = sugerido
-                
-                    valor_atual = st.session_state["qtd_por_drink"][drink]
-                
-                    qtd_input = st.number_input(
-                        f"{drink}",
-                        min_value=0,
-                        key=key,
-                        value=valor_atual
-                    )
-                
-                    # salva alteração
-                    st.session_state["qtd_por_drink"][drink] = qtd_input
-                
-                
-                # 🔥 AGORA SIM — calcula depois (CORRETO)
-                soma_real = sum(st.session_state["qtd_por_drink"].values())
-                
-                st.info(f"Total definido: {soma_real} drinks")
-                
-                restante = int(total_drinks) - soma_real
-                
-                if restante > 0:
-                    st.warning(f"⚠️ Faltam {restante} drinks para completar o total")
-                
-                elif restante < 0:
-                    st.error(f"🚫 Você ultrapassou em {abs(restante)} drinks")
-                
-                else:
-                    st.success("✅ Total perfeito (bate com o evento)")
-                
                 # =========================
                 # CÁLCULO DOS INGREDIENTES
                 # =========================
-                
                 ingredientes_totais = {}
                 
                 for drink in selecao:
                 
-                    # 🔥 USA DIRETAMENTE O VALOR EDITADO
-                    qtd_drinks = st.session_state["qtd_por_drink"].get(drink, 0)
+                    proporcao = pesos[drink] / total_peso if total_peso > 0 else 0
+                    qtd_drinks = total_drinks * proporcao
                 
                     receita = df_receitas[df_receitas["drink"] == drink]
                 
                     for _, row in receita.iterrows():
                 
+                        # 🔥 ESSENCIAL (estava faltando)
                         ingrediente = normalizar_nome(row["ingrediente"])
                         qtd = row["quantidade"]
                 
@@ -1250,65 +1202,24 @@ elif menu == "Orçamentos":
                 ingredientes_insumos = {}
                 
                 for item, qtd in ingredientes_totais.items():
+                    # Primeiro, busca exata pelo nome
+                    resultado = df_bebidas[
+                        df_bebidas["nome"].str.lower().str.strip() == item.lower()
+                    ]
                 
-                    item_key = item.lower().strip()
-
-                    # =========================
-                    # 🔎 BUSCA NO BANCO
-                    # =========================
-                    
-                    # 1. tenta achar por nome exato
-                    resultado_nome = df_bebidas[
-                        df_bebidas["nome"].str.lower().str.strip() == item_key
-                    ]
-                    
-                    # 2. tenta achar por tipo
-                    resultado_tipo = df_bebidas[
-                        df_bebidas["tipo"].str.lower().str.contains(item_key)
-                    ]
-                    
-                    # =========================
-                    # 🧠 DECISÃO INTELIGENTE
-                    # =========================
-                    
-                    if not resultado_nome.empty:
-                        resultado = resultado_nome
-                    
-                    elif not resultado_tipo.empty:
-                        resultado = resultado_tipo
-                    
-                    # 🔥 fallback inteligente (palavras-chave de bebida)
-                    elif any(p in item_key for p in [
-                        "vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "espumante", "vinho"
-                    ]):
-                        resultado = resultado_tipo
-                    
-                    else:
-                        resultado = pd.DataFrame()  # vazio
-                    
-                    # =========================
-                    # 🍸 BEBIDAS
-                    # =========================
+                    # Se não encontrar pelo nome, busca pelo tipo
+                    if resultado.empty:
+                        resultado = df_bebidas[
+                            df_bebidas["tipo"].str.lower().str.contains(item.lower())
+                        ]
+                
                     if not resultado.empty:
-                    
-                        tipo = resultado.iloc[0]["tipo"]
-                    
-                        if item_key in ingredientes_bebidas:
-                            ingredientes_bebidas[item_key]["qtd"] += qtd
-                        else:
-                            ingredientes_bebidas[item_key] = {
-                                "qtd": qtd,
-                                "tipo": tipo
-                            }
-                    
-                    # =========================
-                    # 🍋 INSUMOS
-                    # =========================
+                        ingredientes_bebidas[item] = {
+                            "qtd": qtd,
+                            "tipo": resultado.iloc[0]["tipo"]
+                        }
                     else:
-                        if item_key in ingredientes_insumos:
-                            ingredientes_insumos[item_key] += qtd
-                        else:
-                            ingredientes_insumos[item_key] = qtd
+                        ingredientes_insumos[item] = qtd
 
                 # =========================
                 # SEPARAÇÃO INSUMOS (FRUTAS vs ARTESANAIS)
@@ -1322,7 +1233,7 @@ elif menu == "Orçamentos":
                 
                     # 🔥 REGRA SIMPLES E FUNCIONAL
                     if any(p in nome for p in [
-                        "xarope", "charope", "espuma", "syrup", "cordial"
+                        "charope", "xarope", "espuma", "suco"
                     ]):
                         ingredientes_artesanais[item] = qtd
                     else:
@@ -1360,7 +1271,7 @@ elif menu == "Orçamentos":
                     )
                 
                     escolhas_marcas[item] = escolha
-
+                
                 st.divider()
                 
                 # =========================
@@ -1742,30 +1653,18 @@ elif menu == "Orçamentos":
                                 }).execute()
                     st.success("✅ Orçamento salvo com sucesso!")
                     # =========================
-                    # SALVAR FRUTAS
+                    # SALVAR FRUTAS / INSUMOS
                     # =========================
-                    for fruta, qtd_gramas in ingredientes_frutas.items():
+                    for fruta, qtd_gramas in ingredientes_insumos.items():
                     
                         supabase.table("evento_itens").insert({
                             "evento_id": evento_id,
                             "produto": fruta.capitalize(),
                             "quantidade": qtd_gramas,
                             "unidade": "g",
-                            "categoria": "Frutas"
+                            "categoria": "Insumos"
                         }).execute()
-                    
-                    # =========================
-                    # SALVAR ARTESANAIS
-                    # =========================
-                    for item, qtd_ml in ingredientes_artesanais.items():
-                    
-                        supabase.table("evento_itens").insert({
-                            "evento_id": evento_id,
-                            "produto": item.capitalize(),
-                            "quantidade": qtd_ml,
-                            "unidade": "ml",
-                            "categoria": "Artesanais"
-                        }).execute()
+                    st.success("Orçamento salvo com sucesso!")
 
     # =========================
     # ABA 2 - PENDENTES
@@ -1878,7 +1777,7 @@ elif menu == "Orçamentos":
                             else:
                                 return "Outros"
     
-                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
+                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria_global)
     
                         # =========================
                         # COLUNAS OPERACIONAIS
@@ -2007,6 +1906,9 @@ elif menu == "Orçamentos":
                             st.write(a)
                     else:
                         st.success("✅ Evento aprovado e estoque atualizado!")
+                    
+                    # limpa memória
+                    st.session_state["orcamento_bebidas"] = {}
                     
                     st.rerun()
     
