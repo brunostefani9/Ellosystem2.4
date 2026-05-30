@@ -159,7 +159,7 @@ def tela_precificacao(nome_tabela):
                     ),
                     "custo": st.column_config.NumberColumn(
                         "💰 Custo",
-                        format="R$ %.4f"
+                        format="R$ %.2f"
                     ),
                 }
             )
