@@ -1559,29 +1559,30 @@ elif menu == "Orçamentos":
                 # =========================
                 # MARGEM
                 # =========================
-                margem = st.slider("Margem de lucro (%)", 0, 300, 100)
+                st.subheader("📈 Precificação")
+                
+                margem = st.slider(
+                    "Margem de lucro (%)",
+                    0,
+                    300,
+                    100
+                )
+                
                 preco_venda = custo_total * (1 + margem / 100)
-                
-                st.metric("💰 Preço Final Sugerido", f"R$ {preco_venda:,.2f}")
-                
                 
                 # =========================
                 # DESCONTO
                 # =========================
-                st.subheader("💰 Desconto")
-                
-                desconto = st.slider("Desconto (%)", 0, 100, 0)
+                desconto = st.slider(
+                    "Desconto (%)",
+                    0,
+                    100,
+                    0
+                )
                 
                 preco_com_desconto = preco_venda * (1 - desconto / 100)
                 
-                st.metric("💸 Preço com desconto", f"R$ {preco_com_desconto:,.2f}")
                 valor_desconto = preco_venda - preco_com_desconto
-
-                st.metric(
-                    "🔻 Desconto",
-                    f"R$ {valor_desconto:,.2f}",
-                    f"{desconto}%"
-                )
                 
                 # =========================
                 # COMISSÃO
@@ -1606,43 +1607,106 @@ elif menu == "Orçamentos":
                         step=0.5
                     )
                 
-                    valor_comissao = preco_com_desconto * (
-                        percentual_comissao / 100
+                    valor_comissao = (
+                        preco_com_desconto *
+                        (percentual_comissao / 100)
                     )
                 
-                    st.metric(
-                        "💵 Valor da comissão",
-                        f"R$ {valor_comissao:,.2f}"
-                    )
-                
-                valor_final_venda = preco_com_desconto + valor_comissao
-                
-                st.metric(
-                    "💰 Valor final com comissão",
-                    f"R$ {valor_final_venda:,.2f}"
+                valor_final_venda = (
+                    preco_com_desconto +
+                    valor_comissao
                 )
-
                 
                 # =========================
                 # LUCRO
                 # =========================
                 lucro = valor_final_venda - custo_total
                 
-                if lucro < 0:
-                    st.error("⚠️ Atenção: esse desconto gera PREJUÍZO!")
-                else:
-                    st.success(f"✅ Lucro estimado: R$ {lucro:,.2f}")
-                
-                
                 # =========================
                 # INDICADORES
                 # =========================
-                valor_por_convidado = valor_final_venda / num_convidados if num_convidados > 0 else 0
-                st.metric("💰 Valor cobrado por convidado", f"R$ {valor_por_convidado:,.2f}")
+                valor_por_convidado = (
+                    valor_final_venda / num_convidados
+                    if num_convidados > 0 else 0
+                )
                 
-                valor_por_hora = valor_final_venda / horas if horas > 0 else 0
-                st.metric("⏱️ Valor por hora", f"R$ {valor_por_hora:,.2f}")
+                valor_por_hora = (
+                    valor_final_venda / horas
+                    if horas > 0 else 0
+                )
                 
+                margem_real = (
+                    (lucro / valor_final_venda) * 100
+                    if valor_final_venda > 0 else 0
+                )
+                
+                # =========================
+                # RESUMO FINANCEIRO
+                # =========================
+                st.divider()
+                
+                st.subheader("📊 Resumo Financeiro")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "💰 Custo",
+                        f"R$ {custo_total:,.2f}"
+                    )
+                
+                with col2:
+                    st.metric(
+                        "📈 Venda",
+                        f"R$ {preco_com_desconto:,.2f}"
+                    )
+                
+                with col3:
+                    st.metric(
+                        "🤝 Comissão",
+                        f"R$ {valor_comissao:,.2f}"
+                    )
+                
+                st.divider()
+                
+                st.metric(
+                    "🏆 VALOR FINAL DO ORÇAMENTO",
+                    f"R$ {valor_final_venda:,.2f}"
+                )
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "🔻 Desconto",
+                        f"R$ {valor_desconto:,.2f}",
+                        f"{desconto}%"
+                    )
+                
+                with col2:
+                    st.metric(
+                        "👤 Valor por convidado",
+                        f"R$ {valor_por_convidado:,.2f}"
+                    )
+                
+                with col3:
+                    st.metric(
+                        "⏱️ Valor por hora",
+                        f"R$ {valor_por_hora:,.2f}"
+                    )
+                
+                if lucro < 0:
+                    st.error(
+                        f"⚠️ Prejuízo estimado: R$ {lucro:,.2f}"
+                    )
+                else:
+                    st.success(
+                        f"✅ Lucro estimado: R$ {lucro:,.2f}"
+                    )
+                
+                st.info(
+                    f"📊 Margem real: {margem_real:.1f}%"
+                )
                 
                 # =========================
                 # 💾 SALVAR ORÇAMENTO (RESTAURADO)
