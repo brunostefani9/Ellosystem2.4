@@ -1584,6 +1584,46 @@ elif menu == "Orçamentos":
                 )
                 
                 # =========================
+                # COMISSÃO
+                # =========================
+                st.subheader("🤝 Comissão")
+                
+                incluir_comissao = st.checkbox(
+                    "Incluir comissão nesta venda",
+                    value=False
+                )
+                
+                valor_comissao = 0
+                percentual_comissao = 0
+                
+                if incluir_comissao:
+                
+                    percentual_comissao = st.number_input(
+                        "Percentual da comissão (%)",
+                        min_value=0.0,
+                        max_value=100.0,
+                        value=10.0,
+                        step=0.5
+                    )
+                
+                    valor_comissao = preco_com_desconto * (
+                        percentual_comissao / 100
+                    )
+                
+                    st.metric(
+                        "💵 Valor da comissão",
+                        f"R$ {valor_comissao:,.2f}"
+                    )
+                
+                valor_final_venda = preco_com_desconto + valor_comissao
+                
+                st.metric(
+                    "💰 Valor final com comissão",
+                    f"R$ {valor_final_venda:,.2f}"
+                )
+
+                
+                # =========================
                 # LUCRO
                 # =========================
                 lucro = preco_com_desconto - custo_total
