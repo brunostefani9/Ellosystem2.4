@@ -1626,7 +1626,7 @@ elif menu == "Orçamentos":
                 # =========================
                 # LUCRO
                 # =========================
-                lucro = preco_com_desconto - custo_total
+                lucro = valor_final_venda - custo_total
                 
                 if lucro < 0:
                     st.error("⚠️ Atenção: esse desconto gera PREJUÍZO!")
@@ -1637,10 +1637,10 @@ elif menu == "Orçamentos":
                 # =========================
                 # INDICADORES
                 # =========================
-                valor_por_convidado = preco_com_desconto / num_convidados if num_convidados > 0 else 0
+                valor_por_convidado = valor_final_venda / num_convidados if num_convidados > 0 else 0
                 st.metric("💰 Valor cobrado por convidado", f"R$ {valor_por_convidado:,.2f}")
                 
-                valor_por_hora = preco_com_desconto / horas if horas > 0 else 0
+                valor_por_hora = valor_final_venda / horas if horas > 0 else 0
                 st.metric("⏱️ Valor por hora", f"R$ {valor_por_hora:,.2f}")
                 
                 
@@ -1661,7 +1661,9 @@ elif menu == "Orçamentos":
                         "hora_convidados": str(hora_convidados),
                         "convidados": num_convidados,
                         "custo": custo_total,
-                        "venda": preco_com_desconto,
+                        "venda": valor_final_venda,
+                        "comissao_percentual": percentual_comissao,
+                        "comissao_valor": valor_comissao,
                         "status": "pendente"
                     }).execute()
                     
