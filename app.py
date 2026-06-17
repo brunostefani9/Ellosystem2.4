@@ -932,10 +932,13 @@ elif menu == "Receitas":
     with aba_lista:
 
         df = carregar_tabela("receitas")
+        st.write(df)
 
         if df.empty:
             st.info("Nenhum drink cadastrado")
         else:
+            df = df[df["drink"].notna()]
+
             drinks = df["drink"].unique()
 
             for drink in drinks:
