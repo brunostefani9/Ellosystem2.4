@@ -931,7 +931,10 @@ elif menu == "Receitas":
     # =========================
     with aba_lista:
 
-        df = carregar_tabela("receitas")
+    df = carregar_tabela("receitas")
+
+    bebidas = carregar_tabela("precos_bebidas")
+    insumos = carregar_tabela("precos_insumos")
 
         if df.empty:
             st.info("Nenhum drink cadastrado")
@@ -955,9 +958,24 @@ elif menu == "Receitas":
                         unidade = row["unidade"]
 
                         custo_unitario = 0
-                        uso_padrao = 1
 
-                        custo_total += (quantidade / uso_padrao) * custo_unitario
+                        # Procura nas bebidas
+                        item = bebidas[
+                            bebidas["nome"].astype(str).str.lower() == ingrediente.lower()
+                        ]
+                        
+                        # Se não encontrou, procura nos insumos
+                        if item.empty:
+                            item = insumos[
+                                insumos["nome"].astype(str).str.lower() == ingrediente.lower()
+                            ]
+                        
+                        # Se encontrou, pega o custo
+                        if not item.empty:
+                            custo_unitario = float(item.iloc[0]["custo"])
+                        
+                        # Soma ao custo total do drink
+                        custo_total += custo_unitario
 
                         st.write(f"- {ingrediente} ({quantidade} {unidade})")
 
