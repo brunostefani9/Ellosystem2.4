@@ -977,12 +977,13 @@ elif menu == "Receitas":
             # =========================
             # 🔥 EXCLUSÃO CENTRALIZADA
             # =========================
-            st.write(df[df["drink"] == drink_excluir])
+           
             st.markdown("---")
             st.subheader("🗑 Excluir drink")
 
             drink_excluir = st.selectbox("Selecione o drink", drinks)
 
+            st.write(df[df["drink"] == drink_excluir])
             if st.button("Excluir drink"):
                 supabase.table("receitas") \
                     .delete() \
