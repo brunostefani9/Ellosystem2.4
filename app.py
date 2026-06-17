@@ -26,6 +26,45 @@ def carregar_tabela(nome):
 
 st.set_page_config(page_title="Ellosystem", layout="wide")
 
+def calcular_custo_drink(drink, df_receitas, df_bebidas, df_insumos):
+
+    receita = df_receitas[df_receitas["drink"] == drink]
+
+    custo = 0
+
+    for _, row in receita.iterrows():
+
+        ingrediente = normalizar_nome(row["ingrediente"])
+        quantidade = float(row["quantidade"])
+
+        # procura bebida
+        bebida = df_bebidas[
+            df_bebidas["nome"].str.lower().str.strip() == ingrediente.lower()
+        ]
+
+        if not bebida.empty:
+
+            preco = float(bebida.iloc[0]["preco"])
+            volume = float(bebida.iloc[0]["quantidade"])
+
+            if volume > 0:
+                custo += (quantidade / volume) * preco
+
+            continue
+
+        # procura insumo
+        insumo = df_insumos[
+            df_insumos["nome"].str.lower().str.strip() == ingrediente.lower()
+        ]
+
+        if not insumo.empty:
+
+            preco = float(insumo.iloc[0]["preco"])
+
+            custo += (quantidade / 1000) * preco
+
+    return round(custo,2)
+
 def definir_categoria_global(produto):
 
     produto = str(produto).lower()
