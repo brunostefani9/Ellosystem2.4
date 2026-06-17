@@ -1027,7 +1027,7 @@ elif menu == "Receitas":
                     key=f"exc_{drink_edicao}"
                 )
                 
-                if st.button("Remover ingrediente"):
+            if st.button("Remover ingrediente"):
 
                 receita_editada = receita_editada[
                     receita_editada["ingrediente"] != ingrediente_excluir
