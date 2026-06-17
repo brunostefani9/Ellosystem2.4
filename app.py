@@ -849,9 +849,24 @@ elif menu == "Receitas":
 
         col1, col2, col3, col4 = st.columns(4)
 
-        ingrediente = normalizar_nome(col1.text_input("Ingrediente"))
-        quantidade = col2.number_input("Quantidade", min_value=0.0)
-        unidade = col3.selectbox("Unidade", ["ml","g","un","gota","fatia","guarnição"])
+        ingrediente = normalizar_nome(
+            col1.text_input(
+                "Ingrediente",
+                key="novo_ingrediente"
+            )
+        )
+        
+        quantidade = col2.number_input(
+            "Quantidade",
+            min_value=0.0,
+            key="nova_quantidade"
+        )
+        
+        unidade = col3.selectbox(
+            "Unidade",
+            ["ml","g","un","gota","fatia","guarnição"],
+            key="nova_unidade"
+        )
 
         if col4.button("➕ Adicionar"):
 
@@ -865,10 +880,20 @@ elif menu == "Receitas":
                     "unidade": unidade
                 })
 
-                st.session_state["msg"] = "Ingrediente adicionado!"
-                st.rerun()
+                st.success("Ingrediente adicionado!")
             else:
                 st.warning("Preencha tudo corretamente")
+
+        if st.session_state["ingredientes_temp"]:
+
+            st.subheader("Ingredientes adicionados")
+        
+            st.dataframe(
+                pd.DataFrame(
+                    st.session_state["ingredientes_temp"]
+                ),
+                use_container_width=True
+            )
 
         if st.button("💾 Salvar Drink"):
 
@@ -917,7 +942,7 @@ elif menu == "Receitas":
                 receita = df[df["drink"] == drink]
                 custo_total = 0
 
-                col1, col2 = st.columns([5,1])
+                col1, col2, col3 = st.columns([5,1,1])
 
                 with col1:
                     st.markdown(f"### 🍹 {drink}")
@@ -936,6 +961,14 @@ elif menu == "Receitas":
 
                 with col2:
                     st.markdown(f"### 💰\nR$ {custo_total:,.2f}")
+                
+                with col3:
+                
+                    if st.button(
+                        "✏️",
+                        key=f"editar_{drink}"
+                    ):
+                        st.session_state["drink_edicao"] = drink
 
                 st.divider()
 
@@ -954,6 +987,69 @@ elif menu == "Receitas":
                     .execute()
                 st.success(f"{drink_excluir} excluído com sucesso!")
                 st.rerun()
+
+            # =========================
+            # EDIÇÃO DE RECEITA
+            # =========================
+            
+            if "drink_edicao" in st.session_state:
+            
+                drink_edicao = st.session_state["drink_edicao"]
+            
+                st.markdown("---")
+                st.subheader(f"✏️ Editando: {drink_edicao}")
+            
+                receita_editar = (
+                    df[df["drink"] == drink_edicao]
+                    .copy()
+                    .reset_index(drop=True)
+                )
+            
+                receita_editada = st.data_editor(
+                    receita_editar,
+                    use_container_width=True,
+                    num_rows="dynamic"
+                )
+            
+                col_salvar, col_cancelar = st.columns(2)
+            
+                with col_salvar:
+            
+                    if st.button("💾 Salvar alterações"):
+            
+                        try:
+            
+                            supabase.table("receitas")\
+                                .delete()\
+                                .eq("drink", drink_edicao)\
+                                .execute()
+            
+                            for _, row in receita_editada.iterrows():
+            
+                                supabase.table("receitas").insert({
+                                    "drink": row["drink"],
+                                    "ingrediente": row["ingrediente"],
+                                    "quantidade": row["quantidade"],
+                                    "unidade": row["unidade"]
+                                }).execute()
+            
+                            st.success("Receita atualizada!")
+            
+                            del st.session_state["drink_edicao"]
+            
+                            st.rerun()
+            
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+            
+                with col_cancelar:
+            
+                    if st.button("❌ Cancelar"):
+            
+                        del st.session_state["drink_edicao"]
+            
+                        st.rerun()
+
 
 elif menu == "Orçamentos":
 
