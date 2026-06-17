@@ -65,6 +65,20 @@ def calcular_custo_drink(drink, df_receitas, df_bebidas, df_insumos):
 
     return round(custo,2)
 
+def ingredientes_do_drink(drink, df_receitas):
+
+    receita = df_receitas[df_receitas["drink"] == drink]
+
+    ingredientes = []
+
+    for _, row in receita.iterrows():
+
+        ingredientes.append(
+            normalizar_nome(row["ingrediente"])
+        )
+
+    return ingredientes
+
 def definir_categoria_global(produto):
 
     produto = str(produto).lower()
