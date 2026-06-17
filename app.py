@@ -1004,13 +1004,97 @@ elif menu == "Receitas":
                     .copy()
                     .reset_index(drop=True)
                 )
-            
+                
+                if f"receita_editada_{drink_edicao}" in st.session_state:
+                
+                    receita_editar = st.session_state[
+                        f"receita_editada_{drink_edicao}"
+                    ]
+                
                 receita_editada = st.data_editor(
                     receita_editar,
                     use_container_width=True,
-                    num_rows="dynamic"
+                    hide_index=True,
+                    num_rows="dynamic",
+                    disabled=["id"]
                 )
+
+                st.markdown("### 🗑 Excluir ingrediente")
+                
+                ingrediente_excluir = st.selectbox(
+                    "Ingrediente",
+                    receita_editar["ingrediente"].tolist(),
+                    key=f"exc_{drink_edicao}"
+                )
+                
+                if st.button("Remover ingrediente"):
+
+                receita_editada = receita_editada[
+                    receita_editada["ingrediente"] != ingrediente_excluir
+                ]
             
+                st.session_state[
+                    f"receita_editada_{drink_edicao}"
+                ] = receita_editada
+            
+                st.rerun()
+                
+                st.markdown("### ➕ Adicionar ingrediente")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                novo_ing = col1.text_input(
+                    "Ingrediente",
+                    key=f"novo_ing_{drink_edicao}"
+                )
+                
+                nova_qtd = col2.number_input(
+                    "Quantidade",
+                    min_value=0.0,
+                    key=f"nova_qtd_{drink_edicao}"
+                )
+                
+                nova_un = col3.selectbox(
+                    "Unidade",
+                    ["ml","g","un","gota","fatia","guarnição"],
+                    key=f"nova_un_{drink_edicao}"
+                )
+                
+                if st.button(
+                    "➕ Adicionar ingrediente na receita",
+                    key=f"btn_add_{drink_edicao}"
+                ):
+                
+                    if novo_ing and nova_qtd > 0:
+                
+                        nova_linha = {
+                            "id": None,
+                            "drink": drink_edicao,
+                            "ingrediente": normalizar_nome(novo_ing),
+                            "quantidade": nova_qtd,
+                            "unidade": nova_un
+                        }
+                
+                        receita_editada = pd.concat(
+                            [
+                                receita_editada,
+                                pd.DataFrame([nova_linha])
+                            ],
+                            ignore_index=True
+                        )
+                
+                        st.session_state[
+                            f"receita_editada_{drink_edicao}"
+                        ] = receita_editada
+                
+                        st.success("Ingrediente adicionado!")
+                
+                        st.rerun()
+                
+                    else:
+                        st.warning("Preencha ingrediente e quantidade.")
+
+                
                 col_salvar, col_cancelar = st.columns(2)
             
                 with col_salvar:
@@ -1024,7 +1108,12 @@ elif menu == "Receitas":
                                 .eq("drink", drink_edicao)\
                                 .execute()
             
-                            for _, row in receita_editada.iterrows():
+                            dados_salvar = st.session_state.get(
+                                f"receita_editada_{drink_edicao}",
+                                receita_editada
+                            )
+                            
+                            for _, row in dados_salvar.iterrows():
             
                                 supabase.table("receitas").insert({
                                     "drink": row["drink"],
@@ -1034,11 +1123,16 @@ elif menu == "Receitas":
                                 }).execute()
             
                             st.success("Receita atualizada!")
-            
+
+                            if f"receita_editada_{drink_edicao}" in st.session_state:
+                                del st.session_state[
+                                    f"receita_editada_{drink_edicao}"
+                                ]
+                            
                             del st.session_state["drink_edicao"]
-            
+                            
                             st.rerun()
-            
+                            
                         except Exception as e:
                             st.error(f"Erro: {e}")
             
