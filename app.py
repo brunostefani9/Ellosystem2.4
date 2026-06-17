@@ -812,7 +812,51 @@ elif menu == "Relatórios":
 
         else:
             st.info("Sem dados de produtos")
+def calcular_custo_ingrediente(
+    ingrediente,
+    quantidade,
+    bebidas,
+    insumos,
+    marcas_escolhidas
+    ):
+    ingrediente = str(ingrediente).strip().lower()
     
+    custo = 0
+    
+    # Primeiro procura nos insumos
+    item = insumos[
+        insumos["nome"].astype(str).str.lower() == ingrediente
+    ]
+    
+    if not item.empty:
+        return float(item.iloc[0]["custo"])
+    
+    # Depois procura por tipo de bebida
+    opcoes = bebidas[
+        bebidas["tipo"].astype(str).str.lower() == ingrediente
+    ]
+    
+    if opcoes.empty:
+        return 0
+    
+    chave = f"marca_{ingrediente}"
+    
+    if chave not in marcas_escolhidas:
+        marcas_escolhidas[chave] = opcoes.iloc[0]["nome"]
+    
+    marca = st.selectbox(
+        f"{ingrediente.title()}",
+        opcoes["nome"].tolist(),
+        key=chave
+    )
+    
+    custo = float(
+        opcoes[
+            opcoes["nome"] == marca
+        ].iloc[0]["custo"]
+    )
+    
+    return custo
 
 elif menu == "Receitas":
 
