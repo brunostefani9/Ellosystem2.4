@@ -1039,7 +1039,7 @@ elif menu == "Receitas":
             
                 st.rerun()
                 
-                st.markdown("### ➕ Adicionar ingrediente")
+            st.markdown("### ➕ Adicionar ingrediente")
                 
                 col1, col2, col3 = st.columns(3)
                 
