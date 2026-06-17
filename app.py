@@ -1020,26 +1020,29 @@ elif menu == "Receitas":
                 )
 
                 st.markdown("### 🗑 Excluir ingrediente")
-                
+
                 ingrediente_excluir = st.selectbox(
                     "Ingrediente",
                     receita_editar["ingrediente"].tolist(),
                     key=f"exc_{drink_edicao}"
                 )
                 
-            if st.button("Remover ingrediente"):
-
-                receita_editada = receita_editada[
-                    receita_editada["ingrediente"] != ingrediente_excluir
-                ]
-            
-                st.session_state[
-                    f"receita_editada_{drink_edicao}"
-                ] = receita_editada
-            
-                st.rerun()
+                if st.button(
+                    "Remover ingrediente",
+                    key=f"remover_{drink_edicao}"
+                ):
                 
-            st.markdown("### ➕ Adicionar ingrediente")
+                    receita_editada = receita_editada[
+                        receita_editada["ingrediente"] != ingrediente_excluir
+                    ]
+                
+                    st.session_state[
+                        f"receita_editada_{drink_edicao}"
+                    ] = receita_editada
+                
+                    st.rerun()
+                
+                st.markdown("### ➕ Adicionar ingrediente")
                 
                 col1, col2, col3 = st.columns(3)
                 
@@ -1087,61 +1090,66 @@ elif menu == "Receitas":
                             f"receita_editada_{drink_edicao}"
                         ] = receita_editada
                 
-                        st.success("Ingrediente adicionado!")
-                
                         st.rerun()
                 
-                    else:
-                        st.warning("Preencha ingrediente e quantidade.")
-
-                
                 col_salvar, col_cancelar = st.columns(2)
-            
+                
                 with col_salvar:
-            
-                    if st.button("💾 Salvar alterações"):
-            
+                
+                    if st.button(
+                        "💾 Salvar alterações",
+                        key=f"salvar_{drink_edicao}"
+                    ):
+                
                         try:
-            
+                
                             supabase.table("receitas")\
                                 .delete()\
                                 .eq("drink", drink_edicao)\
                                 .execute()
-            
+                
                             dados_salvar = st.session_state.get(
                                 f"receita_editada_{drink_edicao}",
                                 receita_editada
                             )
-                            
+                
                             for _, row in dados_salvar.iterrows():
-            
+                
                                 supabase.table("receitas").insert({
                                     "drink": row["drink"],
                                     "ingrediente": row["ingrediente"],
                                     "quantidade": row["quantidade"],
                                     "unidade": row["unidade"]
                                 }).execute()
-            
-                            st.success("Receita atualizada!")
-
+                
                             if f"receita_editada_{drink_edicao}" in st.session_state:
                                 del st.session_state[
                                     f"receita_editada_{drink_edicao}"
                                 ]
-                            
+                
                             del st.session_state["drink_edicao"]
-                            
+                
+                            st.success("Receita atualizada!")
+                
                             st.rerun()
-                            
+                
                         except Exception as e:
                             st.error(f"Erro: {e}")
-            
+                
                 with col_cancelar:
-            
-                    if st.button("❌ Cancelar"):
-            
+                
+                    if st.button(
+                        "❌ Cancelar",
+                        key=f"cancelar_{drink_edicao}"
+                    ):
+                
+                        if f"receita_editada_{drink_edicao}" in st.session_state:
+                            del st.session_state[
+                                f"receita_editada_{drink_edicao}"
+                            ]
+                
                         del st.session_state["drink_edicao"]
-            
+                
                         st.rerun()
 
 
