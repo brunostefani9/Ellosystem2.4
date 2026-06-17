@@ -932,7 +932,6 @@ elif menu == "Receitas":
     with aba_lista:
 
         df = carregar_tabela("receitas")
-        st.write(df)
 
         if df.empty:
             st.info("Nenhum drink cadastrado")
@@ -978,6 +977,7 @@ elif menu == "Receitas":
             # =========================
             # 🔥 EXCLUSÃO CENTRALIZADA
             # =========================
+            st.write(df[df["drink"] == drink_excluir])
             st.markdown("---")
             st.subheader("🗑 Excluir drink")
 
