@@ -880,235 +880,226 @@ elif menu == "Receitas":
     if "msg" not in st.session_state:
         st.session_state["msg"] = ""
 
-    # Mostra mensagem (se existir)
     if st.session_state["msg"]:
         st.success(st.session_state["msg"])
         st.session_state["msg"] = ""
 
-    # ------------------------
-    # SUB-ABAS
-    # ------------------------
     aba_cadastro, aba_lista = st.tabs(
         ["Cadastro de Drinks", "Lista de Drinks"]
     )
 
-    # =========================
-    # ABA 1 - CADASTRO
-    # =========================
+    # ==================================================
+    # CADASTRO
+    # ==================================================
     with aba_cadastro:
 
         drink = st.text_input(
             "Nome do drink",
             value=st.session_state.get("drink_nome", "")
         )
-    
+
         col1, col2, col3, col4 = st.columns(4)
-    
+
         ingrediente = normalizar_nome(
             col1.text_input(
                 "Ingrediente",
                 key="novo_ingrediente"
             )
         )
-    
+
         quantidade = col2.number_input(
             "Quantidade",
             min_value=0.0,
             key="nova_quantidade"
         )
-    
+
         unidade = col3.selectbox(
             "Unidade",
-            ["ml","g","un","gota","fatia","guarnição"],
+            ["ml", "g", "un", "gota", "fatia", "guarnição"],
             key="nova_unidade"
         )
 
-    if col4.button("➕ Adicionar"):
+        if col4.button("➕ Adicionar"):
 
-        if drink and ingrediente and quantidade > 0:
+            if drink and ingrediente and quantidade > 0:
 
-            st.session_state["drink_nome"] = drink
+                st.session_state["drink_nome"] = drink
 
-            st.session_state["ingredientes_temp"].append({
+                st.session_state["ingredientes_temp"].append({
 
-                "ingrediente": ingrediente,
-                "quantidade": quantidade,
-                "unidade": unidade
+                    "ingrediente": ingrediente,
+                    "quantidade": quantidade,
+                    "unidade": unidade
 
-            })
+                })
 
-            st.success("Ingrediente adicionado!")
-
-        else:
-
-            st.warning("Preencha todos os campos.")
-
-    if st.session_state["ingredientes_temp"]:
-
-        st.subheader("Ingredientes")
-
-        tabela = pd.DataFrame(
-            st.session_state["ingredientes_temp"]
-        )
-
-        st.dataframe(
-            tabela,
-            use_container_width=True
-        )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        if st.button("💾 Salvar Drink"):
-
-            if not st.session_state["drink_nome"]:
-
-                st.error("Informe o nome do drink.")
-
-            elif not st.session_state["ingredientes_temp"]:
-
-                st.error("Adicione ingredientes.")
+                st.success("Ingrediente adicionado!")
 
             else:
 
-                supabase.table("receitas")\
-                    .delete()\
-                    .eq(
-                        "drink",
-                        st.session_state["drink_nome"]
-                    )\
-                    .execute()
+                st.warning("Preencha todos os campos.")
 
-                for item in st.session_state["ingredientes_temp"]:
+        if st.session_state["ingredientes_temp"]:
 
-                    supabase.table("receitas").insert({
+            st.subheader("Ingredientes")
 
-                        "drink": st.session_state["drink_nome"],
+            tabela = pd.DataFrame(
+                st.session_state["ingredientes_temp"]
+            )
 
-                        "ingrediente": item["ingrediente"],
+            st.dataframe(
+                tabela,
+                use_container_width=True
+            )
 
-                        "quantidade": item["quantidade"],
+        col1, col2 = st.columns(2)
 
-                        "unidade": item["unidade"]
+        with col1:
 
-                    }).execute()
+            if st.button("💾 Salvar Drink"):
 
-                st.success("Receita salva com sucesso!")
+                if not st.session_state["drink_nome"]:
+
+                    st.error("Informe o nome do drink.")
+
+                elif not st.session_state["ingredientes_temp"]:
+
+                    st.error("Adicione ingredientes.")
+
+                else:
+
+                    supabase.table("receitas")\
+                        .delete()\
+                        .eq(
+                            "drink",
+                            st.session_state["drink_nome"]
+                        )\
+                        .execute()
+
+                    for item in st.session_state["ingredientes_temp"]:
+
+                        supabase.table("receitas").insert({
+
+                            "drink": st.session_state["drink_nome"],
+                            "ingrediente": item["ingrediente"],
+                            "quantidade": item["quantidade"],
+                            "unidade": item["unidade"]
+
+                        }).execute()
+
+                    st.success("Receita salva com sucesso!")
+
+                    st.session_state["ingredientes_temp"] = []
+                    st.session_state["drink_nome"] = ""
+
+                    st.rerun()
+
+        with col2:
+
+            if st.button("❌ Cancelar edição"):
 
                 st.session_state["ingredientes_temp"] = []
-
                 st.session_state["drink_nome"] = ""
 
                 st.rerun()
 
-    with col2:
-
-        if st.button("❌ Cancelar edição"):
-
-            st.session_state["ingredientes_temp"] = []
-
-            st.session_state["drink_nome"] = ""
-
-            st.rerun()
-
-    # =========================
-    # ABA 2 - LISTA
-    # =========================
+    # ==================================================
+    # LISTA
+    # ==================================================
     with aba_lista:
 
-    df = carregar_tabela("receitas")
-    bebidas = carregar_tabela("precos_bebidas")
-    insumos = carregar_tabela("precos_insumos")
+        df = carregar_tabela("receitas")
+        bebidas = carregar_tabela("precos_bebidas")
+        insumos = carregar_tabela("precos_insumos")
 
-    if df.empty:
-        st.info("Nenhum drink cadastrado")
+        if df.empty:
 
-    else:
+            st.info("Nenhum drink cadastrado")
 
-        drinks = sorted(df["drink"].dropna().unique())
+        else:
 
-        for drink in drinks:
+            drinks = sorted(df["drink"].dropna().unique())
 
-            receita = df[df["drink"] == drink]
+            for drink in drinks:
 
-            custo_total = 0
+                receita = df[df["drink"] == drink]
 
-            col1, col2, col3, col4 = st.columns([6,2,1,1])
+                custo_total = 0
 
-            with col1:
+                col1, col2, col3, col4 = st.columns([6, 2, 1, 1])
 
-                st.markdown(f"### 🍸 {drink}")
+                with col1:
 
-                for _, row in receita.iterrows():
+                    st.markdown(f"### 🍸 {drink}")
 
-                    ingrediente = str(row["ingrediente"])
-                    quantidade = float(row["quantidade"])
-                    unidade = row["unidade"]
+                    for _, row in receita.iterrows():
 
-                    st.write(f"• {ingrediente} - {quantidade} {unidade}")
+                        ingrediente = str(row["ingrediente"])
+                        quantidade = float(row["quantidade"])
+                        unidade = row["unidade"]
 
-                    custo = calcular_custo_ingrediente(
-                        ingrediente,
-                        quantidade,
-                        unidade
+                        st.write(f"• {ingrediente} - {quantidade} {unidade}")
+
+                        custo = calcular_custo_ingrediente(
+                            ingrediente,
+                            quantidade,
+                            unidade
+                        )
+
+                        custo_total += custo
+
+                with col2:
+
+                    st.metric(
+                        "Custo",
+                        f"R$ {custo_total:.2f}"
                     )
 
-                    custo_total += custo
+                with col3:
 
-            with col2:
+                    if st.button(
+                        "✏️",
+                        key=f"editar_{drink}"
+                    ):
 
-                st.metric(
-                    "Custo",
-                    f"R$ {custo_total:.2f}"
-                )
+                        dados = df[df["drink"] == drink]
 
-            with col3:
+                        st.session_state["drink_nome"] = drink
+                        st.session_state["ingredientes_temp"] = []
 
-                if st.button(
-                    "✏️",
-                    key=f"editar_{drink}"
-                ):
+                        for _, r in dados.iterrows():
 
-                    dados = df[df["drink"] == drink]
+                            st.session_state["ingredientes_temp"].append({
 
-                    st.session_state["drink_nome"] = drink
+                                "ingrediente": r["ingrediente"],
+                                "quantidade": r["quantidade"],
+                                "unidade": r["unidade"]
 
-                    st.session_state["ingredientes_temp"] = []
+                            })
 
-                    for _, r in dados.iterrows():
+                        st.success(
+                            f"Receita '{drink}' carregada para edição."
+                        )
 
-                        st.session_state["ingredientes_temp"].append({
+                        st.switch_page("app.py")
 
-                            "ingrediente": r["ingrediente"],
-                            "quantidade": r["quantidade"],
-                            "unidade": r["unidade"]
+                with col4:
 
-                        })
+                    if st.button(
+                        "🗑️",
+                        key=f"excluir_{drink}"
+                    ):
 
-                    st.success(
-                        f"Receita '{drink}' carregada para edição."
-                    )
+                        supabase.table("receitas")\
+                            .delete()\
+                            .eq("drink", drink)\
+                            .execute()
 
-                    st.rerun()
+                        st.success("Drink excluído com sucesso!")
 
-            with col4:
+                        st.rerun()
 
-                if st.button(
-                    "🗑️",
-                    key=f"excluir_{drink}"
-                ):
-
-                    supabase.table("receitas")\
-                        .delete()\
-                        .eq("drink", drink)\
-                        .execute()
-
-                    st.success("Drink excluído com sucesso!")
-
-                    st.rerun()
-
-            st.divider()
+                st.divider()
 
 elif menu == "Orçamentos":
 
