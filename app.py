@@ -1013,7 +1013,6 @@ elif menu == "Receitas":
     with aba_lista:
     
         df = carregar_tabela("receitas")
-    
         bebidas = carregar_tabela("precos_bebidas")
         insumos = carregar_tabela("precos_insumos")
     
@@ -1022,56 +1021,90 @@ elif menu == "Receitas":
     
         else:
     
-            df = df[df["drink"].notna()]
-    
-            drinks = df["drink"].unique()
-    
-            for drink in drinks:
+            for drink in sorted(df["drink"].dropna().unique()):
     
                 receita = df[df["drink"] == drink]
+    
                 custo_total = 0
     
-                col1, col2, col3 = st.columns([5,1,1])
+                col1, col2, col3, col4 = st.columns([6,2,1,1])
     
                 with col1:
     
-                    st.markdown(f"### 🍹 {drink}")
+                    st.markdown(f"### 🍸 {drink}")
     
                     for _, row in receita.iterrows():
     
-                        ingrediente = row["ingrediente"]
-                        quantidade = row["quantidade"]
+                        ingrediente = str(row["ingrediente"])
+                        quantidade = float(row["quantidade"])
                         unidade = row["unidade"]
     
-                        custo_unitario = 0
+                        st.write(f"• {ingrediente} - {quantidade} {unidade}")
     
-                        # Procura nas bebidas
                         item = bebidas[
-                            bebidas["nome"].astype(str).str.lower() == ingrediente.lower()
+                            bebidas["nome"].astype(str).str.lower().str.strip()
+                            ==
+                            ingrediente.lower().strip()
                         ]
     
-                        # Se não encontrou, procura nos insumos
                         if item.empty:
+    
                             item = insumos[
-                                insumos["nome"].astype(str).str.lower() == ingrediente.lower()
+                                insumos["nome"].astype(str).str.lower().str.strip()
+                                ==
+                                ingrediente.lower().strip()
                             ]
     
-                        # Se encontrou, pega o custo
                         if not item.empty:
-                            custo_unitario = float(item.iloc[0]["custo"])
     
-                        custo_total += custo_unitario
-    
-                        st.write(f"- {ingrediente} ({quantidade} {unidade})")
+                            if "custo" in item.columns:
+                                custo_total += float(item.iloc[0]["custo"])
     
                 with col2:
-                    st.markdown(f"### 💰\nR$ {custo_total:,.2f}")
+                    st.metric("Custo", f"R$ {custo_total:.2f}")
     
-                if st.button(
-                    "✏️",
-                    key=f"editar_{drink}"
-                ):
-                    st.write("CLIQUE FUNCIONOU")
+                with col3:
+    
+                    if st.button(
+                        "✏️",
+                        key=f"editar_{drink}"
+                    ):
+    
+                        dados = df[df["drink"] == drink]
+    
+                        st.session_state["drink_nome"] = drink
+    
+                        st.session_state["ingredientes_temp"] = []
+    
+                        for _, r in dados.iterrows():
+    
+                            st.session_state["ingredientes_temp"].append({
+    
+                                "ingrediente": r["ingrediente"],
+                                "quantidade": r["quantidade"],
+                                "unidade": r["unidade"]
+    
+                            })
+    
+                        st.rerun()
+    
+                with col4:
+    
+                    if st.button(
+                        "🗑️",
+                        key=f"excluir_{drink}"
+                    ):
+    
+                        supabase.table("receitas")\
+                            .delete()\
+                            .eq("drink", drink)\
+                            .execute()
+    
+                        st.success("Drink excluído!")
+    
+                        st.rerun()
+    
+                st.divider()
 
 elif menu == "Orçamentos":
 
