@@ -1067,15 +1067,11 @@ elif menu == "Receitas":
                 with col2:
                     st.markdown(f"### 💰\nR$ {custo_total:,.2f}")
     
-                with col3:
-    
-                    if st.button(
-                        "✏️",
-                        key=f"editar_{drink}"
-                    ):
-                        st.session_state["drink_edicao"] = drink
-    
-                st.divider()
+                if st.button(
+                    "✏️",
+                    key=f"editar_{drink}"
+                ):
+                    st.write("CLIQUE FUNCIONOU")
 
 elif menu == "Orçamentos":
 
