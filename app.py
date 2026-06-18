@@ -897,6 +897,35 @@ elif menu == "Receitas":
     # =========================
     with aba_cadastro:
 
+        # ===========================
+        # MODO EDIÇÃO
+        # ===========================
+        if "drink_edicao" in st.session_state:
+        
+            dados = carregar_tabela("receitas")
+        
+            receita = dados[
+                dados["drink"] == st.session_state["drink_edicao"]
+            ]
+        
+            if not receita.empty:
+        
+                st.session_state["drink_nome"] = st.session_state["drink_edicao"]
+        
+                st.session_state["ingredientes_temp"] = []
+        
+                for _, row in receita.iterrows():
+        
+                    st.session_state["ingredientes_temp"].append({
+                        "ingrediente": row["ingrediente"],
+                        "quantidade": row["quantidade"],
+                        "unidade": row["unidade"]
+                    })
+        
+                del st.session_state["drink_edicao"]
+        
+                st.rerun()
+        
         drink = st.text_input("Nome do drink", value=st.session_state["drink_nome"])
 
         col1, col2, col3, col4 = st.columns(4)
