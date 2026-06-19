@@ -1112,67 +1112,75 @@ elif menu == "Receitas":
     # EDIÇÃO DA RECEITA
     # ==========================================
     if "editar_receita" in st.session_state:
-
+    
         st.markdown("---")
         st.subheader(f"✏️ Editando: {st.session_state['editar_receita']}")
-
-        receita = df[
-            df["drink"] == st.session_state["editar_receita"]
-        ].reset_index(drop=True)
-
-        ingredientes = []
-
-        for _, r in receita.iterrows():
-
-            ingredientes.append({
-                "ingrediente": r["ingrediente"],
-                "quantidade": float(r["quantidade"]),
-                "unidade": r["unidade"]
-            })
-
-        editado = st.data_editor(
-            pd.DataFrame(ingredientes),
-            num_rows="dynamic",
-            use_container_width=True,
-            key="editor_receita"
+    
+        receita = (
+            df[df["drink"] == st.session_state["editar_receita"]]
+            [["ingrediente","quantidade","unidade"]]
+            .reset_index(drop=True)
         )
-
+    
+        editado = st.data_editor(
+    
+            receita,
+    
+            use_container_width=True,
+    
+            num_rows="dynamic",
+    
+            hide_index=True,
+    
+            key="editor_receita"
+    
+        )
+    
         col1, col2 = st.columns(2)
-
+    
         with col1:
-
+    
             if st.button("💾 Salvar alterações"):
-
+    
                 supabase.table("receitas")\
                     .delete()\
-                    .eq("drink", st.session_state["editar_receita"])\
+                    .eq(
+                        "drink",
+                        st.session_state["editar_receita"]
+                    )\
                     .execute()
-
+    
                 for _, linha in editado.iterrows():
-
+    
+                    if str(linha["ingrediente"]).strip() == "":
+                        continue
+    
                     supabase.table("receitas").insert({
-
+    
                         "drink": st.session_state["editar_receita"],
+    
                         "ingrediente": linha["ingrediente"],
+    
                         "quantidade": float(linha["quantidade"]),
+    
                         "unidade": linha["unidade"]
-
+    
                     }).execute()
-
+    
                 st.success("Receita atualizada!")
-
+    
                 del st.session_state["editar_receita"]
-
+    
                 st.rerun()
-
+    
         with col2:
-
+    
             if st.button("Cancelar"):
-
+    
                 del st.session_state["editar_receita"]
-
+    
                 st.rerun()
-
+            
 elif menu == "Orçamentos":
 
     if "orcamento_bebidas" not in st.session_state:
