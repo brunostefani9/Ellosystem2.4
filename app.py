@@ -1086,27 +1086,10 @@ elif menu == "Receitas":
                         "✏️",
                         key=f"editar_{drink}"
                     ):
-
-                        dados = df[df["drink"] == drink]
-
-                        st.session_state["drink_nome"] = drink
-                        st.session_state["ingredientes_temp"] = []
-
-                        for _, r in dados.iterrows():
-
-                            st.session_state["ingredientes_temp"].append({
-
-                                "ingrediente": r["ingrediente"],
-                                "quantidade": r["quantidade"],
-                                "unidade": r["unidade"]
-
-                            })
-
-                        st.success(
-                            f"Receita '{drink}' carregada para edição."
-                        )
-
-                        st.switch_page("app.py")
+                
+                        st.session_state["editar_receita"] = drink
+                
+                        st.rerun()
 
                 with col4:
 
@@ -1125,6 +1108,70 @@ elif menu == "Receitas":
                         st.rerun()
 
                 st.divider()
+    # ==========================================
+    # EDIÇÃO DA RECEITA
+    # ==========================================
+    if "editar_receita" in st.session_state:
+
+        st.markdown("---")
+        st.subheader(f"✏️ Editando: {st.session_state['editar_receita']}")
+
+        receita = df[
+            df["drink"] == st.session_state["editar_receita"]
+        ].reset_index(drop=True)
+
+        ingredientes = []
+
+        for _, r in receita.iterrows():
+
+            ingredientes.append({
+                "ingrediente": r["ingrediente"],
+                "quantidade": float(r["quantidade"]),
+                "unidade": r["unidade"]
+            })
+
+        editado = st.data_editor(
+            pd.DataFrame(ingredientes),
+            num_rows="dynamic",
+            use_container_width=True,
+            key="editor_receita"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            if st.button("💾 Salvar alterações"):
+
+                supabase.table("receitas")\
+                    .delete()\
+                    .eq("drink", st.session_state["editar_receita"])\
+                    .execute()
+
+                for _, linha in editado.iterrows():
+
+                    supabase.table("receitas").insert({
+
+                        "drink": st.session_state["editar_receita"],
+                        "ingrediente": linha["ingrediente"],
+                        "quantidade": float(linha["quantidade"]),
+                        "unidade": linha["unidade"]
+
+                    }).execute()
+
+                st.success("Receita atualizada!")
+
+                del st.session_state["editar_receita"]
+
+                st.rerun()
+
+        with col2:
+
+            if st.button("Cancelar"):
+
+                del st.session_state["editar_receita"]
+
+                st.rerun()
 
 elif menu == "Orçamentos":
 
