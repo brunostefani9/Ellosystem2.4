@@ -105,28 +105,25 @@ def definir_categoria_global(produto):
 
 def calcular_custo_ingrediente(ingrediente, quantidade, unidade):
 
-    bebidas = carregar_tabela("precos_bebidas")
-    insumos = carregar_tabela("precos_insumos")
-
     ingrediente = str(ingrediente).strip().lower()
 
-    # Procura primeiro nas bebidas
-    item = bebidas[
-        bebidas["nome"].astype(str).str.strip().str.lower() == ingrediente
+    item = df_bebidas_global[
+        df_bebidas_global["nome"].astype(str).str.strip().str.lower() == ingrediente
     ]
 
-    # Se não achar, procura nos insumos
     if item.empty:
-        item = insumos[
-            insumos["nome"].astype(str).str.strip().str.lower() == ingrediente
+        item = df_insumos_global[
+            df_insumos_global["nome"].astype(str).str.strip().str.lower() == ingrediente
         ]
 
     if item.empty:
         return 0
 
-    custo_unitario = float(item.iloc[0]["custo"])
+    return float(item.iloc[0]["custo"])
 
-    return custo_unitario
+# Carrega uma única vez
+df_bebidas_global = carregar_tabela("precos_bebidas")
+df_insumos_global = carregar_tabela("precos_insumos")
 
 # -------------------------
 # SIDEBAR
