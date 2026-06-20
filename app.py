@@ -2361,171 +2361,470 @@ elif menu == "Orçamentos":
 
 elif menu == "Cachês":
 
-    st.title("👥 Cálculo de Cachês")
+    st.title("👥 Gestão de Cachês")
 
-    # =========================
-    # SUB ABAS
-    # =========================
-    subaba = st.radio("Escolha a visão", ["Resumo", "Por pessoa", "Histórico"])
+    # =====================================
+    # SUBABAS
+    # =====================================
 
-    # =========================
-    # VALORES BASE (GLOBAL)
-    # =========================
-    st.subheader("💰 Valores base")
+    subaba = st.radio(
+        "Escolha a visão",
+        ["Resumo", "Por Pessoa", "Histórico"],
+        horizontal=True
+    )
+
+    st.divider()
+
+    # =====================================
+    # VALORES PADRÃO
+    # =====================================
+
+    st.subheader("⚙️ Configuração dos Cachês")
 
     col1, col2, col3 = st.columns(3)
 
-    valor_bartender = col1.number_input("Bartender", value=250.0)
-    valor_barback = col2.number_input("Barback", value=180.0)
-    valor_lider = col3.number_input("Líder", value=300.0)
+    valor_bartender = col1.number_input(
+        "🍸 Bartender",
+        min_value=0.0,
+        value=250.00,
+        step=10.0
+    )
 
-    limite_horas = st.number_input("Horas inclusas", value=7.0)
-    valor_hora_extra = st.number_input("💰 Hora extra", value=40.0)
+    valor_barback = col2.number_input(
+        "🧰 Barback",
+        min_value=0.0,
+        value=180.00,
+        step=10.0
+    )
 
-    # =========================
-    # 🔹 RESUMO
-    # =========================
+    valor_lider = col3.number_input(
+        "👑 Líder",
+        min_value=0.0,
+        value=300.00,
+        step=10.0
+    )
+
+    col1, col2 = st.columns(2)
+
+    limite_horas = col1.number_input(
+        "⏱ Horas inclusas",
+        min_value=1.0,
+        value=7.0,
+        step=0.5
+    )
+
+    valor_hora_extra = col2.number_input(
+        "💰 Valor Hora Extra",
+        min_value=0.0,
+        value=40.0,
+        step=5.0
+    )
+
+    st.divider()
+
+    # =====================================
+    # RESUMO
+    # =====================================
+
     if subaba == "Resumo":
 
-        st.subheader("Equipe")
+        st.subheader("📊 Simulação de Evento")
 
         col1, col2, col3 = st.columns(3)
 
-        qtd_bartenders = col1.number_input("🍸 Bartenders", min_value=0, value=2)
-        qtd_barbacks = col2.number_input("🧰 Barbacks", min_value=0, value=1)
-        qtd_lider = col3.number_input("👑 Líder", min_value=0, max_value=1, value=1)
-
-        st.subheader("Extras")
-
-        col1, col2 = st.columns(2)
-
-        qtd_carro = col1.number_input("🚗 Pessoas com carro", min_value=0, value=1)
-        valor_carro = col2.number_input("💰 Ajuda carro", value=100.0)
-
-        horas = st.number_input("⏱️ Horas totais", value=7.0)
-
-        total_base = (
-            qtd_bartenders * valor_bartender +
-            qtd_barbacks * valor_barback +
-            qtd_lider * valor_lider
+        qtd_bartenders = col1.number_input(
+            "Bartenders",
+            min_value=0,
+            value=2
         )
 
-        horas_extra = max(0, horas - limite_horas)
-        custo_horas_extra = horas_extra * valor_hora_extra * (
-            qtd_bartenders + qtd_barbacks + qtd_lider
+        qtd_barbacks = col2.number_input(
+            "Barbacks",
+            min_value=0,
+            value=1
         )
 
-        custo_carro = qtd_carro * valor_carro
-
-        total_final = total_base + custo_horas_extra + custo_carro
+        qtd_lideres = col3.number_input(
+            "Líderes",
+            min_value=0,
+            max_value=2,
+            value=1
+        )
 
         st.divider()
 
-        st.metric("👥 Base", f"R$ {total_base:,.2f}")
-        st.metric("⏱️ Extras", f"R$ {custo_horas_extra:,.2f}")
-        st.metric("🚗 Transporte", f"R$ {custo_carro:,.2f}")
-        st.metric("💸 Total", f"R$ {total_final:,.2f}")
+        col1, col2, col3 = st.columns(3)
+
+        horas_evento = col1.number_input(
+            "Horas do Evento",
+            min_value=1.0,
+            value=7.0,
+            step=0.5
+        )
+
+        pessoas_carro = col2.number_input(
+            "Pessoas com Carro",
+            min_value=0,
+            value=1
+        )
+
+        ajuda_carro = col3.number_input(
+            "Ajuda de Custo",
+            min_value=0.0,
+            value=100.0
+        )
+
+        total_base = (
+            (qtd_bartenders * valor_bartender)
+            + (qtd_barbacks * valor_barback)
+            + (qtd_lideres * valor_lider)
+        )
+
+        horas_extra = max(
+            0,
+            horas_evento - limite_horas
+        )
+
+        total_horas = (
+            horas_extra
+            * valor_hora_extra
+            * (
+                qtd_bartenders
+                + qtd_barbacks
+                + qtd_lideres
+            )
+        )
+
+        total_carro = pessoas_carro * ajuda_carro
+
+        total_final = (
+            total_base
+            + total_horas
+            + total_carro
+        )
+
+        st.divider()
+
+        c1, c2, c3, c4 = st.columns(4)
+
+        c1.metric(
+            "Base",
+            f"R$ {total_base:,.2f}"
+        )
+
+        c2.metric(
+            "Hora Extra",
+            f"R$ {total_horas:,.2f}"
+        )
+
+        c3.metric(
+            "Ajuda Custo",
+            f"R$ {total_carro:,.2f}"
+        )
+
+        c4.metric(
+            "TOTAL",
+            f"R$ {total_final:,.2f}"
+        )
+
+        st.success(
+            f"💰 Custo estimado do evento: R$ {total_final:,.2f}"
+        )
 
     # =========================
     # 🔹 POR PESSOA
     # =========================
-    elif subaba == "Por pessoa":
+    elif subaba == "Por Pessoa":
 
-        st.subheader("👤 Pagamento individual")
+    st.subheader("👤 Pagamento Individual")
 
-        evento_nome = st.text_input("Nome do evento")
+    evento_nome = st.text_input(
+        "Nome do Evento"
+    )
 
-        qtd_pessoas = st.number_input(
-            "Quantidade de pessoas",
-            min_value=1,
-            max_value=20,
-            value=3
+    qtd_pessoas = st.number_input(
+        "Quantidade de profissionais",
+        min_value=1,
+        max_value=30,
+        value=3
+    )
+
+    st.divider()
+
+    dados_pagamento = []
+    total_geral = 0
+
+    for i in range(qtd_pessoas):
+
+        st.markdown(f"### Profissional {i+1}")
+
+        col1, col2, col3 = st.columns(3)
+
+        nome = col1.text_input(
+            "Nome",
+            key=f"nome_{i}"
         )
 
-        total_geral = 0
-        dados_pagamento = []
+        funcao = col2.selectbox(
+            "Função",
+            [
+                "Bartender",
+                "Barback",
+                "Líder"
+            ],
+            key=f"funcao_{i}"
+        )
 
-        for i in range(qtd_pessoas):
+        horas = col3.number_input(
+            "Horas Trabalhadas",
+            min_value=1.0,
+            value=7.0,
+            step=0.5,
+            key=f"horas_{i}"
+        )
 
-            st.markdown(f"### 👤 Profissional {i+1}")
+        # Valor Base
 
-            col1, col2, col3 = st.columns(3)
+        if funcao == "Bartender":
+            valor_base = valor_bartender
 
-            nome = col1.text_input("Nome", key=f"nome_{i}")
+        elif funcao == "Barback":
+            valor_base = valor_barback
 
-            funcao = col2.selectbox(
-                "Função",
-                ["Bartender", "Barback", "Líder"],
-                key=f"funcao_{i}"
-            )
+        else:
+            valor_base = valor_lider
 
-            horas = col3.number_input(
-                "Horas",
-                value=7.0,
-                key=f"horas_{i}"
-            )
+        horas_extra = max(
+            0,
+            horas - limite_horas
+        )
 
-            if funcao == "Bartender":
-                valor_base = valor_bartender
-            elif funcao == "Barback":
-                valor_base = valor_barback
-            else:
-                valor_base = valor_lider
+        pagamento = valor_base + (
+            horas_extra * valor_hora_extra
+        )
 
-            horas_extra = max(0, horas - limite_horas)
-            pagamento = valor_base + (horas_extra * valor_hora_extra)
+        st.metric(
+            "Pagamento",
+            f"R$ {pagamento:,.2f}"
+        )
 
-            st.metric(
-                f"💰 {nome if nome else f'Pessoa {i+1}'}",
-                f"R$ {pagamento:,.2f}"
-            )
+        total_geral += pagamento
 
-            total_geral += pagamento
+        if nome.strip():
 
-            dados_pagamento.append((evento_nome, nome, funcao, pagamento))
+            dados_pagamento.append({
+
+                "nome": nome.strip(),
+
+                "funcao": funcao,
+
+                "valor": pagamento
+
+            })
 
         st.divider()
-        st.metric("💸 Total equipe", f"R$ {total_geral:,.2f}")
 
-        # SALVAR
-        if st.button("💾 Salvar pagamentos"):
+    st.metric(
+        "💰 Total da Equipe",
+        f"R$ {total_geral:,.2f}"
+    )
 
-            # 1. cria evento
-            
-            eveto_resp = supabase.table("eventos").insert({
-                "nome": evento_nome
-            }).execute()
-        
-            evento_id = evento_resp.data[0]["id"]
-        
-            # 2. salva cada pessoa
-            for dados in dados_pagamento:
-        
-                evento, nome, funcao, valor = dados
-        
-                supabase.table("pagamentos_equipe").insert({
-                    "evento_id": evento_id,
-                    "nome": nome,
-                    "funcao": funcao,
-                    "valor": valor
+    # ===========================================
+    # SALVAR
+    # ===========================================
+
+    if st.button(
+        "💾 Salvar Pagamentos",
+        use_container_width=True
+    ):
+
+        if not evento_nome.strip():
+
+            st.error(
+                "Informe o nome do evento."
+            )
+
+            st.stop()
+
+        if len(dados_pagamento) == 0:
+
+            st.error(
+                "Informe pelo menos um profissional."
+            )
+
+            st.stop()
+
+        try:
+
+            # Procura evento existente
+
+            consulta = supabase.table("eventos")\
+                .select("*")\
+                .eq("nome", evento_nome.strip())\
+                .execute()
+
+            if consulta.data:
+
+                evento_id = consulta.data[0]["id"]
+
+            else:
+
+                novo = supabase.table("eventos").insert({
+
+                    "nome": evento_nome.strip()
+
                 }).execute()
-        
-            st.success("✅ Pagamentos salvos no Supabase!")
-        
+
+                evento_id = novo.data[0]["id"]
+
+            # Salvar pagamentos
+
+            for pessoa in dados_pagamento:
+
+                supabase.table("pagamentos_equipe").insert({
+
+                    "evento_id": evento_id,
+
+                    "evento": evento_nome.strip(),
+
+                    "nome": pessoa["nome"],
+
+                    "funcao": pessoa["funcao"],
+
+                    "valor": pessoa["valor"]
+
+                }).execute()
+
+            st.success(
+                "✅ Pagamentos salvos com sucesso!"
+            )
+
+        except Exception as erro:
+
+            st.error(
+                f"Erro ao salvar: {erro}"
+            )
 
     # =========================
     # 🔹 HISTÓRICO
     # =========================
     elif subaba == "Histórico":
 
-        st.subheader("📊 Histórico de pagamentos")
+    st.subheader("📊 Histórico de Pagamentos")
 
-        df_pagamentos["evento"] = df_pagamentos["eventos"].apply(lambda x: x["nome"] if x else None)
+    df_pagamentos = carregar_tabela("pagamentos_equipe")
 
-        df_pagamentos = df_pagamentos.drop(columns=["eventos"])
-        
-        st.dataframe(df_pagamentos)
+    if df_pagamentos.empty:
 
+        st.info("Nenhum pagamento encontrado.")
+
+    else:
+
+        # ==========================
+        # Formata Data
+        # ==========================
+
+        if "created_at" in df_pagamentos.columns:
+
+            df_pagamentos["created_at"] = pd.to_datetime(
+                df_pagamentos["created_at"]
+            )
+
+        # ==========================
+        # FILTROS
+        # ==========================
+
+        col1, col2 = st.columns(2)
+
+        filtro_evento = col1.text_input(
+            "🔎 Pesquisar Evento"
+        )
+
+        filtro_nome = col2.text_input(
+            "👤 Pesquisar Profissional"
+        )
+
+        if filtro_evento:
+
+            df_pagamentos = df_pagamentos[
+                df_pagamentos["evento"]
+                .astype(str)
+                .str.contains(
+                    filtro_evento,
+                    case=False,
+                    na=False
+                )
+            ]
+
+        if filtro_nome:
+
+            df_pagamentos = df_pagamentos[
+                df_pagamentos["nome"]
+                .astype(str)
+                .str.contains(
+                    filtro_nome,
+                    case=False,
+                    na=False
+                )
+            ]
+
+        # ==========================
+        # ORDENAÇÃO
+        # ==========================
+
+        if "created_at" in df_pagamentos.columns:
+
+            df_pagamentos = df_pagamentos.sort_values(
+                by="created_at",
+                ascending=False
+            )
+
+            df_pagamentos["created_at"] = df_pagamentos[
+                "created_at"
+            ].dt.strftime("%d/%m/%Y %H:%M")
+
+        # ==========================
+        # TOTAL
+        # ==========================
+
+        total_pago = df_pagamentos["valor"].sum()
+
+        st.metric(
+            "💰 Total Pago",
+            f"R$ {total_pago:,.2f}"
+        )
+
+        st.divider()
+
+        # ==========================
+        # FORMATA VALOR
+        # ==========================
+
+        tabela = df_pagamentos.copy()
+
+        tabela["valor"] = tabela["valor"].apply(
+            lambda x: f"R$ {x:,.2f}"
+        )
+
+        colunas = [
+            "created_at",
+            "evento",
+            "nome",
+            "funcao",
+            "valor"
+        ]
+
+        colunas = [
+            c for c in colunas
+            if c in tabela.columns
+        ]
+
+        st.dataframe(
+            tabela[colunas],
+            use_container_width=True,
+            hide_index=True
+        )
+            
 elif menu == "Vendas":
 
     st.title("📊 Vendas")
