@@ -2379,54 +2379,56 @@ elif menu == "Cachês":
     # VALORES PADRÃO
     # =====================================
 
-    st.subheader("⚙️ Configuração dos Cachês")
-
-    col1, col2, col3 = st.columns(3)
-
-    valor_bartender = col1.number_input(
-        "🍸 Bartender",
-        min_value=0.0,
-        value=250.00,
-        step=10.0
-    )
-
-    valor_barback = col2.number_input(
-        "🧰 Barback",
-        min_value=0.0,
-        value=180.00,
-        step=10.0
-    )
-
-    valor_lider = col3.number_input(
-        "👑 Líder",
-        min_value=0.0,
-        value=300.00,
-        step=10.0
-    )
-
-    col1, col2 = st.columns(2)
-
-    limite_horas = col1.number_input(
-        "⏱ Horas inclusas",
-        min_value=1.0,
-        value=7.0,
-        step=0.5
-    )
-
-    valor_hora_extra = col2.number_input(
-        "💰 Valor Hora Extra",
-        min_value=0.0,
-        value=40.0,
-        step=5.0
-    )
-
-    st.divider()
+    if subaba in ["Resumo", "Por Pessoa"]:
+        
+        st.subheader("⚙️ Configuração dos Cachês")
+    
+        col1, col2, col3 = st.columns(3)
+    
+        valor_bartender = col1.number_input(
+            "🍸 Bartender",
+            min_value=0.0,
+            value=250.00,
+            step=10.0
+        )
+    
+        valor_barback = col2.number_input(
+            "🧰 Barback",
+            min_value=0.0,
+            value=180.00,
+            step=10.0
+        )
+    
+        valor_lider = col3.number_input(
+            "👑 Líder",
+            min_value=0.0,
+            value=300.00,
+            step=10.0
+        )
+    
+        col1, col2 = st.columns(2)
+    
+        limite_horas = col1.number_input(
+            "⏱ Horas inclusas",
+            min_value=1.0,
+            value=7.0,
+            step=0.5
+        )
+    
+        valor_hora_extra = col2.number_input(
+            "💰 Valor Hora Extra",
+            min_value=0.0,
+            value=40.0,
+            step=5.0
+        )
+    
+        st.divider()
 
     # =====================================
     # RESUMO
     # =====================================
 
-    if subaba == "Resumo":
+    if subaba in ["Resumo", "Por Pessoa"]:
 
         st.subheader("📊 Simulação de Evento")
 
