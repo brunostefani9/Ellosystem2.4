@@ -1869,8 +1869,8 @@ elif menu == "Orçamentos":
                 st.divider()
                 
                 st.subheader("📊 Resumo Financeiro")
-                
-                col1, col2, col3 = st.columns(3)
+
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
                     st.metric(
@@ -1885,6 +1885,12 @@ elif menu == "Orçamentos":
                     )
                 
                 with col3:
+                    st.metric(
+                        "💵 Lucro",
+                        f"R$ {lucro:,.2f}"
+                    )
+                
+                with col4:
                     st.metric(
                         "🤝 Comissão",
                         f"R$ {valor_comissao:,.2f}"
@@ -1927,9 +1933,17 @@ elif menu == "Orçamentos":
                         f"✅ Lucro estimado: R$ {lucro:,.2f}"
                     )
                 
-                st.info(
-                    f"📊 Margem real: {margem_real:.1f}%"
-                )
+                if margem_real >= 35:
+                    st.info(f"📈 Margem de lucro: **{margem_real:.1f}%** | 🟢 Excelente")
+                
+                elif margem_real >= 25:
+                    st.info(f"📈 Margem de lucro: **{margem_real:.1f}%** | ✅ Saudável")
+                
+                elif margem_real >= 15:
+                    st.info(f"📈 Margem de lucro: **{margem_real:.1f}%** | 🟡 Atenção")
+                
+                else:
+                    st.info(f"📈 Margem de lucro: **{margem_real:.1f}%** | 🔴 Muito baixa")
                 
                 # =========================
                 # 💾 SALVAR ORÇAMENTO (RESTAURADO)
