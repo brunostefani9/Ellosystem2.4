@@ -2536,174 +2536,174 @@ elif menu == "Cachês":
     # =========================
     elif subaba == "Por Pessoa":
 
-    st.subheader("👤 Pagamento Individual")
-
-    evento_nome = st.text_input(
-        "Nome do Evento"
-    )
-
-    qtd_pessoas = st.number_input(
-        "Quantidade de profissionais",
-        min_value=1,
-        max_value=30,
-        value=3
-    )
-
-    st.divider()
-
-    dados_pagamento = []
-    total_geral = 0
-
-    for i in range(qtd_pessoas):
-
-        st.markdown(f"### Profissional {i+1}")
-
-        col1, col2, col3 = st.columns(3)
-
-        nome = col1.text_input(
-            "Nome",
-            key=f"nome_{i}"
+        st.subheader("👤 Pagamento Individual")
+    
+        evento_nome = st.text_input(
+            "Nome do Evento"
         )
-
-        funcao = col2.selectbox(
-            "Função",
-            [
-                "Bartender",
-                "Barback",
-                "Líder"
-            ],
-            key=f"funcao_{i}"
+    
+        qtd_pessoas = st.number_input(
+            "Quantidade de profissionais",
+            min_value=1,
+            max_value=30,
+            value=3
         )
-
-        horas = col3.number_input(
-            "Horas Trabalhadas",
-            min_value=1.0,
-            value=7.0,
-            step=0.5,
-            key=f"horas_{i}"
-        )
-
-        # Valor Base
-
-        if funcao == "Bartender":
-            valor_base = valor_bartender
-
-        elif funcao == "Barback":
-            valor_base = valor_barback
-
-        else:
-            valor_base = valor_lider
-
-        horas_extra = max(
-            0,
-            horas - limite_horas
-        )
-
-        pagamento = valor_base + (
-            horas_extra * valor_hora_extra
-        )
-
-        st.metric(
-            "Pagamento",
-            f"R$ {pagamento:,.2f}"
-        )
-
-        total_geral += pagamento
-
-        if nome.strip():
-
-            dados_pagamento.append({
-
-                "nome": nome.strip(),
-
-                "funcao": funcao,
-
-                "valor": pagamento
-
-            })
-
+    
         st.divider()
-
-    st.metric(
-        "💰 Total da Equipe",
-        f"R$ {total_geral:,.2f}"
-    )
-
-    # ===========================================
-    # SALVAR
-    # ===========================================
-
-    if st.button(
-        "💾 Salvar Pagamentos",
-        use_container_width=True
-    ):
-
-        if not evento_nome.strip():
-
-            st.error(
-                "Informe o nome do evento."
+    
+        dados_pagamento = []
+        total_geral = 0
+    
+        for i in range(qtd_pessoas):
+    
+            st.markdown(f"### Profissional {i+1}")
+    
+            col1, col2, col3 = st.columns(3)
+    
+            nome = col1.text_input(
+                "Nome",
+                key=f"nome_{i}"
             )
-
-            st.stop()
-
-        if len(dados_pagamento) == 0:
-
-            st.error(
-                "Informe pelo menos um profissional."
+    
+            funcao = col2.selectbox(
+                "Função",
+                [
+                    "Bartender",
+                    "Barback",
+                    "Líder"
+                ],
+                key=f"funcao_{i}"
             )
-
-            st.stop()
-
-        try:
-
-            # Procura evento existente
-
-            consulta = supabase.table("eventos")\
-                .select("*")\
-                .eq("nome", evento_nome.strip())\
-                .execute()
-
-            if consulta.data:
-
-                evento_id = consulta.data[0]["id"]
-
+    
+            horas = col3.number_input(
+                "Horas Trabalhadas",
+                min_value=1.0,
+                value=7.0,
+                step=0.5,
+                key=f"horas_{i}"
+            )
+    
+            # Valor Base
+    
+            if funcao == "Bartender":
+                valor_base = valor_bartender
+    
+            elif funcao == "Barback":
+                valor_base = valor_barback
+    
             else:
-
-                novo = supabase.table("eventos").insert({
-
-                    "nome": evento_nome.strip()
-
-                }).execute()
-
-                evento_id = novo.data[0]["id"]
-
-            # Salvar pagamentos
-
-            for pessoa in dados_pagamento:
-
-                supabase.table("pagamentos_equipe").insert({
-
-                    "evento_id": evento_id,
-
-                    "evento": evento_nome.strip(),
-
-                    "nome": pessoa["nome"],
-
-                    "funcao": pessoa["funcao"],
-
-                    "valor": pessoa["valor"]
-
-                }).execute()
-
-            st.success(
-                "✅ Pagamentos salvos com sucesso!"
+                valor_base = valor_lider
+    
+            horas_extra = max(
+                0,
+                horas - limite_horas
             )
-
-        except Exception as erro:
-
-            st.error(
-                f"Erro ao salvar: {erro}"
+    
+            pagamento = valor_base + (
+                horas_extra * valor_hora_extra
             )
+    
+            st.metric(
+                "Pagamento",
+                f"R$ {pagamento:,.2f}"
+            )
+    
+            total_geral += pagamento
+    
+            if nome.strip():
+    
+                dados_pagamento.append({
+    
+                    "nome": nome.strip(),
+    
+                    "funcao": funcao,
+    
+                    "valor": pagamento
+    
+                })
+    
+            st.divider()
+    
+        st.metric(
+            "💰 Total da Equipe",
+            f"R$ {total_geral:,.2f}"
+        )
+    
+        # ===========================================
+        # SALVAR
+        # ===========================================
+    
+        if st.button(
+            "💾 Salvar Pagamentos",
+            use_container_width=True
+        ):
+    
+            if not evento_nome.strip():
+    
+                st.error(
+                    "Informe o nome do evento."
+                )
+    
+                st.stop()
+    
+            if len(dados_pagamento) == 0:
+    
+                st.error(
+                    "Informe pelo menos um profissional."
+                )
+    
+                st.stop()
+    
+            try:
+    
+                # Procura evento existente
+    
+                consulta = supabase.table("eventos")\
+                    .select("*")\
+                    .eq("nome", evento_nome.strip())\
+                    .execute()
+    
+                if consulta.data:
+    
+                    evento_id = consulta.data[0]["id"]
+    
+                else:
+    
+                    novo = supabase.table("eventos").insert({
+    
+                        "nome": evento_nome.strip()
+    
+                    }).execute()
+    
+                    evento_id = novo.data[0]["id"]
+    
+                # Salvar pagamentos
+    
+                for pessoa in dados_pagamento:
+    
+                    supabase.table("pagamentos_equipe").insert({
+    
+                        "evento_id": evento_id,
+    
+                        "evento": evento_nome.strip(),
+    
+                        "nome": pessoa["nome"],
+    
+                        "funcao": pessoa["funcao"],
+    
+                        "valor": pessoa["valor"]
+    
+                    }).execute()
+    
+                st.success(
+                    "✅ Pagamentos salvos com sucesso!"
+                )
+    
+            except Exception as erro:
+    
+                st.error(
+                    f"Erro ao salvar: {erro}"
+                )
 
     # =========================
     # 🔹 HISTÓRICO
