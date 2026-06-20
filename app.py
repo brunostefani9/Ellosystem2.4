@@ -2369,7 +2369,7 @@ elif menu == "Cachês":
 
     subaba = st.radio(
         "Escolha a visão",
-        ["Resumo", "Por Pessoa", "Histórico"],
+        ["Resumo", "Por Pessoa", "Histórico", "Consolidado"],
         horizontal=True
     )
 
@@ -2821,6 +2821,159 @@ elif menu == "Cachês":
     
             st.dataframe(
                 tabela[colunas],
+                use_container_width=True,
+                hide_index=True
+            )
+
+
+    # =========================
+    # 🔹 CONSOLIDADO
+    # =========================
+    elif subaba == "Consolidado":
+    
+        st.subheader("📈 Consolidado de Cachês")
+    
+        df_pagamentos = carregar_tabela("pagamentos_equipe")
+    
+        if df_pagamentos.empty:
+            st.info("Nenhum pagamento encontrado.")
+    
+        else:
+    
+            # ======================
+            # Indicadores
+            # ======================
+    
+            total_pago = df_pagamentos["valor"].sum()
+    
+            total_profissionais = df_pagamentos["nome"].nunique()
+    
+            total_eventos = df_pagamentos["evento"].nunique()
+    
+            media_evento = (
+                total_pago / total_eventos
+                if total_eventos > 0 else 0
+            )
+    
+            c1, c2, c3, c4 = st.columns(4)
+    
+            c1.metric(
+                "💰 Total Pago",
+                f"R$ {total_pago:,.2f}"
+            )
+    
+            c2.metric(
+                "👥 Profissionais",
+                total_profissionais
+            )
+    
+            c3.metric(
+                "🎉 Eventos",
+                total_eventos
+            )
+    
+            c4.metric(
+                "📊 Média / Evento",
+                f"R$ {media_evento:,.2f}"
+            )
+    
+            st.divider()
+    
+            # ======================
+            # Escolha do profissional
+            # ======================
+    
+            profissionais = sorted(
+                df_pagamentos["nome"].dropna().unique()
+            )
+    
+            profissional = st.selectbox(
+                "👤 Selecione o profissional",
+                ["Todos"] + profissionais
+            )
+    
+            if profissional != "Todos":
+    
+                df_prof = df_pagamentos[
+                    df_pagamentos["nome"] == profissional
+                ]
+    
+                st.divider()
+    
+                c1, c2, c3, c4 = st.columns(4)
+    
+                c1.metric(
+                    "Eventos Trabalhados",
+                    df_prof["evento"].nunique()
+                )
+    
+                c2.metric(
+                    "Total Recebido",
+                    f"R$ {df_prof['valor'].sum():,.2f}"
+                )
+    
+                c3.metric(
+                    "Maior Cachê",
+                    f"R$ {df_prof['valor'].max():,.2f}"
+                )
+    
+                c4.metric(
+                    "Média",
+                    f"R$ {df_prof['valor'].mean():,.2f}"
+                )
+    
+                st.divider()
+    
+                st.write("### Histórico do profissional")
+    
+                tabela = df_prof.copy()
+    
+                if "created_at" in tabela.columns:
+    
+                    tabela["created_at"] = pd.to_datetime(
+                        tabela["created_at"]
+                    ).dt.strftime("%d/%m/%Y")
+    
+                tabela["valor"] = tabela["valor"].apply(
+                    lambda x: f"R$ {x:,.2f}"
+                )
+    
+                st.dataframe(
+                    tabela[
+                        [
+                            "created_at",
+                            "evento",
+                            "funcao",
+                            "valor"
+                        ]
+                    ],
+                    use_container_width=True,
+                    hide_index=True
+                )
+    
+            st.divider()
+    
+            st.subheader("🏆 Ranking de Profissionais")
+    
+            ranking = (
+                df_pagamentos
+                .groupby("nome", as_index=False)
+                .agg(
+                    Eventos=("evento", "nunique"),
+                    Total=("valor", "sum")
+                )
+                .sort_values(
+                    "Total",
+                    ascending=False
+                )
+            )
+    
+            ranking["Total"] = ranking["Total"].apply(
+                lambda x: f"R$ {x:,.2f}"
+            )
+    
+            st.dataframe(
+                ranking,
                 use_container_width=True,
                 hide_index=True
             )
