@@ -1726,6 +1726,13 @@ elif menu == "Orçamentos":
                     custo_caches +
                     custo_outros
                 )
+
+                st.metric(
+                    "💸 Total dos Custos Extras",
+                    f"R$ {custo_extras:,.2f}"
+                )
+                
+                st.divider()
                                 
                 # =========================
                 # 📦 PACOTES / SERVIÇOS ADICIONAIS
@@ -1776,8 +1783,6 @@ elif menu == "Orçamentos":
                 st.divider()
                 
                 st.metric("💰 Custo Total do Evento (Bruto)", f"R$ {custo_total:,.2f}")
-                st.markdown(f"### 💸 Extras: R$ {custo_extras:,.2f}")
-                
                 
                 # =========================
                 # MARGEM
