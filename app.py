@@ -2710,120 +2710,120 @@ elif menu == "Cachês":
     # =========================
     elif subaba == "Histórico":
 
-    st.subheader("📊 Histórico de Pagamentos")
-
-    df_pagamentos = carregar_tabela("pagamentos_equipe")
-
-    if df_pagamentos.empty:
-
-        st.info("Nenhum pagamento encontrado.")
-
-    else:
-
-        # ==========================
-        # Formata Data
-        # ==========================
-
-        if "created_at" in df_pagamentos.columns:
-
-            df_pagamentos["created_at"] = pd.to_datetime(
-                df_pagamentos["created_at"]
-            )
-
-        # ==========================
-        # FILTROS
-        # ==========================
-
-        col1, col2 = st.columns(2)
-
-        filtro_evento = col1.text_input(
-            "🔎 Pesquisar Evento"
-        )
-
-        filtro_nome = col2.text_input(
-            "👤 Pesquisar Profissional"
-        )
-
-        if filtro_evento:
-
-            df_pagamentos = df_pagamentos[
-                df_pagamentos["evento"]
-                .astype(str)
-                .str.contains(
-                    filtro_evento,
-                    case=False,
-                    na=False
+        st.subheader("📊 Histórico de Pagamentos")
+    
+        df_pagamentos = carregar_tabela("pagamentos_equipe")
+    
+        if df_pagamentos.empty:
+    
+            st.info("Nenhum pagamento encontrado.")
+    
+        else:
+    
+            # ==========================
+            # Formata Data
+            # ==========================
+    
+            if "created_at" in df_pagamentos.columns:
+    
+                df_pagamentos["created_at"] = pd.to_datetime(
+                    df_pagamentos["created_at"]
                 )
-            ]
-
-        if filtro_nome:
-
-            df_pagamentos = df_pagamentos[
-                df_pagamentos["nome"]
-                .astype(str)
-                .str.contains(
-                    filtro_nome,
-                    case=False,
-                    na=False
-                )
-            ]
-
-        # ==========================
-        # ORDENAÇÃO
-        # ==========================
-
-        if "created_at" in df_pagamentos.columns:
-
-            df_pagamentos = df_pagamentos.sort_values(
-                by="created_at",
-                ascending=False
+    
+            # ==========================
+            # FILTROS
+            # ==========================
+    
+            col1, col2 = st.columns(2)
+    
+            filtro_evento = col1.text_input(
+                "🔎 Pesquisar Evento"
             )
-
-            df_pagamentos["created_at"] = df_pagamentos[
-                "created_at"
-            ].dt.strftime("%d/%m/%Y %H:%M")
-
-        # ==========================
-        # TOTAL
-        # ==========================
-
-        total_pago = df_pagamentos["valor"].sum()
-
-        st.metric(
-            "💰 Total Pago",
-            f"R$ {total_pago:,.2f}"
-        )
-
-        st.divider()
-
-        # ==========================
-        # FORMATA VALOR
-        # ==========================
-
-        tabela = df_pagamentos.copy()
-
-        tabela["valor"] = tabela["valor"].apply(
-            lambda x: f"R$ {x:,.2f}"
-        )
-
-        colunas = [
-            "created_at",
-            "evento",
-            "nome",
-            "funcao",
-            "valor"
-        ]
-
-        colunas = [
-            c for c in colunas
-            if c in tabela.columns
-        ]
-
-        st.dataframe(
-            tabela[colunas],
-            use_container_width=True,
-            hide_index=True
-        )
+    
+            filtro_nome = col2.text_input(
+                "👤 Pesquisar Profissional"
+            )
+    
+            if filtro_evento:
+    
+                df_pagamentos = df_pagamentos[
+                    df_pagamentos["evento"]
+                    .astype(str)
+                    .str.contains(
+                        filtro_evento,
+                        case=False,
+                        na=False
+                    )
+                ]
+    
+            if filtro_nome:
+    
+                df_pagamentos = df_pagamentos[
+                    df_pagamentos["nome"]
+                    .astype(str)
+                    .str.contains(
+                        filtro_nome,
+                        case=False,
+                        na=False
+                    )
+                ]
+    
+            # ==========================
+            # ORDENAÇÃO
+            # ==========================
+    
+            if "created_at" in df_pagamentos.columns:
+    
+                df_pagamentos = df_pagamentos.sort_values(
+                    by="created_at",
+                    ascending=False
+                )
+    
+                df_pagamentos["created_at"] = df_pagamentos[
+                    "created_at"
+                ].dt.strftime("%d/%m/%Y %H:%M")
+    
+            # ==========================
+            # TOTAL
+            # ==========================
+    
+            total_pago = df_pagamentos["valor"].sum()
+    
+            st.metric(
+                "💰 Total Pago",
+                f"R$ {total_pago:,.2f}"
+            )
+    
+            st.divider()
+    
+            # ==========================
+            # FORMATA VALOR
+            # ==========================
+    
+            tabela = df_pagamentos.copy()
+    
+            tabela["valor"] = tabela["valor"].apply(
+                lambda x: f"R$ {x:,.2f}"
+            )
+    
+            colunas = [
+                "created_at",
+                "evento",
+                "nome",
+                "funcao",
+                "valor"
+            ]
+    
+            colunas = [
+                c for c in colunas
+                if c in tabela.columns
+            ]
+    
+            st.dataframe(
+                tabela[colunas],
+                use_container_width=True,
+                hide_index=True
+            )
             
 elif menu == "Vendas":
 
