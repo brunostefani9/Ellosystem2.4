@@ -2392,21 +2392,21 @@ elif menu == "Orçamentos":
         # ABA 2 - PENDENTES
         # =========================
         with tab2:
-    
+
             st.subheader("📋 Orçamentos Pendentes")
-        
+
             df_eventos = pd.DataFrame(
                 supabase.table("eventos")
                 .select("*")
                 .eq("status", "pendente")
                 .execute().data or []
             )
-        
+
             if df_eventos.empty:
                 st.info("Nenhum orçamento pendente")
             else:
                 for _, row in df_eventos.iterrows():
-        
+
                     icone = "🍸" if row.get("modalidade") == "Bar Completo" else "👷"
 
                     st.write(
@@ -2415,25 +2415,24 @@ elif menu == "Orçamentos":
                         f"📅 {row['data']} | "
                         f"📍 {row['cidade']}"
                     )
-        
+
                     # =========================
                     # CONTROLE DE ABERTURA
                     # =========================
                     if f"abrir_{row['id']}" not in st.session_state:
                         st.session_state[f"abrir_{row['id']}"] = False
-        
+
                     # =========================
                     # BOTÃO CHECKLIST
                     # =========================
                     if st.button(f"📋 Checklist {row['id']}", key=f"check_{row['id']}"):
                         st.session_state[f"abrir_{row['id']}"] = True
-        
+
                     # =========================
                     # CHECKLIST
                     # =========================
                     if st.session_state[f"abrir_{row['id']}"]:
 
-                        modalidade = row.get("modalidade", "Bar Completo")
                         itens = pd.DataFrame(
                             supabase.table("evento_itens")
                             .select("*")
@@ -2441,197 +2440,186 @@ elif menu == "Orçamentos":
                             .execute().data or []
                         )
 
-                        
                         modalidade = row.get("modalidade", "Bar Completo")
-                        
+
                         st.subheader("📋 Checklist do Evento")
                         st.info(f"Modalidade: {modalidade}")
-                    
+
                         # =========================
                         # INFORMAÇÕES DO EVENTO
                         # =========================        
-                            st.markdown(f"""
-                            ### 📍 Informações do Evento
-                        
-                            **👤 Cliente:** {row['cliente']}  
-                            📞 {row['telefone']}  
-                        
-                            📅 {row['data']}  
-                            📍 {row['cidade']} - {row['endereco']}  
-                        
-                            🎉 Tipo: {row['tipo_evento']}  
-                        
-                            🕒 Chegada equipe: {row['hora_chegada']}  
-                            🍸 Início serviço: {row['hora_inicio']}  
-                            👥 Convidados chegam: {row['hora_convidados']}  
-                        
-                            👥 Nº convidados: {row['convidados']}  
-                        
-                            💰 Valor: R$ {row['venda']:,.2f}
-                            """)
-                            
-                            # =========================
-                            # 👥 EQUIPE (NOVO)
-                            # =========================
-                            st.markdown("### 👥 Equipe")
-                        
-                            if "equipe" in row and row["equipe"]:
-                                nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
-                                
-                                for nome in nomes:
-                                    st.write(f"✔ {nome}")
-                            else:
-                                st.write("Sem equipe definida")
-                        
-                            # =========================
-                            # ITENS DO EVENTO
-                            # =========================
-                            if itens.empty:
-                                st.warning("Nenhum item encontrado")
-                            else:
-                                df_checklist = itens.copy()
-                        
-                                # =========================
-                                # CATEGORIA INTELIGENTE
-                                # =========================
-        
-                                def definir_categoria(produto):
-            
-                                    produto = produto.lower()
-            
-                                    if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça"]):
-                                        return "Bebidas"
-            
-                                    elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango"]):
-                                        return "Frutas"
-            
-                                    elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine"]):
-                                        return "Insumos"
-            
-                                    else:
-                                        return "Outros"
-            
-                                df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria_global)
-            
-                                # =========================
-                                # COLUNAS OPERACIONAIS
-                                # =========================
-                                df_checklist["Início"] = ""
-                                df_checklist["Fim"] = ""
-            
-                                # =========================
-                                # EDITOR
-                                # =========================
-                                df_editado = st.data_editor(
-                                    df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]],
-                                    num_rows="dynamic",
-                                    use_container_width=True,
-                                    key=f"editor_{row['id']}"
-                                )
-            
-                                # =========================
-                                # SALVAR EDIÇÃO
-                                # =========================
-                                if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
-            
-                                    # deletar itens antigos
-                                    supabase.table("evento_itens")\
-                                        .delete()\
-                                        .eq("evento_id", row["id"])\
-                                        .execute()
-                                    
-                                    # inserir novos
-                                    for _, item in df_editado.iterrows():
-                                        supabase.table("evento_itens").insert({
-                                            "evento_id": row["id"],
-                                            "produto": item["produto"],
-                                            "quantidade": item["quantidade"],
-                                            "unidade": item.get("unidade", "un"),
-                                            "categoria": item["Categoria"]
-                                        }).execute()
-                                    st.success("Checklist atualizado!")
-                        else:
+                        st.markdown(f"""
+                        ### 📍 Informações do Evento
 
-                            st.markdown(f"""
-                            ### 📍 Informações do Evento
-                    
-                            **👤 Cliente:** {row['cliente']}
-                    
-                            📞 {row['telefone']}
-                    
-                            📅 {row['data']}
-                    
-                            📍 {row['cidade']} - {row['endereco']}
-                    
-                            🎉 Tipo: {row['tipo_evento']}
-                    
-                            🕒 Chegada equipe: {row['hora_chegada']}
-                    
-                            👥 Início: {row['hora_inicio']}
-                            """)
-                    
-                            st.markdown("### 👥 Equipe")
-                    
-                            if not itens.empty:
-                    
-                                equipe = itens[itens["categoria"] == "Equipe"]
-                    
-                                if not equipe.empty:
-                                    for _, item in equipe.iterrows():
-                                        st.write(f"✔ {item['produto']}")
-                    
-                                locacoes = itens[itens["categoria"] == "Locação"]
-                    
-                                if not locacoes.empty:
-                                    st.markdown("### 🥂 Locações")
-                                    st.dataframe(
-                                        locacoes[["produto", "quantidade"]]
-                                        .rename(columns={
-                                            "produto": "Item",
-                                            "quantidade": "Valor"
-                                        }),
-                                        use_container_width=True
-                                    )
-                    
-                                custos = itens[itens["categoria"] == "Custos"]
-                    
-                                if not custos.empty:
-                                    st.markdown("### 💸 Custos")
-                                    st.dataframe(
-                                        custos[["produto", "quantidade"]]
-                                        .rename(columns={
-                                            "produto": "Item",
-                                            "quantidade": "Valor"
-                                        }),
-                                        use_container_width=True
-                                    )
-                    
+                        **👤 Cliente:** {row['cliente']}  
+                        📞 {row['telefone']}  
+
+                        📅 {row['data']}  
+                        📍 {row['cidade']} - {row['endereco']}  
+
+                        🎉 Tipo: {row['tipo_evento']}  
+
+                        🕒 Chegada equipe: {row['hora_chegada']}  
+                        🍸 Início serviço: {row['hora_inicio']}  
+                        👥 Convidados chegam: {row['hora_convidados']}  
+
+                        👥 Nº convidados: {row['convidados']}  
+
+                        💰 Valor: R$ {row['venda']:,.2f}
+                        """)
+
+                        # =========================
+                        # 👥 EQUIPE (NOVO)
+                        # =========================
+                        st.markdown("### 👥 Equipe")
+
+                        if "equipe" in row and row["equipe"]:
+                            nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
+
+                            for nome in nomes:
+                                st.write(f"✔ {nome}")
+                        else:
+                            st.write("Sem equipe definida")
+
+                        # =========================
+                        # ITENS DO EVENTO
+                        # =========================
+                        if itens.empty:
+                            st.warning("Nenhum item encontrado")
+                        else:
+                            df_checklist = itens.copy()
+
+                        # =========================
+                        # CATEGORIA INTELIGENTE
+                        # =========================
+                        def definir_categoria(produto):
+                            produto = produto.lower()
+                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça"]):
+                                return "Bebidas"
+                            elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango"]):
+                                return "Frutas"
+                            elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine"]):
+                                return "Insumos"
                             else:
-                                st.warning("Nenhum item encontrado")
-        
+                                return "Outros"
+
+                        # Alterado para chamar a função local corretamente
+                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
+
+                        # =========================
+                        # COLUNAS OPERACIONAIS
+                        # =========================
+                        df_checklist["Início"] = ""
+                        df_checklist["Fim"] = ""
+
+                        # =========================
+                        # EDITOR
+                        # =========================
+                        df_editado = st.data_editor(
+                            df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]],
+                            num_rows="dynamic",
+                            use_container_width=True,
+                            key=f"editor_{row['id']}"
+                        )
+
+                        # =========================
+                        # SALVAR EDIÇÃO
+                        # =========================
+                        if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
+
+                            # deletar itens antigos
+                            supabase.table("evento_itens")\
+                                .delete()\
+                                .eq("evento_id", row["id"])\
+                                .execute()
+
+                            # inserir novos
+                            for _, item in df_editado.iterrows():
+                                supabase.table("evento_itens").insert({
+                                    "evento_id": row["id"],
+                                    "produto": item["produto"],
+                                    "quantidade": item["quantidade"],
+                                    "unidade": item.get("unidade", "un"),
+                                    "categoria": item["Categoria"]
+                                }).execute()
+                            st.success("Checklist updated!")
+                    else:
+                        # Este bloco else agora responde corretamente ao 'if st.session_state[...]'
+                        st.markdown(f"""
+                        ### 📍 Informações do Evento
+
+                        **👤 Cliente:** {row['cliente']}
+
+                        📞 {row['telefone']}
+
+                        📅 {row['data']}
+
+                        📍 {row['cidade']} - {row['endereco']}
+
+                        🎉 Tipo: {row['tipo_evento']}
+
+                        🕒 Chegada equipe: {row['hora_chegada']}
+
+                        👥 Início: {row['hora_inicio']}
+                        """)
+
+                        st.markdown("### 👥 Equipe")
+
+                        if not itens.empty:
+                            equipe = itens[itens["categoria"] == "Equipe"]
+                            if not equipe.empty:
+                                for _, item in equipe.iterrows():
+                                    st.write(f"✔ {item['produto']}")
+
+                            locacoes = itens[itens["categoria"] == "Locação"]
+                            if not locacoes.empty:
+                                st.markdown("### 🥂 Locações")
+                                st.dataframe(
+                                    locacoes[["produto", "quantidade"]]
+                                    .rename(columns={
+                                        "produto": "Item",
+                                        "quantidade": "Valor"
+                                    }),
+                                    use_container_width=True
+                                )
+
+                            custos = itens[itens["categoria"] == "Custos"]
+                            if not custos.empty:
+                                st.markdown("### 💸 Custos")
+                                st.dataframe(
+                                    custos[["produto", "quantidade"]]
+                                    .rename(columns={
+                                        "produto": "Item",
+                                        "quantidade": "Valor"
+                                    }),
+                                    use_container_width=True
+                                )
+                        else:
+                            st.warning("Nenhum item encontrado")
+
                     # =========================
                     # VALOR
                     # =========================
                     st.write(f"💰 Venda: R$ {row['venda']:,.2f}")
-        
+
                     # =========================
                     # AÇÕES
                     # =========================
                     col1, col2 = st.columns(2)
-        
+
                     if col1.button(f"✅ Aprovar {row['id']}", key=f"aprovar_{row['id']}"):
-    
+
                         # Atualiza status
                         supabase.table("eventos")\
                             .update({"status": "aprovado"})\
                             .eq("id", row["id"])\
                             .execute()
-                    
+
                         # 🔥 PEGAR VALORES DO EVENTO
                         valor_venda = row["venda"] if "venda" in row else 0
                         custo = row["custo"] if "custo" in row else 0
                         lucro = valor_venda - custo
-                    
+
                         # 🔥 SALVAR NA TABELA VENDAS
                         supabase.table("vendas").insert({
                             "evento_id": row["id"],
@@ -2641,7 +2629,7 @@ elif menu == "Orçamentos":
                             "custo": custo,
                             "lucro": lucro
                         }).execute()
-                    
+
                         # 🔥 LANÇAR NO FINANCEIRO (AUTOMÁTICO)
                         supabase.table("Financeiro").insert({
                             "data": datetime.now().strftime("%Y-%m-%d"),
@@ -2651,7 +2639,7 @@ elif menu == "Orçamentos":
                         }).execute()
                         st.success("Evento aprovado e venda registrada!")
                         st.rerun()
-                        
+
                         alertas = []
 
                         itens_evento = pd.DataFrame(
@@ -2660,43 +2648,41 @@ elif menu == "Orçamentos":
                             .eq("evento_id", row["id"])
                             .execute().data or []
                         )
-                        
+
                         bebidas = itens_evento[
                             itens_evento["categoria"] == "Bebidas"
                         ]
-                        
+
                         for _, bebida in bebidas.iterrows():
-                        
+
                             marca = bebida["produto"]
                             qtd_necessaria = bebida["quantidade"]
-                        
-                            qtd_necessaria = dados["quantidade"]
-                        
+
                             atual = pd.DataFrame(
                                 supabase.table("estoque")
                                 .select("*")
                                 .eq("marca", marca)
                                 .execute().data or []
                             )
-                        
+
                             if atual.empty:
                                 alertas.append(f"❌ {marca} não existe no estoque")
-                        
+
                             else:
                                 qtd_atual = atual.iloc[0]["quantidade"]
-                        
+
                                 if qtd_atual < qtd_necessaria:
                                     alertas.append(
                                         f"⚠️ {marca}: precisa {qtd_necessaria}, tem {qtd_atual}"
                                     )
-                        
+
                                 nova_qtd = max(0, qtd_atual - qtd_necessaria)
-                        
+
                                 supabase.table("estoque")\
                                     .update({"quantidade": nova_qtd})\
                                     .eq("marca", marca)\
                                     .execute()
-                        
+
                                 supabase.table("movimentacoes").insert({
                                     "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                     "tipo": "bebida",
@@ -2705,28 +2691,26 @@ elif menu == "Orçamentos":
                                     "quantidade": qtd_necessaria,
                                     "origem": "Reserva"
                                 }).execute()
-    
+
                         if alertas:
                             st.warning("⚠️ Problemas no estoque:")
                             for a in alertas:
                                 st.write(a)
                         else:
                             st.success("✅ Evento aprovado e estoque atualizado!")
-                        
+
                         # limpa memória
                         st.session_state["orcamento_bebidas"] = {}
-                        
                         st.rerun()
-        
+
                     if col2.button(f"🗑 Excluir {row['id']}", key=f"excluir_{row['id']}"):
                         supabase.table("eventos")\
                             .delete()\
                             .eq("id", row["id"])\
                             .execute()
                         st.rerun()
-        
+
                     st.divider()
-    
         # =========================
         # ABA 3 - APROVADOS
         # =========================
