@@ -1976,7 +1976,7 @@ elif menu == "Orçamentos":
                         response = supabase.table("eventos").insert({
                             "cliente": nome_cliente,
                             "data": str(data_evento),
-                            "cidade": city := cidade_evento,
+                            "cidade": cidade_evento,
                             "telefone": telefone,
                             "endereco": endereco,
                             "tipo_evento": tipo_evento,
@@ -2300,7 +2300,7 @@ elif menu == "Orçamentos":
         
                     "cliente": nome_cliente,
                     "data": str(data_evento),
-                    "cidade": city := cidade_evento,
+                    "cidade": cidade_evento,
                     "telefone": telefone,
                     "endereco": endereco,
         
