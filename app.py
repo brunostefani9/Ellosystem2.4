@@ -1971,8 +1971,11 @@ elif menu == "Orçamentos":
                     # =========================
                     # 💾 SALVAR ORÇAMENTO (RESTAURADO)
                     # =========================
+                    # 👈 COLOQUE A TRANSFORMAÇÃO DOS DRINKS AQUI (Exemplo usando uma lista 'drinks_selecionados')
+                    texto_drinks = "\n".join(st.session_state.get("drinks_selecionados", []))
+
                     if st.button("💾 Salvar orçamento"):
-                    
+                        
                         response = supabase.table("eventos").insert({
                             "cliente": nome_cliente,
                             "data": str(data_evento),
@@ -1989,7 +1992,8 @@ elif menu == "Orçamentos":
                             "venda": valor_final_venda,
                             "comissao_percentual": percentual_comissao,
                             "comissao_valor": valor_comissao,
-                            "status": "pendente"
+                            "status": "pendente",  # 👈 COLOQUEI A VÍRGULA AQUI!
+                            "drinks": texto_drinks
                         }).execute()
                         
                         evento_id = response.data[0]["id"]
@@ -2447,46 +2451,20 @@ elif menu == "Orçamentos":
                         st.info(f"Modalidade: {modalidade}")
 
                         # =========================
-                        # 🍸 CARTA DE DRINKS SELECIONADOS (AUTOMÁTICA)
+                        # 🍸 CARTA DE DRINKS SELECIONADOS
                         # =========================
                         st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
                         
-                        lista_drinks = []
-                        texto_encontrado = ""
-
-                        # Procura automaticamente em qualquer coluna que possa conter a lista de drinks
-                        colunas_provaveis = ["drinks", "cardapio", "receitas_selecionadas", "observacoes", "descricao"]
-                        
-                        for col in colunas_provaveis:
-                            if col in row and row[col] and isinstance(row[col], str) and ("Sour" in row[col] or "Time" in row[col] or "Amado" in row[col] or "*" in row[col]):
-                                texto_encontrado = row[col]
-                                break
-                        
-                        # Se não achou nas prováveis, tenta pegar qualquer campo de texto longo que tenha quebra de linha ou asterisco
-                        if not texto_encontrado:
-                            for k, v in row.items():
-                                if isinstance(v, str) and ("\n" in v or "*" in v) and len(v) > 5:
-                                    # Evita pegar colunas óbvias de endereço ou equipe
-                                    if k not in ["endereco", "equipe", "cliente", "cidade"]:
-                                        texto_encontrado = v
-                                        break
-
-                        # Processa o texto encontrado para listar os drinks limpando os marcadores
-                        if texto_encontrado:
-                            linhas = texto_encontrado.split("\n")
-                            for linha in lines:
-                                linha_limpa = linha.strip()
-                                if linha_limpa:
-                                    # Remove asteriscos ou hífens que venham do banco para não duplicar a formatação
-                                    linha_limpa = linha_limpa.lstrip("*").lstrip("-").strip()
-                                    lista_drinks.append(linha_limpa)
-
-                        # Exibe na tela exatamente os drinks salvos
-                        if lista_drinks:
+                        # Buscando direto da coluna 'drinks' da tabela eventos
+                        if "drinks" in row and row["drinks"]:
+                            texto_drinks = row["drinks"]
+                            # Divide o texto do banco por quebras de linha para listar um por um
+                            lista_drinks = [d.strip() for d in texto_drinks.split("\n") if d.strip()]
+                            
                             for drink in lista_drinks:
                                 st.markdown(f"*{drink}")
                         else:
-                            st.warning("Nenhum drink localizado no cadastro deste evento no Supabase.")
+                            st.warning("Nenhum drink salvo neste orçamento ainda. Verifique o cadastro do orçamento.")
                         
                         st.markdown("---")
 
@@ -2539,7 +2517,7 @@ elif menu == "Orçamentos":
                         # =========================
                         def definir_categoria(produto):
                             produto = str(produto).lower()
-                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "martini", "campari", "absolut", "jack daniels", "aperol", "salton", "tanqueray", "bourbon"]):
+                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "martini", "campari", "absolut", "jack daniels", "aperol", "salton"]):
                                 return "Bebidas"
                             elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango", "fruta", "blossom"]):
                                 return "Frutas"
@@ -2571,13 +2549,11 @@ elif menu == "Orçamentos":
                         # =========================
                         if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
 
-                            # deletar itens antigos
                             supabase.table("evento_itens")\
                                 .delete()\
                                 .eq("evento_id", row["id"])\
                                 .execute()
 
-                            # inserir novos
                             for _, item in df_editado.iterrows():
                                 if str(item["produto"]).strip() == "":
                                     continue
