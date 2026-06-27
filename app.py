@@ -2528,14 +2528,11 @@ elif menu == "Orçamentos":
                         st.markdown("---")
                         st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
 
-                        # NOTA: Altere 'drinks' para o nome exato da sua coluna no banco se for diferente
                         coluna_drinks = "drinks" 
 
                         if coluna_drinks in row and row[coluna_drinks]:
-                            # Se os drinks estiverem salvos como texto separados por quebra de linha
                             if isinstance(row[coluna_drinks], str):
                                 lista_drinks = [d.strip() for d in row[coluna_drinks].split("\n") if d.strip()]
-                            # Caso estejam salvos como uma lista/array nativa no Supabase
                             elif isinstance(row[coluna_drinks], list):
                                 lista_drinks = [str(d).strip() for d in row[coluna_drinks] if str(d).strip()]
                             else:
@@ -2543,7 +2540,6 @@ elif menu == "Orçamentos":
 
                             if lista_drinks:
                                 for drink in lista_drinks:
-                                    # Exibe com o marcador asterisco igual ao seu modelo de imagem
                                     st.markdown(f"*{drink}")
                             else:
                                 st.write("Nenhum drink selecionado para este evento.")
@@ -2555,9 +2551,6 @@ elif menu == "Orçamentos":
                         # SALVAR EDIÇÃO
                         # =========================
                         if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
-                    else:
-                        st.markdown(f"""
-                        ### 📍 Informações do Evento
 
                         **👤 Cliente:** {row['cliente']}
 
