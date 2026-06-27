@@ -2753,7 +2753,6 @@ elif menu == "Orçamentos":
                         st.subheader("📋 Checklist do Evento")
                         st.info(f"Modalidade: {modalidade}")
 
-                        
                         if modalidade == "Bar Completo":
                             
                             # =========================
@@ -2762,84 +2761,84 @@ elif menu == "Orçamentos":
                         
                             st.markdown(f"""
                             ### 📍 Informações do Evento
-            
+                            
                             **👤 Cliente:** {row['cliente']}  
                             📞 {row['telefone']}  
-            
+                            
                             📅 {row['data']}  
                             📍 {row['cidade']} - {row['endereco']}  
-            
+                            
                             🎉 Tipo: {row['tipo_evento']}  
-            
+                            
                             🕒 Chegada equipe: {row['hora_chegada']}  
                             🍸 Início serviço: {row['hora_inicio']}  
                             👥 Convidados chegam: {row['hora_convidados']}  
-            
+                            
                             👥 Nº convidados: {row['convidados']}  
                             """)
         
-                        # =========================
-                        # 👥 EQUIPE
-                        # =========================
-                        st.markdown("### 👥 Equipe")
-        
-                        if "equipe" in row and row["equipe"]:
-                            nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
-                            for nome in nomes:
-                                st.write(f"✔ {nome}")
-                        else:
-                            st.write("Sem equipe definida")
-        
-                        # =========================
-                        # ITENS
-                        # =========================
-                        if not itens.empty:
-        
-                            df_checklist = itens.copy()
-        
-                            def definir_categoria(unidade):
-                                if unidade == "garrafas":
-                                    return "Bebidas"
-                                elif unidade == "g":
-                                    return "Frutas"
-                                else:
-                                    return "Outros"
-        
-                            df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
-        
-                            df_checklist["Início"] = ""
-                            df_checklist["Fim"] = ""
-        
-                            st.dataframe(
-                                df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
-                                .rename(columns={
-                                    "produto": "Produto",
-                                    "quantidade": "Qtde"
-                                })
-                            )
-                        else:
-                            st.warning("Nenhum item encontrado")
+                            # =========================
+                            # 👥 EQUIPE
+                            # =========================
+                            st.markdown("### 👥 Equipe")
+            
+                            if "equipe" in row and row["equipe"]:
+                                nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
+                                for nome in nomes:
+                                    st.write(f"✔ {nome}")
+                            else:
+                                st.write("Sem equipe definida")
+            
+                            # =========================
+                            # ITENS
+                            # =========================
+                            if not itens.empty:
+            
+                                df_checklist = itens.copy()
+            
+                                def definir_categoria(unidade):
+                                    if unidade == "garrafas":
+                                        return "Bebidas"
+                                    elif unidade == "g":
+                                        return "Frutas"
+                                    else:
+                                        return "Outros"
+            
+                                df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
+            
+                                df_checklist["Início"] = ""
+                                df_checklist["Fim"] = ""
+            
+                                st.dataframe(
+                                    df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
+                                    .rename(columns={
+                                        "produto": "Produto",
+                                        "quantidade": "Qtde"
+                                    })
+                                )
+                            else:
+                                st.warning("Nenhum item encontrado")
 
                         else:
-
+                            # Caso não seja Bar Completo, exibe as informações normais/alternativas
                             st.markdown(f"""
                             ### 📍 Informações do Evento
-                        
+                            
                             **👤 Cliente:** {row['cliente']}
-                        
+                            
                             📞 {row['telefone']}
-                        
+                            
                             📅 {row['data']}
                             📍 {row['cidade']} - {row['endereco']}
-                        
+                            
                             🎉 Tipo: {row['tipo_evento']}
-                        
+                            
                             🕒 Chegada equipe: {row['hora_chegada']}
                             👥 Chegada convidados: {row['hora_convidados']}
-                        
+                            
                             💰 Valor contratado: R$ {row['venda']:,.2f}
                             """)
-                        
+                            
                             if not itens.empty:
                                 st.dataframe(
                                     itens[["categoria", "produto", "quantidade"]]
@@ -2861,7 +2860,7 @@ elif menu == "Orçamentos":
                             .update({"status": "finalizado"})\
                             .eq("id", row["id"])\
                             .execute()
-                    
+                        
                         st.success("Evento finalizado!")
                         st.rerun()
         
