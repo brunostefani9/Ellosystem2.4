@@ -1971,8 +1971,8 @@ elif menu == "Orçamentos":
                     # =========================
                     # 💾 SALVAR ORÇAMENTO (RESTAURADO)
                     # =========================
-                    # 👈 COLOQUE A TRANSFORMAÇÃO DOS DRINKS AQUI (Exemplo usando uma lista 'drinks_selecionados')
-                    texto_drinks = "\n".join(st.session_state.get("drinks_selecionados", []))
+                    # 👈 Juntamos os drinks usando a sua variável 'selecao'
+                    texto_drinks = "\n".join(selecao) if selecao else ""
 
                     if st.button("💾 Salvar orçamento"):
                         
@@ -1992,8 +1992,8 @@ elif menu == "Orçamentos":
                             "venda": valor_final_venda,
                             "comissao_percentual": percentual_comissao,
                             "comissao_valor": valor_comissao,
-                            "status": "pendente",  # 👈 COLOQUEI A VÍRGULA AQUI!
-                            "drinks": texto_drinks
+                            "status": "pendente",
+                            "drinks": texto_drinks  # 👈 Grava na coluna que criamos no Supabase
                         }).execute()
                         
                         evento_id = response.data[0]["id"]
