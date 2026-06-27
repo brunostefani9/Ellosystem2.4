@@ -2451,23 +2451,22 @@ elif menu == "Orçamentos":
                         # =========================
                         st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
                         
-                        coluna_drinks = "receitas" 
+                        # Tentando ler o campo correto de texto do evento (ajuste para "cardapio" se necessário)
+                        coluna_do_evento = "drinks" if "drinks" in row else ("cardapio" if "cardapio" in row else "")
+                        lista_drinks = []
 
-                        if coluna_drinks in row and row[coluna_drinks]:
-                            if isinstance(row[coluna_drinks], str):
-                                lista_drinks = [d.strip() for d in row[coluna_drinks].split("\n") if d.strip()]
-                            elif isinstance(row[coluna_drinks], list):
-                                lista_drinks = [str(d).strip() for d in row[coluna_drinks] if str(d).strip()]
-                            else:
-                                lista_drinks = []
+                        if coluna_do_evento and row[coluna_do_evento]:
+                            texto_drinks = row[coluna_do_evento]
+                            if isinstance(texto_drinks, str):
+                                lista_drinks = [d.replace("*", "").strip() for d in texto_drinks.split("\n") if d.strip()]
+                            elif isinstance(texto_drinks, list):
+                                lista_drinks = [str(d).replace("*", "").strip() for d in texto_drinks if str(d).strip()]
 
-                            if lista_drinks:
-                                for drink in lista_drinks:
-                                    st.markdown(f"*{drink}")
-                            else:
-                                st.write("Nenhum drink selecionado para este evento.")
+                        if lista_drinks:
+                            for drink in lista_drinks:
+                                st.markdown(f"*{drink}")
                         else:
-                            st.write("Nenhum drink cadastrado.")
+                            st.write("Nenhum drink selecionado para este evento ou coluna não encontrada.")
                         
                         st.markdown("---")
 
@@ -2495,7 +2494,7 @@ elif menu == "Orçamentos":
                         """)
 
                         # =========================
-                        # 👥 EQUIPE (NOVO)
+                        # 👥 EQUIPE
                         # =========================
                         st.markdown("### 👥 Equipe")
 
@@ -2511,6 +2510,7 @@ elif menu == "Orçamentos":
                         # =========================
                         if itens.empty:
                             st.warning("Nenhum item encontrado")
+                            df_checklist = pd.DataFrame(columns=["Categoria", "produto", "quantidade", "Início", "Fim"])
                         else:
                             df_checklist = itens.copy()
 
@@ -2519,22 +2519,22 @@ elif menu == "Orçamentos":
                         # =========================
                         def definir_categoria(produto):
                             produto = produto.lower()
-                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça"]):
+                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "martini", "campari", "absolut", "jack daniels", "aperol", "salton"]):
                                 return "Bebidas"
-                            elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango"]):
+                            elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango", "fruta"]):
                                 return "Frutas"
-                            elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine"]):
+                            elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine", "insumo", "sarandi", "suvalan", "coca cola"]):
                                 return "Insumos"
                             else:
                                 return "Outros"
 
-                        df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
+                        if "Categoria" not in df_checklist.columns and not df_checklist.empty:
+                            df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
 
-                        # =========================
-                        # COLUNAS OPERACIONAIS
-                        # =========================
-                        df_checklist["Início"] = ""
-                        df_checklist["Fim"] = ""
+                        if "Início" not in df_checklist.columns:
+                            df_checklist["Início"] = ""
+                        if "Fim" not in df_checklist.columns:
+                            df_checklist["Fim"] = ""
 
                         # =========================
                         # EDITOR
@@ -2559,11 +2559,13 @@ elif menu == "Orçamentos":
 
                             # inserir novos
                             for _, item in df_editado.iterrows():
+                                if str(item["produto"]).strip() == "":
+                                    continue
                                 supabase.table("evento_itens").insert({
                                     "evento_id": row["id"],
                                     "produto": item["produto"],
-                                    "quantidade": item["quantidade"],
-                                    "unidade": item.get("unidade", "un"),
+                                    "quantidade": float(item["quantidade"]),
+                                    "unidade": "un",
                                     "categoria": item["Categoria"]
                                 }).execute()
                             st.success("Checklist atualizado!")
