@@ -1971,10 +1971,10 @@ elif menu == "Orçamentos":
                     # =========================
                     # 💾 SALVAR ORÇAMENTO (RESTAURADO)
                     # =========================
-                    # 👈 Juntamos os drinks usando a sua variável 'selecao'
-                    texto_drinks = "\n".join(selecao) if selecao else ""
-
                     if st.button("💾 Salvar orçamento"):
+                        
+                        # 🎯 A CRIAÇÃO DO TEXTO TEM QUE FICAR AQUI DENTRO!
+                        texto_drinks = "\n".join(selecao) if selecao else ""
                         
                         response = supabase.table("eventos").insert({
                             "cliente": nome_cliente,
@@ -1993,7 +1993,7 @@ elif menu == "Orçamentos":
                             "comissao_percentual": percentual_comissao,
                             "comissao_valor": valor_comissao,
                             "status": "pendente",
-                            "drinks": texto_drinks  # 👈 Grava na coluna que criamos no Supabase
+                            "drinks": texto_drinks  # 👈 Grava na coluna que você criou
                         }).execute()
                         
                         evento_id = response.data[0]["id"]
