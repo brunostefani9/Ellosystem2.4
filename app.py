@@ -2447,6 +2447,31 @@ elif menu == "Orçamentos":
                         st.info(f"Modalidade: {modalidade}")
 
                         # =========================
+                        # 🍸 CARTA DE DRINKS SELECIONADOS (NO TOPO)
+                        # =========================
+                        st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
+                        
+                        coluna_drinks = "receitas" 
+
+                        if coluna_drinks in row and row[coluna_drinks]:
+                            if isinstance(row[coluna_drinks], str):
+                                lista_drinks = [d.strip() for d in row[coluna_drinks].split("\n") if d.strip()]
+                            elif isinstance(row[coluna_drinks], list):
+                                lista_drinks = [str(d).strip() for d in row[coluna_drinks] if str(d).strip()]
+                            else:
+                                lista_drinks = []
+
+                            if lista_drinks:
+                                for drink in lista_drinks:
+                                    st.markdown(f"*{drink}")
+                            else:
+                                st.write("Nenhum drink selecionado para este evento.")
+                        else:
+                            st.write("Nenhum drink cadastrado.")
+                        
+                        st.markdown("---")
+
+                        # =========================
                         # INFORMAÇÕES DO EVENTO
                         # =========================        
                         st.markdown(f"""
@@ -2476,7 +2501,6 @@ elif menu == "Orçamentos":
 
                         if "equipe" in row and row["equipe"]:
                             nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
-
                             for nome in nomes:
                                 st.write(f"✔ {nome}")
                         else:
@@ -2523,31 +2547,6 @@ elif menu == "Orçamentos":
                         )
 
                         # =========================
-                        # 🍸 CARTA DE DRINKS SELECIONADOS (NOVO)
-                        # =========================
-                        st.markdown("---")
-                        st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
-
-                        coluna_drinks = "drinks" 
-
-                        if coluna_drinks in row and row[coluna_drinks]:
-                            if isinstance(row[coluna_drinks], str):
-                                lista_drinks = [d.strip() for d in row[coluna_drinks].split("\n") if d.strip()]
-                            elif isinstance(row[coluna_drinks], list):
-                                lista_drinks = [str(d).strip() for d in row[coluna_drinks] if str(d).strip()]
-                            else:
-                                lista_drinks = []
-
-                            if lista_drinks:
-                                for drink in lista_drinks:
-                                    st.markdown(f"*{drink}")
-                            else:
-                                st.write("Nenhum drink selecionado para este evento.")
-                        else:
-                            st.write("Nenhum drink cadastrado.")
-                        st.markdown("---")
-
-                        # =========================
                         # SALVAR EDIÇÃO
                         # =========================
                         if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
@@ -2567,9 +2566,7 @@ elif menu == "Orçamentos":
                                     "unidade": item.get("unidade", "un"),
                                     "categoria": item["Categoria"]
                                 }).execute()
-                            st.success("Checklist updated!")
-
-                        st.markdown("### 👥 Equipe")
+                            st.success("Checklist atualizado!")
 
                         # Agora esse 'itens' sempre existirá sem quebrar o app
                         if not itens.empty:
