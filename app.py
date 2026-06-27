@@ -2447,26 +2447,31 @@ elif menu == "Orçamentos":
                         st.info(f"Modalidade: {modalidade}")
 
                         # =========================
-                        # 🍸 CARTA DE DRINKS SELECIONADOS (NO TOPO)
+                        # 🍸 CARTA DE DRINKS SELECIONADOS (MENU DINÂMICO)
                         # =========================
                         st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
                         
-                        # Tentando ler o campo correto de texto do evento (ajuste para "cardapio" se necessário)
-                        coluna_do_evento = "drinks" if "drinks" in row else ("cardapio" if "cardapio" in row else "")
-                        lista_drinks = []
-
-                        if coluna_do_evento and row[coluna_do_evento]:
-                            texto_drinks = row[coluna_do_evento]
-                            if isinstance(texto_drinks, str):
-                                lista_drinks = [d.replace("*", "").strip() for d in texto_drinks.split("\n") if d.strip()]
-                            elif isinstance(texto_drinks, list):
-                                lista_drinks = [str(d).replace("*", "").strip() for d in texto_drinks if str(d).strip()]
-
-                        if lista_drinks:
-                            for drink in lista_drinks:
-                                st.markdown(f"*{drink}")
+                        # Carrega os drinks direto da sua tabela de receitas
+                        df_receitas_banco = carregar_tabela("receitas")
+                        
+                        if not df_receitas_banco.empty:
+                            opcoes_drinks = sorted(df_receitas_banco["drink"].dropna().unique())
+                            
+                            # Menu de seleção múltipla para você marcar os drinks do evento na hora
+                            drinks_selecionados = st.multiselect(
+                                "Selecione os drinks deste evento para exibição:",
+                                options=opcoes_drinks,
+                                key=f"multiselect_drinks_{row['id']}"
+                            )
+                            
+                            if drinks_selecionados:
+                                st.write("**Drinks Selecionados:**")
+                                for d in drinks_selecionados:
+                                    st.markdown(f"*{d}")
+                            else:
+                                st.caption("Selecione os drinks no campo acima para listar no cardápio.")
                         else:
-                            st.write("Nenhum drink selecionado para este evento ou coluna não encontrada.")
+                            st.write("Nenhum drink cadastrado na base de dados global.")
                         
                         st.markdown("---")
 
@@ -2518,17 +2523,18 @@ elif menu == "Orçamentos":
                         # CATEGORIA INTELIGENTE
                         # =========================
                         def definir_categoria(produto):
-                            produto = produto.lower()
-                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "martini", "campari", "absolut", "jack daniels", "aperol", "salton"]):
+                            produto = str(produto).lower()
+                            if any(p in produto for p in ["vodka", "gin", "rum", "whisky", "tequila", "licor", "cachaça", "martini", "campari", "absolut", "jack daniels", "aperol", "salton", "tanqueray", "bourbon"]):
                                 return "Bebidas"
-                            elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango", "fruta"]):
+                            elif any(p in produto for p in ["limão", "limao", "laranja", "abacaxi", "morango", "fruta", "blossom"]):
                                 return "Frutas"
-                            elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine", "insumo", "sarandi", "suvalan", "coca cola"]):
+                            elif any(p in produto for p in ["xarope", "açucar", "acucar", "grenadine", "insumo", "sarandi", "suvalan", "coca cola", "agua", "tônica", "tonica", "refrigerante"]):
                                 return "Insumos"
                             else:
                                 return "Outros"
 
-                        if "Categoria" not in df_checklist.columns and not df_checklist.empty:
+                        # Força a atualização correta das categorias na tabela do editor
+                        if not df_checklist.empty:
                             df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
 
                         if "Início" not in df_checklist.columns:
@@ -2568,8 +2574,8 @@ elif menu == "Orçamentos":
                                     "unidade": "un",
                                     "categoria": item["Categoria"]
                                 }).execute()
-                            st.success("Checklist atualizado!")
-
+                            st.success("Checklist atualizado com sucesso!")
+                            st.rerun()
                         # Agora esse 'itens' sempre existirá sem quebrar o app
                         if not itens.empty:
                             equipe = itens[itens["categoria"] == "Equipe"]
