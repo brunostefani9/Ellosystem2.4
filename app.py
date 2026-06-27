@@ -2552,20 +2552,22 @@ elif menu == "Orçamentos":
                         # =========================
                         if st.button(f"💾 Salvar edição {row['id']}", key=f"save_{row['id']}"):
 
-                        **👤 Cliente:** {row['cliente']}
+                            # deletar itens antigos
+                            supabase.table("evento_itens")\
+                                .delete()\
+                                .eq("evento_id", row["id"])\
+                                .execute()
 
-                        📞 {row['telefone']}
-
-                        📅 {row['data']}
-
-                        📍 {row['cidade']} - {row['endereco']}
-
-                        🎉 Tipo: {row['tipo_evento']}
-
-                        🕒 Chegada equipe: {row['hora_chegada']}
-
-                        👥 Início: {row['hora_inicio']}
-                        """)
+                            # inserir novos
+                            for _, item in df_editado.iterrows():
+                                supabase.table("evento_itens").insert({
+                                    "evento_id": row["id"],
+                                    "produto": item["produto"],
+                                    "quantidade": item["quantidade"],
+                                    "unidade": item.get("unidade", "un"),
+                                    "categoria": item["Categoria"]
+                                }).execute()
+                            st.success("Checklist updated!")
 
                         st.markdown("### 👥 Equipe")
 
