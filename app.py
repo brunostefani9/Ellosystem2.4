@@ -2447,31 +2447,46 @@ elif menu == "Orçamentos":
                         st.info(f"Modalidade: {modalidade}")
 
                         # =========================
-                        # 🍸 CARTA DE DRINKS SELECIONADOS (MENU DINÂMICO)
+                        # 🍸 CARTA DE DRINKS SELECIONADOS (AUTOMÁTICA)
                         # =========================
                         st.markdown("### 🍸 Cardápio de Drinks Escolhidos")
                         
-                        # Carrega os drinks direto da sua tabela de receitas
-                        df_receitas_banco = carregar_tabela("receitas")
+                        lista_drinks = []
+                        texto_encontrado = ""
+
+                        # Procura automaticamente em qualquer coluna que possa conter a lista de drinks
+                        colunas_provaveis = ["drinks", "cardapio", "receitas_selecionadas", "observacoes", "descricao"]
                         
-                        if not df_receitas_banco.empty:
-                            opcoes_drinks = sorted(df_receitas_banco["drink"].dropna().unique())
-                            
-                            # Menu de seleção múltipla para você marcar os drinks do evento na hora
-                            drinks_selecionados = st.multiselect(
-                                "Selecione os drinks deste evento para exibição:",
-                                options=opcoes_drinks,
-                                key=f"multiselect_drinks_{row['id']}"
-                            )
-                            
-                            if drinks_selecionados:
-                                st.write("**Drinks Selecionados:**")
-                                for d in drinks_selecionados:
-                                    st.markdown(f"*{d}")
-                            else:
-                                st.caption("Selecione os drinks no campo acima para listar no cardápio.")
+                        for col in colunas_provaveis:
+                            if col in row and row[col] and isinstance(row[col], str) and ("Sour" in row[col] or "Time" in row[col] or "Amado" in row[col] or "*" in row[col]):
+                                texto_encontrado = row[col]
+                                break
+                        
+                        # Se não achou nas prováveis, tenta pegar qualquer campo de texto longo que tenha quebra de linha ou asterisco
+                        if not texto_encontrado:
+                            for k, v in row.items():
+                                if isinstance(v, str) and ("\n" in v or "*" in v) and len(v) > 5:
+                                    # Evita pegar colunas óbvias de endereço ou equipe
+                                    if k not in ["endereco", "equipe", "cliente", "cidade"]:
+                                        texto_encontrado = v
+                                        break
+
+                        # Processa o texto encontrado para listar os drinks limpando os marcadores
+                        if texto_encontrado:
+                            linhas = texto_encontrado.split("\n")
+                            for linha in lines:
+                                linha_limpa = linha.strip()
+                                if linha_limpa:
+                                    # Remove asteriscos ou hífens que venham do banco para não duplicar a formatação
+                                    linha_limpa = linha_limpa.lstrip("*").lstrip("-").strip()
+                                    lista_drinks.append(linha_limpa)
+
+                        # Exibe na tela exatamente os drinks salvos
+                        if lista_drinks:
+                            for drink in lista_drinks:
+                                st.markdown(f"*{drink}")
                         else:
-                            st.write("Nenhum drink cadastrado na base de dados global.")
+                            st.warning("Nenhum drink localizado no cadastro deste evento no Supabase.")
                         
                         st.markdown("---")
 
@@ -2533,7 +2548,6 @@ elif menu == "Orçamentos":
                             else:
                                 return "Outros"
 
-                        # Força a atualização correta das categorias na tabela do editor
                         if not df_checklist.empty:
                             df_checklist["Categoria"] = df_checklist["produto"].apply(definir_categoria)
 
