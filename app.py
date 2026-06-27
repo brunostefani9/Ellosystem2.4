@@ -1224,9 +1224,7 @@ elif menu == "Orçamentos":
             "Casamento", "Aniversário", "Corporativo", "Festa privada", "Outro"
         ])
 
-
         st.divider()
-
         st.divider()
 
         tab_bar, tab_mao_obra = st.tabs([
@@ -1617,7 +1615,7 @@ elif menu == "Orçamentos":
                             preco_kg = encontrado.iloc[0]["preco"]
                             custo_por_grama = preco_kg / 1000
                     
-                            col1, col2, col3 = st.columns([4,2,2])
+                            col1, col2, col3 = st.columns([4, 2, 2])
                     
                             with col1:
                                 st.write(f"✔ {fruta.capitalize()}")
@@ -1681,7 +1679,7 @@ elif menu == "Orçamentos":
                         else:
                             preco = 0  # ou coloca um valor padrão se quiser
                     
-                        col1, col2, col3 = st.columns([4,2,2])
+                        col1, col2, col3 = st.columns([4, 2, 2])
                     
                         with col1:
                             st.write(f"✔ {item}")
@@ -1753,7 +1751,7 @@ elif menu == "Orçamentos":
                     )
                     
                     st.divider()
-                                    
+                                        
                     # =========================
                     # 📦 PACOTES / SERVIÇOS ADICIONAIS
                     # =========================
@@ -1795,7 +1793,7 @@ elif menu == "Orçamentos":
                     
                     st.markdown(f"### 💰 Total Pacotes: R$ {total_pacotes:,.2f}")
                     
-                    # =========================
+                   # =========================
                     # TOTAL
                     # =========================
                     custo_total = custo_bebidas + custo_frutas + custo_artesanais + custo_extras + total_pacotes
@@ -1978,7 +1976,7 @@ elif menu == "Orçamentos":
                         response = supabase.table("eventos").insert({
                             "cliente": nome_cliente,
                             "data": str(data_evento),
-                            "cidade": cidade_evento,
+                            "cidade": city := cidade_evento,
                             "telefone": telefone,
                             "endereco": endereco,
                             "tipo_evento": tipo_evento,
@@ -2021,6 +2019,7 @@ elif menu == "Orçamentos":
                                         "categoria": "Bebidas"
                                     }).execute()
                         st.success("✅ Orçamento salvo com sucesso!")
+                        
                         # =========================
                         # SALVAR FRUTAS / INSUMOS
                         # =========================
@@ -2034,6 +2033,7 @@ elif menu == "Orçamentos":
                                 "categoria": "Insumos"
                             }).execute()
                         st.success("Orçamento salvo com sucesso!")
+
         with tab_mao_obra:
         
             st.subheader("👷 Serviço Personalizado")
@@ -2300,7 +2300,7 @@ elif menu == "Orçamentos":
         
                     "cliente": nome_cliente,
                     "data": str(data_evento),
-                    "cidade": cidade_evento,
+                    "cidade": city := cidade_evento,
                     "telefone": telefone,
                     "endereco": endereco,
         
