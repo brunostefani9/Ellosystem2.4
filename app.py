@@ -670,12 +670,20 @@ elif menu == "Estoque":
             if st.button("Excluir item"):
                 row = df[df["id_item"] == item].iloc[0]
 
-                # Convertendo tudo explicitamente para tipos nativos do Python (.item() ou str/float)
-                produto_sel = str(row["produto"])
-                marca_sel = str(row["marca"])
-                tamanho_sel = str(row["tamanho"])
-                qtd_sel = float(row["quantidade"])
+                # Tratamento seguro para textos (evita que o nulo vire a palavra "nan")
+                produto_sel = "" if pd.isna(row["produto"]) else str(row["produto"]).strip()
+                marca_sel = "" if pd.isna(row["marca"]) else str(row["marca"]).strip()
+                tamanho_sel = "" if pd.isna(row["tamanho"]) else str(row["tamanho"]).strip()
+                
+                # Tratamento seguro para a quantidade
+                try:
+                    qtd_sel = float(row["quantidade"])
+                    if pd.isna(qtd_sel):
+                        qtd_sel = 0.0
+                except:
+                    qtd_sel = 0.0
 
+                # 1. Registra a movimentação de exclusão
                 supabase.table("movimentacoes").insert({
                     "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     "produto": produto_sel,
@@ -685,14 +693,29 @@ elif menu == "Estoque":
                     "status": "Manual"
                 }).execute()
 
-                supabase.table("estoque")\
-                    .delete()\
-                    .eq("produto", produto_sel)\
-                    .eq("marca", marca_sel)\
-                    .eq("tamanho", tamanho_sel)\
-                    .execute()
+                # 2. Executa a exclusão no banco de dados
+                # Se o campo for vazio no banco, filtramos por Is.Null, caso contrário filtramos pelo texto
+                query = supabase.table("estoque").delete()
+                
+                if produto_sel == "":
+                    query = query.is_("produto", "null")
+                else:
+                    query = query.eq("produto", produto_sel)
+                    
+                if marca_sel == "":
+                    query = query.is_("marca", "null")
+                else:
+                    query = query.eq("marca", marca_sel)
+                    
+                if tamanho_sel == "":
+                    query = query.is_("tamanho", "null")
+                else:
+                    query = query.eq("tamanho", tamanho_sel)
 
-                st.success("Item removido!")
+                # Executa a query final estruturada
+                query.execute()
+
+                st.success("Item removido com sucesso!")
                 st.rerun()
 
     # =========================
