@@ -484,13 +484,58 @@ elif menu == "Estoque":
     )
 
     # =========================
-    # ENTRADA
+    # ENTRADA INTELIGENTE
     # =========================
     with tab1:
+        # 1. Busca o estoque atual para preencher os seletores
+        dados_existentes = supabase.table("estoque").select("produto, marca, tamanho").execute()
+        df_existente = pd.DataFrame(dados_existentes.data)
+
         with st.form("entrada_estoque", clear_on_submit=True):
-            produto = st.text_input("Tipo do Produto").lower().strip()
-            marca = st.text_input("Marca").strip()
-            tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
+            st.markdown("### 📥 Registrar Movimentação")
+
+            # Se o estoque não estiver vazio, cria a lógica de puxar os existentes
+            if not df_existente.empty:
+                # Lista de produtos únicos + opção de cadastrar um novo
+                lista_produtos = ["➕ Cadastrar Novo Produto"] + sorted(df_existente["produto"].dropna().unique().tolist())
+                produto_escolhido = st.selectbox("Selecione o Produto", lista_produtos)
+
+                if produto_escolhido == "➕ Cadastrar Novo Produto":
+                    produto = st.text_input("Nome do Novo Produto").lower().strip()
+                    marca = st.text_input("Marca do Novo Produto").strip()
+                    tamanho = st.text_input("Tamanho do Novo Produto (ex: 750ml, 1L)").strip()
+                else:
+                    produto = produto_escolhido
+                    
+                    # Filtra as marcas que já existem para este produto específico
+                    marcas_do_produto = sorted(df_existente[df_existente["produto"] == produto]["marca"].dropna().unique().tolist())
+                    lista_marcas = ["➕ Nova Marca para este produto"] + marcas_do_produto
+                    marca_escolhida = st.selectbox("Selecione a Marca", lista_marcas)
+                    
+                    if marca_escolhida == "➕ Nova Marca para este produto":
+                        marca = st.text_input("Digite a Nova Marca").strip()
+                    else:
+                        marca = marca_escolhida
+
+                    # Filtra os tamanhos que já existem para este produto e marca específicos
+                    tamanhos_do_item = sorted(df_existente[(df_existente["produto"] == produto) & (df_existente["marca"] == marca)]["tamanho"].dropna().unique().tolist())
+                    lista_tamanhos = ["➕ Novo Tamanho para este item"] + tamanhos_do_item
+                    tamanho_escolhido = st.selectbox("Selecione o Tamanho", lista_tamanhos)
+
+                    if tamanho_escolhido == "➕ Novo Tamanho para este item":
+                        tamanho = st.text_input("Digite o Novo Tamanho (ex: 750ml, 1L)").strip()
+                    else:
+                        tamanho = tamanho_escolhido
+            else:
+                # Se o banco estiver 100% vazio (primeiro acesso), mostra os campos de texto normais
+                st.info("Primeiro cadastro do sistema. Digite os dados do item:")
+                produto = st.text_input("Tipo do Produto").lower().strip()
+                marca = st.text_input("Marca").strip()
+                tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
+
+            st.divider()
+            
+            # Campos normais de quantidade e valores
             qtd = st.number_input("Quantidade", min_value=0.0)
 
             status = st.selectbox(
@@ -504,54 +549,59 @@ elif menu == "Estoque":
             else:
                 st.info("🔁 Não altera preço existente")
 
+            # Botão de envio do formulário
             if st.form_submit_button("Registrar entrada"):
-                if status != "Teste":
-                    dados = supabase.table("estoque")\
-                        .select("*")\
-                        .eq("produto", produto)\
-                        .eq("marca", marca)\
-                        .eq("tamanho", tamanho)\
-                        .execute()
-
-                    atual = pd.DataFrame(dados.data)
-
-                    if atual.empty:
-                        supabase.table("estoque").insert({
-                            "produto": str(produto),
-                            "marca": str(marca),
-                            "quantidade": float(qtd),
-                            "tamanho": str(tamanho),
-                            "preco": float(preco)
-                        }).execute()
-                    else:
-                        # Forçando tipo nativo do Python para evitar tipos do NumPy
-                        qtd_atual = float(atual.iloc[0]["quantidade"])
-                        preco_atual = float(atual.iloc[0]["preco"])
-
-                        nova_qtd = qtd_atual + float(qtd)
-                        novo_preco = float(preco) if status == "Compra" else preco_atual
-
-                        supabase.table("estoque").update({
-                            "quantidade": nova_qtd,
-                            "preco": novo_preco
-                        }).eq("produto", produto)\
-                          .eq("marca", marca)\
-                          .eq("tamanho", tamanho)\
-                          .execute()
+                # Validação básica para não salvar campos em branco
+                if not produto or not marca:
+                    st.error("Por favor, preencha o nome do produto e a marca!")
                 else:
-                    st.warning("Movimentação de teste não altera estoque")
+                    if status != "Teste":
+                        dados = supabase.table("estoque")\
+                            .select("*")\
+                            .eq("produto", produto)\
+                            .eq("marca", marca)\
+                            .eq("tamanho", tamanho)\
+                            .execute()
 
-                supabase.table("movimentacoes").insert({
-                    "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "produto": str(produto),
-                    "marca": str(marca),
-                    "tipo": "Entrada",
-                    "quantidade": float(qtd),
-                    "status": str(status)
-                }).execute()
+                        atual = pd.DataFrame(dados.data)
 
-                st.success("Entrada registrada!")
-                st.rerun()
+                        if atual.empty:
+                            supabase.table("estoque").insert({
+                                "produto": str(produto),
+                                "marca": str(marca),
+                                "quantidade": float(qtd),
+                                "tamanho": str(tamanho),
+                                "preco": float(preco)
+                            }).execute()
+                        else:
+                            qtd_atual = float(atual.iloc[0]["quantidade"])
+                            preco_atual = float(atual.iloc[0]["preco"])
+
+                            nova_qtd = qtd_atual + float(qtd)
+                            novo_preco = float(preco) if status == "Compra" else preco_atual
+
+                            supabase.table("estoque").update({
+                                "quantidade": nova_qtd,
+                                "preco": novo_preco
+                            }).eq("produto", produto)\
+                              .eq("marca", marca)\
+                              .eq("tamanho", tamanho)\
+                              .execute()
+                    else:
+                        st.warning("Movimentação de teste não altera estoque")
+
+                    # Salva a movimentação com textos padrão em caso de erro
+                    supabase.table("movimentacoes").insert({
+                        "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "produto": str(produto) if produto != "" else "Sem Produto",
+                        "marca": str(marca) if marca != "" else "Sem Marca",
+                        "tipo": "Entrada",
+                        "quantidade": float(qtd),
+                        "status": str(status)
+                    }).execute()
+
+                    st.success("Entrada registrada com sucesso!")
+                    st.rerun()
 
     # =========================
     # SAÍDA
