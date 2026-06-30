@@ -670,12 +670,16 @@ elif menu == "Estoque":
             if st.button("Excluir item"):
                 row = df[df["id_item"] == item].iloc[0]
 
-                # Tratamento seguro para textos (evita que o nulo vire a palavra "nan")
+                # Se o produto ou marca estiverem nulos/vazios, define um texto padrão para o histórico
                 produto_sel = "" if pd.isna(row["produto"]) else str(row["produto"]).strip()
                 marca_sel = "" if pd.isna(row["marca"]) else str(row["marca"]).strip()
                 tamanho_sel = "" if pd.isna(row["tamanho"]) else str(row["tamanho"]).strip()
                 
-                # Tratamento seguro para a quantidade
+                # Criamos variáveis específicas para o histórico de movimentações
+                # Se estiver vazio, salva como "Sem Produto" ou "Sem Marca" para o banco aceitar
+                produto_historico = produto_sel if produto_sel != "" else "Sem Produto"
+                marca_historico = marca_sel if marca_sel != "" else "Sem Marca"
+
                 try:
                     qtd_sel = float(row["quantidade"])
                     if pd.isna(qtd_sel):
@@ -683,18 +687,17 @@ elif menu == "Estoque":
                 except:
                     qtd_sel = 0.0
 
-                # 1. Registra a movimentação de exclusão
+                # 1. Registra a movimentação usando os textos padrão para evitar rejeição do banco
                 supabase.table("movimentacoes").insert({
                     "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "produto": produto_sel,
-                    "marca": marca_sel,
+                    "produto": produto_historico,
+                    "marca": marca_historico,
                     "tipo": "Exclusão",
                     "quantidade": qtd_sel,
                     "status": "Manual"
                 }).execute()
 
-                # 2. Executa a exclusão no banco de dados
-                # Se o campo for vazio no banco, filtramos por Is.Null, caso contrário filtramos pelo texto
+                # 2. Executa a exclusão no banco (continua usando a lógica do Is.Null se for vazio)
                 query = supabase.table("estoque").delete()
                 
                 if produto_sel == "":
@@ -712,7 +715,6 @@ elif menu == "Estoque":
                 else:
                     query = query.eq("tamanho", tamanho_sel)
 
-                # Executa a query final estruturada
                 query.execute()
 
                 st.success("Item removido com sucesso!")
