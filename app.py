@@ -484,31 +484,49 @@ elif menu == "Estoque":
     )
 
     # =========================
-    # ENTRADA INTELIGENTE
+    # ENTRADA INTELIGENTE (BLINDADA CONTRA ERROS)
     # =========================
     with tab1:
-        # 1. Busca o estoque atual para preencher os seletores
-        dados_existentes = supabase.table("estoque").select("produto, marca, tamanho").execute()
-        df_existente = pd.DataFrame(dados_existentes.data)
+        # 1. Busca os produtos oficiais que já estão cadastrados no Estoque
+        dados_estoque = supabase.table("estoque").select("produto, marca, tamanho").execute()
+        df_est = pd.DataFrame(dados_estoque.data)
+
+        # 2. BUSCA EXTRA: Se você tiver uma tabela chamada 'precificacao' ou 'produtos', mude o nome aqui
+        # Isso garante que se o item já tem preço, ele aparece na lista para você não errar a escrita
+        try:
+            dados_precos = supabase.table("precificacao").select("produto").execute()
+            produtos_oficiais = [d["produto"] for d in dados_precos.data]
+        except:
+            produtos_oficiais = []
 
         with st.form("entrada_estoque", clear_on_submit=True):
             st.markdown("### 📥 Registrar Movimentação")
 
-            # Se o estoque não estiver vazio, cria a lógica de puxar os existentes
-            if not df_existente.empty:
-                # Lista de produtos únicos + opção de cadastrar um novo
-                lista_produtos = ["➕ Cadastrar Novo Produto"] + sorted(df_existente["produto"].dropna().unique().tolist())
-                produto_escolhido = st.selectbox("Selecione o Produto", lista_produtos)
+            # Junta os produtos do estoque com os da precificação para criar a lista mestre
+            lista_produtos_banco = []
+            if not df_est.empty:
+                lista_produtos_banco += df_est["produto"].dropna().unique().tolist()
+            lista_produtos_banco += produtos_oficiais
+            
+            # Remove duplicados e organiza em ordem alfabética
+            lista_produtos_final = sorted(list(set(lista_produtos_banco)))
 
-                if produto_escolhido == "➕ Cadastrar Novo Produto":
-                    produto = st.text_input("Nome do Novo Produto").lower().strip()
-                    marca = st.text_input("Marca do Novo Produto").strip()
-                    tamanho = st.text_input("Tamanho do Novo Produto (ex: 750ml, 1L)").strip()
-                else:
-                    produto = produto_escolhido
-                    
-                    # Filtra as marcas que já existem para este produto específico
-                    marcas_do_produto = sorted(df_existente[df_existente["produto"] == produto]["marca"].dropna().unique().tolist())
+            # Cria o Seletor Mestre de Produtos
+            lista_selectbox = ["➕ Cadastrar Novo Produto/Insumo"] + lista_produtos_final
+            produto_escolhido = st.selectbox("Selecione o Produto (Nome Oficial)", lista_selectbox)
+
+            if produto_escolhido == "➕ Cadastrar Novo Produto/Insumo":
+                # Se for novo, você digita. DICA: usamos .title() para deixar sempre a primeira letra Maiúscula (Ex: Jack Daniels)
+                # Se preferir tudo minúsculo, troque .title() por .lower()
+                produto = st.text_input("Nome do Novo Produto (Ex: Jack Daniels)").title().strip()
+                marca = st.text_input("Marca do Novo Produto").strip()
+                tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
+            else:
+                produto = produto_escolhido
+                
+                # Se o produto já existe no estoque, tentamos filtrar as marcas e tamanhos dele
+                if not df_est.empty and produto in df_est["produto"].values:
+                    marcas_do_produto = sorted(df_est[df_est["produto"] == produto]["marca"].dropna().unique().tolist())
                     lista_marcas = ["➕ Nova Marca para este produto"] + marcas_do_produto
                     marca_escolhida = st.selectbox("Selecione a Marca", lista_marcas)
                     
@@ -517,8 +535,7 @@ elif menu == "Estoque":
                     else:
                         marca = marca_escolhida
 
-                    # Filtra os tamanhos que já existem para este produto e marca específicos
-                    tamanhos_do_item = sorted(df_existente[(df_existente["produto"] == produto) & (df_existente["marca"] == marca)]["tamanho"].dropna().unique().tolist())
+                    tamanhos_do_item = sorted(df_est[(df_est["produto"] == produto) & (df_est["marca"] == marca)]["tamanho"].dropna().unique().tolist())
                     lista_tamanhos = ["➕ Novo Tamanho para este item"] + tamanhos_do_item
                     tamanho_escolhido = st.selectbox("Selecione o Tamanho", lista_tamanhos)
 
@@ -526,22 +543,16 @@ elif menu == "Estoque":
                         tamanho = st.text_input("Digite o Novo Tamanho (ex: 750ml, 1L)").strip()
                     else:
                         tamanho = tamanho_escolhido
-            else:
-                # Se o banco estiver 100% vazio (primeiro acesso), mostra os campos de texto normais
-                st.info("Primeiro cadastro do sistema. Digite os dados do item:")
-                produto = st.text_input("Tipo do Produto").lower().strip()
-                marca = st.text_input("Marca").strip()
-                tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
+                else:
+                    # Se o produto veio da tabela de preços mas nunca entrou no estoque, pede marca e tamanho
+                    st.info(f"O produto '{produto}' existe no catálogo, adicione os detalhes de estoque:")
+                    marca = st.text_input("Marca").strip()
+                    tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
 
             st.divider()
             
-            # Campos normais de quantidade e valores
             qtd = st.number_input("Quantidade", min_value=0.0)
-
-            status = st.selectbox(
-                "Status",
-                ["Compra", "Volta evento", "Teste"]
-            )
+            status = st.selectbox("Status", ["Compra", "Volta evento", "Teste"])
 
             preco = 0.0
             if status == "Compra":
@@ -549,11 +560,9 @@ elif menu == "Estoque":
             else:
                 st.info("🔁 Não altera preço existente")
 
-            # Botão de envio do formulário
             if st.form_submit_button("Registrar entrada"):
-                # Validação básica para não salvar campos em branco
                 if not produto or not marca:
-                    st.error("Por favor, preencha o nome do produto e a marca!")
+                    st.error("Por favor, selecione ou preencha o produto e a marca!")
                 else:
                     if status != "Teste":
                         dados = supabase.table("estoque")\
@@ -590,11 +599,10 @@ elif menu == "Estoque":
                     else:
                         st.warning("Movimentação de teste não altera estoque")
 
-                    # Salva a movimentação com textos padrão em caso de erro
                     supabase.table("movimentacoes").insert({
                         "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "produto": str(produto) if produto != "" else "Sem Produto",
-                        "marca": str(marca) if marca != "" else "Sem Marca",
+                        "produto": str(produto),
+                        "marca": str(marca),
                         "tipo": "Entrada",
                         "quantidade": float(qtd),
                         "status": str(status)
