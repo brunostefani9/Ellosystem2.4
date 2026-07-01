@@ -484,75 +484,24 @@ elif menu == "Estoque":
     )
 
     # =========================
-    # ENTRADA INTELIGENTE (BLINDADA CONTRA ERROS)
+    # ENTRADA (RETORNADA AO PADRÃO LIVRE)
     # =========================
     with tab1:
-        # 1. Busca os produtos oficiais que já estão cadastrados no Estoque
-        dados_estoque = supabase.table("estoque").select("produto, marca, tamanho").execute()
-        df_est = pd.DataFrame(dados_estoque.data)
-
-        # 2. BUSCA EXTRA: Se você tiver uma tabela chamada 'precificacao' ou 'produtos', mude o nome aqui
-        # Isso garante que se o item já tem preço, ele aparece na lista para você não errar a escrita
-        try:
-            dados_precos = supabase.table("precificacao").select("produto").execute()
-            produtos_oficiais = [d["produto"] for d in dados_precos.data]
-        except:
-            produtos_oficiais = []
-
         with st.form("entrada_estoque", clear_on_submit=True):
             st.markdown("### 📥 Registrar Movimentação")
 
-            # Junta os produtos do estoque com os da precificação para criar a lista mestre
-            lista_produtos_banco = []
-            if not df_est.empty:
-                lista_produtos_banco += df_est["produto"].dropna().unique().tolist()
-            lista_produtos_banco += produtos_oficiais
-            
-            # Remove duplicados e organiza em ordem alfabética
-            lista_produtos_final = sorted(list(set(lista_produtos_banco)))
+            # Campos de texto livres de volta!
+            # .title() garante que a primeira letra de cada palavra fique maiúscula (Ex: Jack Daniels)
+            produto = st.text_input("Tipo do Produto (Ex: Whisky, Vodka, Energetico)").title().strip()
+            marca = st.text_input("Marca (Ex: Jack Daniels, Absolut, Red Bull)").strip()
+            tamanho = st.text_input("Tamanho (Ex: 750ml, 1L, 250ml)").strip()
 
-            # Cria o Seletor Mestre de Produtos
-            lista_selectbox = ["➕ Cadastrar Novo Produto/Insumo"] + lista_produtos_final
-            produto_escolhido = st.selectbox("Selecione o Produto (Nome Oficial)", lista_selectbox)
-
-            if produto_escolhido == "➕ Cadastrar Novo Produto/Insumo":
-                # Se for novo, você digita. DICA: usamos .title() para deixar sempre a primeira letra Maiúscula (Ex: Jack Daniels)
-                # Se preferir tudo minúsculo, troque .title() por .lower()
-                produto = st.text_input("Nome do Novo Produto (Ex: Jack Daniels)").title().strip()
-                marca = st.text_input("Marca do Novo Produto").strip()
-                tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
-            else:
-                produto = produto_escolhido
-                
-                # Se o produto já existe no estoque, tentamos filtrar as marcas e tamanhos dele
-                if not df_est.empty and produto in df_est["produto"].values:
-                    marcas_do_produto = sorted(df_est[df_est["produto"] == produto]["marca"].dropna().unique().tolist())
-                    lista_marcas = ["➕ Nova Marca para este produto"] + marcas_do_produto
-                    marca_escolhida = st.selectbox("Selecione a Marca", lista_marcas)
-                    
-                    if marca_escolhida == "➕ Nova Marca para este produto":
-                        marca = st.text_input("Digite a Nova Marca").strip()
-                    else:
-                        marca = marca_escolhida
-
-                    tamanhos_do_item = sorted(df_est[(df_est["produto"] == produto) & (df_est["marca"] == marca)]["tamanho"].dropna().unique().tolist())
-                    lista_tamanhos = ["➕ Novo Tamanho para este item"] + tamanhos_do_item
-                    tamanho_escolhido = st.selectbox("Selecione o Tamanho", lista_tamanhos)
-
-                    if tamanho_escolhido == "➕ Novo Tamanho para este item":
-                        tamanho = st.text_input("Digite o Novo Tamanho (ex: 750ml, 1L)").strip()
-                    else:
-                        tamanho = tamanho_escolhido
-                else:
-                    # Se o produto veio da tabela de preços mas nunca entrou no estoque, pede marca e tamanho
-                    st.info(f"O produto '{produto}' existe no catálogo, adicione os detalhes de estoque:")
-                    marca = st.text_input("Marca").strip()
-                    tamanho = st.text_input("Tamanho (ex: 750ml, 1L)").strip()
-
-            st.divider()
-            
             qtd = st.number_input("Quantidade", min_value=0.0)
-            status = st.selectbox("Status", ["Compra", "Volta evento", "Teste"])
+
+            status = st.selectbox(
+                "Status",
+                ["Compra", "Volta evento", "Teste"]
+            )
 
             preco = 0.0
             if status == "Compra":
@@ -561,8 +510,9 @@ elif menu == "Estoque":
                 st.info("🔁 Não altera preço existente")
 
             if st.form_submit_button("Registrar entrada"):
+                # Validação para não cadastrar itens sem nome ou marca
                 if not produto or not marca:
-                    st.error("Por favor, selecione ou preencha o produto e a marca!")
+                    st.error("Por favor, preencha o tipo do produto e a marca!")
                 else:
                     if status != "Teste":
                         dados = supabase.table("estoque")\
@@ -582,6 +532,7 @@ elif menu == "Estoque":
                                 "tamanho": str(tamanho),
                                 "preco": float(preco)
                             }).execute()
+
                         else:
                             qtd_atual = float(atual.iloc[0]["quantidade"])
                             preco_atual = float(atual.iloc[0]["preco"])
@@ -596,9 +547,11 @@ elif menu == "Estoque":
                               .eq("marca", marca)\
                               .eq("tamanho", tamanho)\
                               .execute()
+
                     else:
                         st.warning("Movimentação de teste não altera estoque")
 
+                    # Registra na tabela de movimentações
                     supabase.table("movimentacoes").insert({
                         "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         "produto": str(produto),
