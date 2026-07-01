@@ -3874,124 +3874,124 @@ elif menu == "Pacotes":
     tab1, tab2 = st.tabs(["Cadastrar", "Lista"])
 
     # ==========================================
-# ABA 1 - PACOTES & ADICIONAIS (NOVO ORÇAMENTO)
-# ==========================================
-with tab1:
-    st.subheader("🍸 Montar Novo Orçamento")
-
-    # 1. Cadastro dos Seus Pacotes Base (Mude os valores e nomes como quiser)
-    pacotes_base = {
-        "Bar Completo Standard": {"preco_pessoa": 45.0, "drinks": "Caipirinha\nCaipiroska\nGin Tônica"},
-        "Bar Completo Premium": {"preco_pessoa": 75.0, "drinks": "Moscow Mule\nGin Tropical\nAperol Spritz"},
-        "Apenas Mão de Obra": {"preco_pessoa": 25.0, "drinks": "Definido pelo cliente"}
-    }
-
-    # 2. Cadastro dos Seus Serviços Adicionais (Aqui você cadastra o Bar de Whisky, etc.)
-    adicionais_disponiveis = {
-        "Bar de Whisky (+ R$ 20,00/pessoa)": {"preco_pessoa": 20.0, "drinks": "Whisky On The Rocks\nWhisky Sour"},
-        "Estação de Gin Gourmet (+ R$ 15,00/pessoa)": {"preco_pessoa": 15.0, "drinks": "Gin Tonica com Especiarias"},
-        "Rodada de Tequila (+ R$ 10,00/pessoa)": {"preco_pessoa": 10.0, "drinks": "Doses de Tequila com Limão"},
-        "Drinks Sem Álcool (Incluso)": {"preco_pessoa": 0.0, "drinks": "Soda Italiana\nCoquetel de Frutas s/ Álcool"}
-    }
-
-    # Formulário de Cadastro do Cliente
-    with st.form("form_montar_orcamento"):
-        st.markdown("### 👤 Dados do Cliente")
-        col1, col2 = st.columns(2)
-        with col1:
-            cliente = st.text_input("Nome do Cliente:")
-            telefone = st.text_input("Telefone / WhatsApp:")
-            data_evento = st.date_input("Data do Evento:")
-        with col2:
-            cidade = st.text_input("Cidade:")
-            endereco = st.text_input("Endereço do Local:")
-            convidados = st.number_input("Número de Convidados:", min_value=1, value=100, step=1)
-
-        st.markdown("---")
-        st.markdown("### 🥂 Seleção do Serviço")
-        
-        # Seleção do pacote principal
-        opcao_pacote = st.selectbox("Selecione o Pacote Base:", list(pacotes_base.keys()))
-        
-        # SELEÇÃO DOS SERVIÇOS ADICIONAIS (Whisky, etc.)
-        st.write("**Deseja incluir serviços adicionais?**")
-        adicionais_escolhidos = []
-        for nome_adicional, dados_adicional in adicionais_disponiveis.items():
-            # Cria um checkbox para cada opcional cadastrado
-            if st.checkbox(nome_adicional):
-                adicionais_escolhidos.append(nome_adicional)
-
-        st.markdown("---")
-        st.markdown("### 🕒 Cronograma e Detalhes")
-        col3, col4, col5 = st.columns(3)
-        with col3:
-            hora_chegada = st.text_input("Chegada da Equipe:", value="18:00")
-        with col4:
-            hora_inicio = st.text_input("Início do Bar:", value="20:00")
-        with col5:
-            hora_convidados = st.text_input("Chegada dos Convidados:", value="19:30")
+    # ABA 1 - PACOTES & ADICIONAIS (NOVO ORÇAMENTO)
+    # ==========================================
+    with tab1:
+        st.subheader("🍸 Montar Novo Orçamento")
+    
+        # 1. Cadastro dos Seus Pacotes Base (Mude os valores e nomes como quiser)
+        pacotes_base = {
+            "Bar Completo Standard": {"preco_pessoa": 45.0, "drinks": "Caipirinha\nCaipiroska\nGin Tônica"},
+            "Bar Completo Premium": {"preco_pessoa": 75.0, "drinks": "Moscow Mule\nGin Tropical\nAperol Spritz"},
+            "Apenas Mão de Obra": {"preco_pessoa": 25.0, "drinks": "Definido pelo cliente"}
+        }
+    
+        # 2. Cadastro dos Seus Serviços Adicionais (Aqui você cadastra o Bar de Whisky, etc.)
+        adicionais_disponiveis = {
+            "Bar de Whisky (+ R$ 20,00/pessoa)": {"preco_pessoa": 20.0, "drinks": "Whisky On The Rocks\nWhisky Sour"},
+            "Estação de Gin Gourmet (+ R$ 15,00/pessoa)": {"preco_pessoa": 15.0, "drinks": "Gin Tonica com Especiarias"},
+            "Rodada de Tequila (+ R$ 10,00/pessoa)": {"preco_pessoa": 10.0, "drinks": "Doses de Tequila com Limão"},
+            "Drinks Sem Álcool (Incluso)": {"preco_pessoa": 0.0, "drinks": "Soda Italiana\nCoquetel de Frutas s/ Álcool"}
+        }
+    
+        # Formulário de Cadastro do Cliente
+        with st.form("form_montar_orcamento"):
+            st.markdown("### 👤 Dados do Cliente")
+            col1, col2 = st.columns(2)
+            with col1:
+                cliente = st.text_input("Nome do Cliente:")
+                telefone = st.text_input("Telefone / WhatsApp:")
+                data_evento = st.date_input("Data do Evento:")
+            with col2:
+                cidade = st.text_input("Cidade:")
+                endereco = st.text_input("Endereço do Local:")
+                convidados = st.number_input("Número de Convidados:", min_value=1, value=100, step=1)
+    
+            st.markdown("---")
+            st.markdown("### 🥂 Seleção do Serviço")
             
-        tipo_evento = st.selectbox("Tipo de Evento:", ["Casamento", "Aniversário", "Corporativo", "Outro"])
-        equipe_padrao = st.text_area("Equipe Escalada (Linha por linha):", value="1 Chefe de Bar\n2 Bartenders")
-
-        st.markdown("---")
-        st.markdown("### 💰 Cálculo de Valores Automático")
-
-        # --- LÓGICA DE CÁLCULO ---
-        # 1. Pega o preço do pacote base
-        preco_total_por_pessoa = pacotes_base[opcao_pacote]["preco_pessoa"]
-        texto_drinks = pacotes_base[opcao_pacote]["drinks"]
-
-        # 2. Soma o preço dos adicionais marcados e junta os drinks deles
-        for ad in adicionais_escolhidos:
-            preco_total_por_pessoa += adicionais_disponiveis[ad]["preco_pessoa"]
-            texto_drinks += "\n" + adicionais_disponiveis[ad]["drinks"]
-
-        # 3. Multiplica pelo total de convidados
-        valor_sugerido_calculado = preco_total_por_pessoa * convidados
-
-        st.info(f"💡 Preço sugerido com base nas escolhas (R$ {preco_total_por_pessoa:.2f} por pessoa): **R$ {valor_sugerido_calculado:,.2f}**")
-
-        # Campos editáveis caso você queira dar desconto ou mudar o preço na hora
-        col_venda, col_custo = st.columns(2)
-        with col_venda:
-            valor_venda_final = st.number_input("Valor de Venda Final (R$):", value=float(valor_sugerido_calculado))
-        with col_custo:
-            valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(valor_sugerido_calculado * 0.35)) # Sugere 35% de custo
-
-        # Botão que envia tudo para a tabela do Supabase
-        botao_gerar = st.form_submit_button("📋 Criar Orçamento Pendente")
-
-        if botao_gerar:
-            if not cliente.strip():
-                st.error("Por favor, digite o nome do cliente.")
-            else:
-                # Monta o objeto para salvar na tabela 'eventos'
-                dados_evento_supabase = {
-                    "status": "pendente",
-                    "modalidade": opcao_pacote,
-                    "cliente": cliente,
-                    "telefone": telefone,
-                    "data": str(data_evento),
-                    "cidade": cidade,
-                    "endereco": endereco,
-                    "tipo_evento": tipo_evento,
-                    "convidados": int(convidados),
-                    "hora_chegada": hora_chegada,
-                    "hora_inicio": hora_inicio,
-                    "hora_convidados": hora_convidados,
-                    "venda": valor_venda_final,
-                    "custo": valor_custo_final,
-                    "drinks": texto_drinks, # Vai o cardápio do pacote + os adicionais juntos!
-                    "equipe": equipe_padrao
-                }
-
-                # Envia para o Supabase
-                resposta = supabase.table("eventos").insert(dados_evento_supabase).execute()
-
-                if resposta.data:
-                    st.success(f"✅ Orçamento para {cliente} criado com sucesso e enviado para a aba de Pendentes!")
-                    st.rerun()
+            # Seleção do pacote principal
+            opcao_pacote = st.selectbox("Selecione o Pacote Base:", list(pacotes_base.keys()))
+            
+            # SELEÇÃO DOS SERVIÇOS ADICIONAIS (Whisky, etc.)
+            st.write("**Deseja incluir serviços adicionais?**")
+            adicionais_escolhidos = []
+            for nome_adicional, dados_adicional in adicionais_disponiveis.items():
+                # Cria um checkbox para cada opcional cadastrado
+                if st.checkbox(nome_adicional):
+                    adicionais_escolhidos.append(nome_adicional)
+    
+            st.markdown("---")
+            st.markdown("### 🕒 Cronograma e Detalhes")
+            col3, col4, col5 = st.columns(3)
+            with col3:
+                hora_chegada = st.text_input("Chegada da Equipe:", value="18:00")
+            with col4:
+                hora_inicio = st.text_input("Início do Bar:", value="20:00")
+            with col5:
+                hora_convidados = st.text_input("Chegada dos Convidados:", value="19:30")
+                
+            tipo_evento = st.selectbox("Tipo de Evento:", ["Casamento", "Aniversário", "Corporativo", "Outro"])
+            equipe_padrao = st.text_area("Equipe Escalada (Linha por linha):", value="1 Chefe de Bar\n2 Bartenders")
+    
+            st.markdown("---")
+            st.markdown("### 💰 Cálculo de Valores Automático")
+    
+            # --- LÓGICA DE CÁLCULO ---
+            # 1. Pega o preço do pacote base
+            preco_total_por_pessoa = pacotes_base[opcao_pacote]["preco_pessoa"]
+            texto_drinks = pacotes_base[opcao_pacote]["drinks"]
+    
+            # 2. Soma o preço dos adicionais marcados e junta os drinks deles
+            for ad in adicionais_escolhidos:
+                preco_total_por_pessoa += adicionais_disponiveis[ad]["preco_pessoa"]
+                texto_drinks += "\n" + adicionais_disponiveis[ad]["drinks"]
+    
+            # 3. Multiplica pelo total de convidados
+            valor_sugerido_calculado = preco_total_por_pessoa * convidados
+    
+            st.info(f"💡 Preço sugerido com base nas escolhas (R$ {preco_total_por_pessoa:.2f} por pessoa): **R$ {valor_sugerido_calculado:,.2f}**")
+    
+            # Campos editáveis caso você queira dar desconto ou mudar o preço na hora
+            col_venda, col_custo = st.columns(2)
+            with col_venda:
+                valor_venda_final = st.number_input("Valor de Venda Final (R$):", value=float(valor_sugerido_calculado))
+            with col_custo:
+                valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(valor_sugerido_calculado * 0.35)) # Sugere 35% de custo
+    
+            # Botão que envia tudo para a tabela do Supabase
+            botao_gerar = st.form_submit_button("📋 Criar Orçamento Pendente")
+    
+            if botao_gerar:
+                if not cliente.strip():
+                    st.error("Por favor, digite o nome do cliente.")
+                else:
+                    # Monta o objeto para salvar na tabela 'eventos'
+                    dados_evento_supabase = {
+                        "status": "pendente",
+                        "modalidade": opcao_pacote,
+                        "cliente": cliente,
+                        "telefone": telefone,
+                        "data": str(data_evento),
+                        "cidade": cidade,
+                        "endereco": endereco,
+                        "tipo_evento": tipo_evento,
+                        "convidados": int(convidados),
+                        "hora_chegada": hora_chegada,
+                        "hora_inicio": hora_inicio,
+                        "hora_convidados": hora_convidados,
+                        "venda": valor_venda_final,
+                        "custo": valor_custo_final,
+                        "drinks": texto_drinks, # Vai o cardápio do pacote + os adicionais juntos!
+                        "equipe": equipe_padrao
+                    }
+    
+                    # Envia para o Supabase
+                    resposta = supabase.table("eventos").insert(dados_evento_supabase).execute()
+    
+                    if resposta.data:
+                        st.success(f"✅ Orçamento para {cliente} criado com sucesso e enviado para a aba de Pendentes!")
+                        st.rerun()
     # -------------------------
     # LISTA DE PACOTES SALVOS
     # -------------------------
