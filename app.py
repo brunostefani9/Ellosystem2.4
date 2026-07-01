@@ -3881,8 +3881,8 @@ elif menu == "Pacotes":
     
         modalidades_disponiveis = ["Bar Completo", "Apenas Mão de Obra"]
     
-        # Início do Formulário
-        with st.form("form_montar_orcamento"):
+        # --- 1. DADOS DO CLIENTE (DENTRO DO FORMULÁRIO) ---
+        with st.form("form_dados_cliente"):
             st.markdown("### 👤 Dados do Cliente")
             col1, col2 = st.columns(2)
             with col1:
@@ -3893,32 +3893,35 @@ elif menu == "Pacotes":
                 cidade = st.text_input("Cidade:")
                 endereco = st.text_input("Endereço do Local:")
                 convidados = st.number_input("Número de Convidados:", min_value=1, value=100, step=1)
-    
-            st.markdown("---")
-            st.markdown("### 🥂 Seleção do Serviço Principal")
             
-            opcao_modalidade = st.selectbox("Selecione a Modalidade:", modalidades_disponiveis)
+            # Botão apenas para confirmar os dados cadastrais
+            dados_confirmados = st.form_submit_button("🔒 Confirmar Dados do Cliente")
     
-            # Definindo preços base
-            if opcao_modalidade == "Bar Completo":
-                preco_base_pessoa = 55.00
-                drinks_base = "Caipirinha\nCaipiroska\nGin Tônica Tradicional\nDrinks sem Álcool"
-            else:
-                preco_base_pessoa = 25.00
-                drinks_base = "Definido pelo cliente (Apenas mão de obra)"
+        st.markdown("---")
+        st.markdown("### 🥂 Seleção do Serviço Principal")
+        
+        # Seleção de modalidade fica fora do form para atualizar em tempo real sem bugar
+        opcao_modalidade = st.selectbox("Selecione a Modalidade:", modalidades_disponiveis)
     
-            # --- VARIÁVEIS INICIALIZADAS ANTES (Evita o NameError) ---
-            custo_adicional_whisky = 0.0
-            venda_adicional_whisky = 0.0
-            drinks_whisky_adicionados = ""
-            
-            # Cria a caixinha de ativação primeiro
+        # Definindo preços base
+        if opcao_modalidade == "Bar Completo":
+            preco_base_pessoa = 55.00
+            drinks_base = "Caipirinha\nCaipiroska\nGin Tônica Tradicional\nDrinks sem Álcool"
+        else:
+            preco_base_pessoa = 25.00
+            drinks_base = "Definido pelo cliente (Apenas mão de obra)"
+    
+        # --- 2. SEÇÃO DE ADICIONAIS (FORA DO FORMULÁRIO - EVITA ERROS) ---
+        custo_adicional_whisky = 0.0
+        venda_adicional_whisky = 0.0
+        drinks_whisky_adicionados = ""
+        
+        if opcao_modalidade == "Bar Completo":
             st.markdown("---")
             st.markdown("### 🥃 Serviços Adicionais (Opcional)")
             ativar_whisky = st.checkbox("Incluir Bar de Whisky Personalizado")
             
-            # Executa a lógica se for Bar Completo E a caixinha estiver marcada
-            if opcao_modalidade == "Bar Completo" and activar_whisky:
+            if activar_whisky:
                 st.markdown("#### Configuração do Bar de Whisky")
                 
                 df_estoque = pd.DataFrame(supabase.table("estoque").select("*").execute().data or [])
@@ -3943,44 +3946,43 @@ elif menu == "Pacotes":
                 venda_adicional_whisky = custo_adicional_whisky * 3.0 
                 drinks_whisky_adicionados = f"\nWhisky {marca_selecionada} On The Rocks\nWhisky {marca_selecionada} Sour"
                 
-                st.caption(f"📊 Custo: R$ {custo_adicional_whisky:.2f} | Venda Adicional: R$ {venda_adicional_whisky:.2f}")
+                st.success(f"📊 Custo das Garrafas: R$ {custo_adicional_whisky:.2f} | Preço Comercial: R$ {venda_adicional_whisky:.2f}")
     
-            st.markdown("---")
-            st.markdown("### 🕒 Cronograma e Detalhes")
-            col3, col4, col5 = st.columns(3)
-            with col3:
-                hora_chegada = st.text_input("Chegada da Equipe:", value="18:00")
-            with col4:
-                hora_inicio = st.text_input("Início do Bar:", value="20:00")
-            with col5:
-                hora_convidados = st.text_input("Chegada dos Convidados:", value="19:30")
-                
-            tipo_evento = st.selectbox("Tipo de Evento:", ["Casamento", "Aniversário", "Corporativo", "Outro"])
-            equipe_padrao = st.text_area("Equipe Escalada (Linha por linha):", value="1 Chefe de Bar\n2 Bartenders")
+        st.markdown("---")
+        st.markdown("### 🕒 Cronograma e Detalhes")
+        col3, col4, col5 = st.columns(3)
+        with col3:
+            hora_chegada = st.text_input("Chegada da Equipe:", value="18:00")
+        with col4:
+            hora_inicio = st.text_input("Início do Bar:", value="20:00")
+        with col5:
+            hora_convidados = st.text_input("Chegada dos Convidados:", value="19:30")
+            
+        tipo_evento = st.selectbox("Tipo de Evento:", ["Casamento", "Aniversário", "Corporativo", "Outro"])
+        equipe_padrao = st.text_area("Equipe Escalada (Linha por linha):", value="1 Chefe de Bar\n2 Bartenders")
     
-            st.markdown("---")
-            st.markdown("### 💰 Cálculo de Valores")
+        st.markdown("---")
+        st.markdown("### 💰 Cálculo de Valores")
     
-            valor_base_evento = preco_base_pessoa * convidados
-            valor_sugerido_calculado = valor_base_evento + venda_adicional_whisky
-            custo_total_estimado = (valor_base_evento * 0.35) + custo_adicional_whisky
-            texto_drinks_final = drinks_base + drinks_whisky_adicionados
+        valor_base_evento = preco_base_pessoa * convidados
+        valor_sugerido_calculado = valor_base_evento + venda_adicional_whisky
+        custo_total_estimado = (valor_base_evento * 0.35) + custo_adicional_whisky
+        texto_drinks_final = drinks_base + drinks_whisky_adicionados
     
-            st.info(f"💡 Preço sugerido para o cliente: **R$ {valor_sugerido_calculado:,.2f}**")
+        st.info(f"💡 Preço sugerido para o cliente: **R$ {valor_sugerido_calculado:,.2f}**")
     
-            col_venda, col_custo = st.columns(2)
-            with col_venda:
-                valor_venda_final = st.number_input("Valor de Venda Final (R$):", value=float(valor_sugerido_calculado))
-            with col_custo:
-                valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(custo_total_estimado))
+        col_venda, col_custo = st.columns(2)
+        with col_venda:
+            valor_venda_final = st.number_input("Valor de Venda Final (R$):", value=float(valor_sugerido_calculado))
+        with col_custo:
+            valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(custo_total_estimado))
     
-            # O BOTÃO DE SUBMIT (Agora obrigatoriamente dentro do form)
-            botao_gerar = st.form_submit_button("📋 Criar Orçamento Pendente")
+        # --- BOTÃO FINAL DE SALVAMENTO (FORA DE QUALQUER FORMULÁRIO) ---
+        botao_gerar = st.button("🚀 Criar e Enviar Orçamento para Pendentes", type="primary")
     
-        # FIM DO FORMULÁRIO (O processamento do clique fica fora do 'with st.form')
         if botao_gerar:
             if not cliente.strip():
-                st.error("Por favor, digite o nome do cliente.")
+                st.error("Por favor, preencha os dados do cliente no formulário acima e clique em Confirmar.")
             else:
                 dados_evento_supabase = {
                     "status": "pendente",
