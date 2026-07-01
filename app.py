@@ -484,24 +484,20 @@ elif menu == "Estoque":
     )
 
     # =========================
-    # ENTRADA (RETORNADA AO PADRÃO LIVRE)
+    # ENTRADA
     # =========================
     with tab1:
         with st.form("entrada_estoque", clear_on_submit=True):
             st.markdown("### 📥 Registrar Movimentação")
 
-            # Campos de texto livres de volta!
-            # .title() garante que a primeira letra de cada palavra fique maiúscula (Ex: Jack Daniels)
-            produto = st.text_input("Tipo do Produto (Ex: Whisky, Vodka, Energetico)").title().strip()
-            marca = st.text_input("Marca (Ex: Jack Daniels, Absolut, Red Bull)").strip()
-            tamanho = st.text_input("Tamanho (Ex: 750ml, 1L, 250ml)").strip()
+            # Padroniza a digitação com .title() e remove espaços com .strip()
+            produto = st.text_input("Tipo do Produto (Ex: Whisky, Vodka)").title().strip()
+            marca = st.text_input("Marca (Ex: Jack Daniels, Absolut)").title().strip()
+            tamanho = st.text_input("Tamanho (Ex: 750, 1000)").strip()
 
             qtd = st.number_input("Quantidade", min_value=0.0)
 
-            status = st.selectbox(
-                "Status",
-                ["Compra", "Volta evento", "Teste"]
-            )
+            status = st.selectbox("Status", ["Compra", "Volta evento", "Teste"])
 
             preco = 0.0
             if status == "Compra":
@@ -510,11 +506,11 @@ elif menu == "Estoque":
                 st.info("🔁 Não altera preço existente")
 
             if st.form_submit_button("Registrar entrada"):
-                # Validação para não cadastrar itens sem nome ou marca
                 if not produto or not marca:
                     st.error("Por favor, preencha o tipo do produto e a marca!")
                 else:
                     if status != "Teste":
+                        # Filtra exatamente usando os nomes padronizados
                         dados = supabase.table("estoque")\
                             .select("*")\
                             .eq("produto", produto)\
@@ -525,15 +521,16 @@ elif menu == "Estoque":
                         atual = pd.DataFrame(dados.data)
 
                         if atual.empty:
+                            # Se não existe, cria o primeiro registro
                             supabase.table("estoque").insert({
-                                "produto": str(produto),
-                                "marca": str(marca),
+                                "produto": produto,
+                                "marca": marca,
                                 "quantidade": float(qtd),
-                                "tamanho": str(tamanho),
+                                "tamanho": tamanho,
                                 "preco": float(preco)
                             }).execute()
-
                         else:
+                            # Se JÁ EXISTE, ele apenas SOMARÁ na mesma linha!
                             qtd_atual = float(atual.iloc[0]["quantidade"])
                             preco_atual = float(atual.iloc[0]["preco"])
 
@@ -547,21 +544,20 @@ elif menu == "Estoque":
                               .eq("marca", marca)\
                               .eq("tamanho", tamanho)\
                               .execute()
-
                     else:
                         st.warning("Movimentação de teste não altera estoque")
 
-                    # Registra na tabela de movimentações
+                    # Registra histórico
                     supabase.table("movimentacoes").insert({
                         "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "produto": str(produto),
-                        "marca": str(marca),
+                        "produto": produto,
+                        "marca": marca,
                         "tipo": "Entrada",
                         "quantidade": float(qtd),
-                        "status": str(status)
+                        "status": status
                     }).execute()
 
-                    st.success("Entrada registrada com sucesso!")
+                    st.success(f"Estoque atualizado para {produto} {marca}!")
                     st.rerun()
 
     # =========================
@@ -575,53 +571,49 @@ elif menu == "Estoque":
             st.info("Estoque vazio")
         else:
             with st.form("saida_estoque", clear_on_submit=True):
-                produto = st.selectbox("Produto", estoque["produto"].unique())
+                produto_sel = st.selectbox("Produto", sorted(estoque["produto"].unique()))
                 
-                marca = st.selectbox(
-                    "Marca",
-                    estoque[estoque["produto"] == produto]["marca"].unique()
-                )
+                marcas_filtradas = estoque[estoque["produto"] == produto_sel]["marca"].unique()
+                marca_sel = st.selectbox("Marca", sorted(marcas_filtradas))
 
-                tamanho = st.selectbox(
-                    "Tamanho",
-                    estoque[
-                        (estoque["produto"] == produto) &
-                        (estoque["marca"] == marca)
-                    ]["tamanho"].fillna("").unique()
-                )
+                tamanhos_filtrados = estoque[
+                    (estoque["produto"] == produto_sel) & 
+                    (estoque["marca"] == marca_sel)
+                ]["tamanho"].fillna("").unique()
+                tamanho_sel = st.selectbox("Tamanho", sorted(tamanhos_filtrados))
 
                 qtd = st.number_input("Quantidade", min_value=1.0)
 
                 if st.form_submit_button("Registrar saída"):
                     dados = supabase.table("estoque")\
                         .select("*")\
-                        .eq("produto", str(produto))\
-                        .eq("marca", str(marca))\
-                        .eq("tamanho", str(tamanho))\
+                        .eq("produto", str(produto_sel))\
+                        .eq("marca", str(marca_sel))\
+                        .eq("tamanho", str(tamanho_sel))\
                         .execute()
 
                     atual = pd.DataFrame(dados.data)
 
                     if atual.empty:
-                        st.error("Item não encontrado")
+                        st.error("Item não encontrado no estoque")
                     else:
                         qtd_atual = float(atual.iloc[0]["quantidade"])
                         nova = qtd_atual - float(qtd)
 
                         if nova < 0:
-                            st.error("Estoque insuficiente")
+                            st.error(f"Estoque insuficiente! Você só tem {qtd_atual} unidades.")
                         else:
                             supabase.table("estoque").update({
                                 "quantidade": nova
-                            }).eq("produto", str(produto))\
-                              .eq("marca", str(marca))\
-                              .eq("tamanho", str(tamanho))\
+                            }).eq("produto", str(produto_sel))\
+                              .eq("marca", str(marca_sel))\
+                              .eq("tamanho", str(tamanho_sel))\
                               .execute()
 
                             supabase.table("movimentacoes").insert({
                                 "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                                "produto": str(produto),
-                                "marca": str(marca),
+                                "produto": str(produto_sel),
+                                "marca": str(marca_sel),
                                 "tipo": "Saída",
                                 "quantidade": float(qtd),
                                 "status": "Evento"
