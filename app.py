@@ -3877,24 +3877,11 @@ elif menu == "Pacotes":
     # ABA 1 - PACOTES & ADICIONAIS (NOVO ORÇAMENTO)
     # ==========================================
     with tab1:
-        st.subheader("🍸 Montar Novo Orçamento")
-    
-        # 1. Cadastro dos Seus Pacotes Base (Mude os valores e nomes como quiser)
-        pacotes_base = {
-            "Bar Completo Standard": {"preco_pessoa": 45.0, "drinks": "Caipirinha\nCaipiroska\nGin Tônica"},
-            "Bar Completo Premium": {"preco_pessoa": 75.0, "drinks": "Moscow Mule\nGin Tropical\nAperol Spritz"},
-            "Apenas Mão de Obra": {"preco_pessoa": 25.0, "drinks": "Definido pelo cliente"}
-        }
-    
-        # 2. Cadastro dos Seus Serviços Adicionais (Aqui você cadastra o Bar de Whisky, etc.)
-        adicionais_disponiveis = {
-            "Bar de Whisky (+ R$ 20,00/pessoa)": {"preco_pessoa": 20.0, "drinks": "Whisky On The Rocks\nWhisky Sour"},
-            "Estação de Gin Gourmet (+ R$ 15,00/pessoa)": {"preco_pessoa": 15.0, "drinks": "Gin Tonica com Especiarias"},
-            "Rodada de Tequila (+ R$ 10,00/pessoa)": {"preco_pessoa": 10.0, "drinks": "Doses de Tequila com Limão"},
-            "Drinks Sem Álcool (Incluso)": {"preco_pessoa": 0.0, "drinks": "Soda Italiana\nCoquetel de Frutas s/ Álcool"}
-        }
-    
-        # Formulário de Cadastro do Cliente
+        st.subheader("💡 Montar Novo Orçamento")
+
+        # 1. Suas duas modalidades reais de negócio
+        modalidades_disponiveis = ["Bar Completo", "Apenas Mão de Obra"]
+        
         with st.form("form_montar_orcamento"):
             st.markdown("### 👤 Dados do Cliente")
             col1, col2 = st.columns(2)
@@ -3906,21 +3893,63 @@ elif menu == "Pacotes":
                 cidade = st.text_input("Cidade:")
                 endereco = st.text_input("Endereço do Local:")
                 convidados = st.number_input("Número de Convidados:", min_value=1, value=100, step=1)
-    
+        
             st.markdown("---")
-            st.markdown("### 🥂 Seleção do Serviço")
+            st.markdown("### 🥂 Seleção do Serviço Principal")
             
-            # Seleção do pacote principal
-            opcao_pacote = st.selectbox("Selecione o Pacote Base:", list(pacotes_base.keys()))
+            # Seleção entre Bar Completo ou Mão de Obra
+            opcao_modalidade = st.selectbox("Selecione a Modalidade:", modalidades_disponiveis)
+        
+            # Definindo preços base de exemplo por pessoa para cada um
+            if opcao_modalidade == "Bar Completo":
+                preco_base_pessoa = 55.00
+                drinks_base = "Caipirinha\nCaipiroska\nGin Tônica Tradicional\nDrinks sem Álcool"
+            else:
+                preco_base_pessoa = 25.00
+                drinks_base = "Definido pelo cliente (Apenas mão de obra)"
+        
+            # --- REGRA DE NEGÓCIO: ADICIONAIS SÓ APARECEM SE FOR BAR COMPLETO ---
+            custo_adicional_whisky = 0.0
+            venda_adicional_whisky = 0.0
+            drinks_whisky_adicionados = ""
             
-            # SELEÇÃO DOS SERVIÇOS ADICIONAIS (Whisky, etc.)
-            st.write("**Deseja incluir serviços adicionais?**")
-            adicionais_escolhidos = []
-            for nome_adicional, dados_adicional in adicionais_disponiveis.items():
-                # Cria um checkbox para cada opcional cadastrado
-                if st.checkbox(nome_adicional):
-                    adicionais_escolhidos.append(nome_adicional)
-    
+            if opcao_modalidade == "Bar Completo":
+                st.markdown("---")
+                st.markdown("### 🥃 Serviços Adicionais (Opcional)")
+                
+                ativar_whisky = st.checkbox("Incluir Bar de Whisky Personalizado")
+                
+                if activar_whisky:
+                    st.markdown("#### Configuração do Bar de Whisky")
+                    
+                    # Busca do seu estoque do Supabase para listar as marcas reais
+                    df_estoque = pd.DataFrame(supabase.table("estoque").select("*").execute().data or [])
+                    
+                    if not df_estoque.empty:
+                        opcoes_whisky = df_estoque[df_estoque["marca"].str.lower().str.contains("whisky|black|red|jack|chivas", na=False)]["marca"].tolist()
+                    else:
+                        opcoes_whisky = ["Red Label", "Black Label", "Jack Daniel's", "Chivas Regal"]
+        
+                    col_w1, col_w2 = st.columns(2)
+                    with col_w1:
+                        marca_selecionada = st.selectbox("Selecione a Marca do Whisky:", opcoes_whisky)
+                    with col_w2:
+                        qtd_garrafas = st.number_input("Quantidade de Garrafas:", min_value=1, value=3, step=1)
+        
+                    # Busca o preço de custo no estoque
+                    if not df_estoque.empty and marca_selecionada in df_estoque["marca"].values:
+                        preco_custo_unitario = float(df_estoque[df_estoque["marca"] == marca_selecionada]["preco"].values[0])
+                    else:
+                        preco_custo_unitario = 120.00  # Padrão de segurança
+        
+                    # Cálculos do Whisky
+                    custo_adicional_whisky = preco_custo_unitario * qtd_garrafas
+                    # Multiplica o custo por 3x para definir o preço de venda do opcional
+                    venda_adicional_whisky = custo_adicional_whisky * 3.0 
+                    drinks_whisky_adicionados = f"\nWhisky {marca_selecionada} On The Rocks\nWhisky {marca_selecionada} Sour"
+                    
+                    st.caption(f"📊 Custo das garrafas: R$ {custo_adicional_whisky:.2f} | Preço de Venda do Adicional: R$ {venda_adicional_whisky:.2f}")
+        
             st.markdown("---")
             st.markdown("### 🕒 Cronograma e Detalhes")
             col3, col4, col5 = st.columns(3)
@@ -3933,43 +3962,37 @@ elif menu == "Pacotes":
                 
             tipo_evento = st.selectbox("Tipo de Evento:", ["Casamento", "Aniversário", "Corporativo", "Outro"])
             equipe_padrao = st.text_area("Equipe Escalada (Linha por linha):", value="1 Chefe de Bar\n2 Bartenders")
-    
+        
             st.markdown("---")
-            st.markdown("### 💰 Cálculo de Valores Automático")
-    
-            # --- LÓGICA DE CÁLCULO ---
-            # 1. Pega o preço do pacote base
-            preco_total_por_pessoa = pacotes_base[opcao_pacote]["preco_pessoa"]
-            texto_drinks = pacotes_base[opcao_pacote]["drinks"]
-    
-            # 2. Soma o preço dos adicionais marcados e junta os drinks deles
-            for ad in adicionais_escolhidos:
-                preco_total_por_pessoa += adicionais_disponiveis[ad]["preco_pessoa"]
-                texto_drinks += "\n" + adicionais_disponiveis[ad]["drinks"]
-    
-            # 3. Multiplica pelo total de convidados
-            valor_sugerido_calculado = preco_total_por_pessoa * convidados
-    
-            st.info(f"💡 Preço sugerido com base nas escolhas (R$ {preco_total_por_pessoa:.2f} por pessoa): **R$ {valor_sugerido_calculado:,.2f}**")
-    
-            # Campos editáveis caso você queira dar desconto ou mudar o preço na hora
+            st.markdown("### 💰 Cálculo de Valores")
+        
+            # --- LÓGICA DE CÁLCULO FINAL ---
+            valor_base_evento = preco_base_pessoa * convidados
+            
+            # Soma o valor base com a venda do adicional (se houver)
+            valor_sugerido_calculado = valor_base_evento + venda_adicional_whisky
+            custo_total_estimado = (valor_base_evento * 0.35) + custo_adicional_whisky
+            
+            # Junta as listas de drinks
+            texto_drinks_final = drinks_base + drinks_whisky_adicionados
+        
+            st.info(f"💡 Preço sugerido para o cliente: **R$ {valor_sugerido_calculado:,.2f}**")
+        
             col_venda, col_custo = st.columns(2)
             with col_venda:
                 valor_venda_final = st.number_input("Valor de Venda Final (R$):", value=float(valor_sugerido_calculado))
             with col_custo:
-                valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(valor_sugerido_calculado * 0.35)) # Sugere 35% de custo
-    
-            # Botão que envia tudo para a tabela do Supabase
+                valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(custo_total_estimado))
+        
             botao_gerar = st.form_submit_button("📋 Criar Orçamento Pendente")
-    
+        
             if botao_gerar:
                 if not cliente.strip():
                     st.error("Por favor, digite o nome do cliente.")
                 else:
-                    # Monta o objeto para salvar na tabela 'eventos'
                     dados_evento_supabase = {
                         "status": "pendente",
-                        "modalidade": opcao_pacote,
+                        "modalidade": opcao_modalidade,
                         "cliente": cliente,
                         "telefone": telefone,
                         "data": str(data_evento),
@@ -3982,16 +4005,12 @@ elif menu == "Pacotes":
                         "hora_convidados": hora_convidados,
                         "venda": valor_venda_final,
                         "custo": valor_custo_final,
-                        "drinks": texto_drinks, # Vai o cardápio do pacote + os adicionais juntos!
+                        "drinks": texto_drinks_final,
                         "equipe": equipe_padrao
                     }
-    
-                    # Envia para o Supabase
-                    resposta = supabase.table("eventos").insert(dados_evento_supabase).execute()
-    
-                    if resposta.data:
-                        st.success(f"✅ Orçamento para {cliente} criado com sucesso e enviado para a aba de Pendentes!")
-                        st.rerun()
+                    supabase.table("eventos").insert(dados_evento_supabase).execute()
+                    st.success(f"✅ Orçamento para {cliente} criado com sucesso!")
+                    st.rerun()
     # -------------------------
     # LISTA DE PACOTES SALVOS
     # -------------------------
