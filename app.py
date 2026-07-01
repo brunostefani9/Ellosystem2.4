@@ -472,9 +472,6 @@ if menu == "Precificação":
 # ESTOQUE
 # -------------------------
 
-# -------------------------
-# ESTOQUE CORRIGIDO
-# -------------------------
 elif menu == "Estoque":
 
     st.title("Controle de Estoque")
@@ -561,7 +558,7 @@ elif menu == "Estoque":
                     st.rerun()
 
     # =========================
-    # SAÍDA COM JUSTIFICATIVA
+    # SAÍDA COM JUSTIFICATIVA (CORRIGIDA)
     # =========================
     with tab2:
         dados = supabase.table("estoque").select("*").execute()
@@ -570,21 +567,25 @@ elif menu == "Estoque":
         if estoque.empty:
             st.info("Estoque vazio")
         else:
-            with st.form("saida_estoque", clear_on_submit=True):
-                produto_sel = st.selectbox("Produto", sorted(estoque["produto"].unique()))
+            st.markdown("### 📤 Registrar Saída de Estoque")
+            
+            # 1. Seletores dinâmicos ficam FORA do form para o Streamlit conseguir atualizar a tela
+            produto_sel = st.selectbox("1️⃣ Selecione o Produto", sorted(estoque["produto"].unique()))
+            
+            marcas_filtradas = estoque[estoque["produto"] == produto_sel]["marca"].unique()
+            marca_sel = st.selectbox("2️⃣ Selecione a Marca", sorted(marcas_filtradas))
+
+            tamanhos_filtrados = estoque[
+                (estoque["produto"] == produto_sel) & 
+                (estoque["marca"] == marca_sel)
+            ]["tamanho"].fillna("").unique()
+            tamanho_sel = st.selectbox("3️⃣ Selecione o Tamanho", sorted(tamanhos_filtrados))
+
+            # 2. O formulário engloba apenas a quantidade, justificativa e o botão de envio
+            with st.form("executar_saida", clear_on_submit=True):
                 
-                marcas_filtradas = estoque[estoque["produto"] == produto_sel]["marca"].unique()
-                marca_sel = st.selectbox("Marca", sorted(marcas_filtradas))
+                qtd = st.number_input("Quantidade para dar baixa", min_value=1.0, step=1.0)
 
-                tamanhos_filtrados = estoque[
-                    (estoque["produto"] == produto_sel) & 
-                    (estoque["marca"] == marca_sel)
-                ]["tamanho"].fillna("").unique()
-                tamanho_sel = st.selectbox("Tamanho", sorted(tamanhos_filtrados))
-
-                qtd = st.number_input("Quantidade", min_value=1.0)
-
-                # Novo campo de Justificativa adicionado aqui!
                 justificativa = st.selectbox(
                     "Motivo da saída / Justificativa",
                     [
@@ -596,44 +597,45 @@ elif menu == "Estoque":
                     ]
                 )
 
-                if st.form_submit_button("Registrar saída"):
-                    dados = supabase.table("estoque")\
+                if st.form_submit_button("Confirmar Baixa no Estoque"):
+                    # Busca o item exato no banco de dados
+                    dados_item = supabase.table("estoque")\
                         .select("*")\
                         .eq("produto", str(produto_sel))\
                         .eq("marca", str(marca_sel))\
                         .eq("tamanho", str(tamanho_sel))\
                         .execute()
 
-                    atual = pd.DataFrame(dados.data)
+                    atual = pd.DataFrame(dados_item.data)
 
                     if atual.empty:
-                        st.error("Item não encontrado no estoque")
+                        st.error("Erro grave: Item não encontrado no banco de dados.")
                     else:
                         qtd_atual = float(atual.iloc[0]["quantidade"])
-                        nova = qtd_atual - float(qtd)
+                        nova_qtd = qtd_atual - float(qtd)
 
-                        if nova < 0:
-                            st.error(f"Estoque insuficiente! Você só tem {qtd_atual} unidades.")
+                        if nova_qtd < 0:
+                            st.error(f"❌ Estoque insuficiente! Você tentou retirar {qtd}, mas só tem {qtd_atual} unidades em estoque.")
                         else:
-                            # Atualiza a quantidade no estoque físico
+                            # A) Atualiza a quantidade no estoque físico
                             supabase.table("estoque").update({
-                                "quantidade": nova
+                                "quantidade": nova_qtd
                             }).eq("produto", str(produto_sel))\
                               .eq("marca", str(marca_sel))\
                               .eq("tamanho", str(tamanho_sel))\
                               .execute()
 
-                            # Registra na tabela de movimentações salvando a justificativa no status!
+                            # B) Registra a movimentação no histórico
                             supabase.table("movimentacoes").insert({
                                 "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                 "produto": str(produto_sel),
                                 "marca": str(marca_sel),
                                 "tipo": "Saída",
                                 "quantidade": float(qtd),
-                                "status": str(justificativa)  # Aqui ele grava o motivo selecionado
+                                "status": str(justificativa)
                             }).execute()
 
-                            st.success(f"Saída registrada com sucesso: {justificativa}!")
+                            st.success(f"✅ Baixa realizada com sucesso! Motivo: {justificativa}")
                             st.rerun()
 
     # =========================
@@ -728,7 +730,7 @@ elif menu == "Estoque":
                 st.success("Item removido com sucesso!")
                 st.rerun()
     # =========================
-    # REGISTROS
+    # REGISTROS CONFIGURADOS
     # =========================
     with tab4:
         dados = supabase.table("movimentacoes")\
@@ -737,9 +739,25 @@ elif menu == "Estoque":
             .execute()
 
         df = pd.DataFrame(dados.data)
-        st.dataframe(df, use_container_width=True)
-        st.info("Movimentações com status 'Teste' não afetam o estoque")
 
+        if df.empty:
+            st.info("Nenhuma movimentação registrada ainda.")
+        else:
+            # Mostra a tabela renomeando a coluna 'status' para ficar mais clara
+            st.dataframe(
+                df, 
+                use_container_width=True,
+                column_config={
+                    "status": st.column_config.TextColumn("📋 Justificativa / Status"),
+                    "data": st.column_config.TextColumn("📅 Data/Hora"),
+                    "produto": st.column_config.TextColumn("📦 Produto"),
+                    "marca": st.column_config.TextColumn("🏷️ Marca"),
+                    "tipo": st.column_config.TextColumn("🔄 Tipo"),
+                    "quantidade": st.column_config.NumberColumn("🔢 Qtd")
+                }
+            )
+
+        st.info("Movimentações com status 'Teste' não afetam o estoque físico")
 elif menu == "Relatórios":
 
     st.title("📊 Dashboard Geral")
