@@ -561,7 +561,7 @@ elif menu == "Estoque":
                     st.rerun()
 
     # =========================
-    # SAÍDA
+    # SAÍDA COM JUSTIFICATIVA
     # =========================
     with tab2:
         dados = supabase.table("estoque").select("*").execute()
@@ -584,6 +584,18 @@ elif menu == "Estoque":
 
                 qtd = st.number_input("Quantidade", min_value=1.0)
 
+                # Novo campo de Justificativa adicionado aqui!
+                justificativa = st.selectbox(
+                    "Motivo da saída / Justificativa",
+                    [
+                        "Evento", 
+                        "Ajuste de Estoque", 
+                        "Teste de Drink", 
+                        "Consumo Interno", 
+                        "Avaria / Perda"
+                    ]
+                )
+
                 if st.form_submit_button("Registrar saída"):
                     dados = supabase.table("estoque")\
                         .select("*")\
@@ -603,6 +615,7 @@ elif menu == "Estoque":
                         if nova < 0:
                             st.error(f"Estoque insuficiente! Você só tem {qtd_atual} unidades.")
                         else:
+                            # Atualiza a quantidade no estoque físico
                             supabase.table("estoque").update({
                                 "quantidade": nova
                             }).eq("produto", str(produto_sel))\
@@ -610,16 +623,17 @@ elif menu == "Estoque":
                               .eq("tamanho", str(tamanho_sel))\
                               .execute()
 
+                            # Registra na tabela de movimentações salvando a justificativa no status!
                             supabase.table("movimentacoes").insert({
                                 "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                 "produto": str(produto_sel),
                                 "marca": str(marca_sel),
                                 "tipo": "Saída",
                                 "quantidade": float(qtd),
-                                "status": "Evento"
+                                "status": str(justificativa)  # Aqui ele grava o motivo selecionado
                             }).execute()
 
-                            st.success("Saída registrada!")
+                            st.success(f"Saída registrada com sucesso: {justificativa}!")
                             st.rerun()
 
     # =========================
