@@ -3869,224 +3869,235 @@ elif menu == "Pacotes":
     st.title("📦 Pacotes / Serviços")
 
     import json
+    from datetime import datetime
 
-    tab1, tab2 = st.tabs(["Cadastrar","Lista"])
+    tab1, tab2 = st.tabs(["Cadastrar", "Lista"])
 
     # -------------------------
     # CADASTRAR PACOTE
     # -------------------------
     with tab1:
-
-        nome = st.text_input("Nome do pacote")
-
-        tipo = st.text_input("Tipo do serviço (livre)")
+        nome = st.text_input("Nome do pacote", placeholder="Ex: Bar de Whisky, Open Bar Premium")
+        tipo = st.text_input("Tipo do serviço (livre)", placeholder="Ex: Adicional, Principal, Casamento")
 
         st.markdown("### 🍸 Bebidas do pacote")
 
-        response = supabase.table("precos_bebidas").select("*").execute()
-        df_bebidas = pd.DataFrame(response.data)
+        # Busca diretamente da tabela de estoque unificada para garantir os preços reais
+        response = supabase.table("estoque").select("produto, marca, tamanho, preco").execute()
+        df_bruto_bebidas = pd.DataFrame(response.data)
+
+        if not df_bruto_bebidas.empty:
+            # Padroniza os nomes para exibição idêntica ao estoque físico
+            df_bruto_bebidas["produto"] = df_bruto_bebidas["produto"].fillna("").astype(str).str.title().str.strip()
+            df_bruto_bebidas["marca"] = df_bruto_bebidas["marca"].fillna("").astype(str).str.title().str.strip()
+            df_bruto_bebidas["tamanho"] = df_bruto_bebidas["tamanho"].fillna("").astype(str).str.strip()
+            df_bruto_bebidas["preco"] = pd.to_numeric(df_bruto_bebidas["preco"], errors="coerce").fillna(0.0)
+
+            # Cria um nome comercial completo legível para o usuário selecionar
+            df_bruto_bebidas["nome_completo"] = (
+                df_bruto_bebidas["produto"] + " " + 
+                df_bruto_bebidas["marca"] + " (" + 
+                df_bruto_bebidas["tamanho"] + ")"
+            )
+            
+            # Remove duplicados visuais caso haja resquício no banco
+            df_bebidas = df_bruto_bebidas.drop_duplicates(subset=["nome_completo"])
+        else:
+            df_bebidas = pd.DataFrame()
+
+        itens_pacote = []
+        custo_total_pacote = 0.0
 
         if not df_bebidas.empty:
-            df_bebidas["preco"] = pd.to_numeric(df_bebidas["preco"], errors="coerce")
-        
-        itens_pacote = []
-        
-        custo_total_pacote = 0
-        
-        if not df_bebidas.empty:
-        
             bebidas_selecionadas = st.multiselect(
-                "Selecione as bebidas",
-                df_bebidas["nome"]
+                "Selecione as bebidas para este pacote",
+                df_bebidas["nome_completo"].tolist()
             )
-        
+
             for bebida in bebidas_selecionadas:
-        
-                dados = df_bebidas[df_bebidas["nome"] == bebida].iloc[0]
-        
-                preco = dados["preco"]
-                volume = dados["quantidade"]
-        
-                col1, col2, col3 = st.columns([4,2,2])
-        
+                dados_item = df_bebidas[df_bebidas["nome_completo"] == bebida].iloc[0]
+
+                preco_unitario = float(dados_item["preco"])
+
+                col1, col2, col3 = st.columns([4, 2, 2])
+
                 with col1:
-                    st.write(f"✔ {bebida}")
-        
+                    st.markdown(f"📊 **{bebida}**")
+                    st.caption(f"Preço de custo un: R$ {preco_unitario:,.2f}")
+
                 with col2:
+                    # Chave única baseada no nome limpo do item para não dar conflito no Streamlit
                     qtd = st.number_input(
                         "Qtd",
-                        min_value=0,
-                        key=f"pac_{bebida}"
+                        min_value=0.0,
+                        step=1.0,
+                        key=f"pac_{dados_item['nome_completo']}"
                     )
-        
+
                 with col3:
-                    total_item = qtd * preco
-                    st.write(f"💰 R$ {total_item:,.2f}")
-        
+                    total_item = qtd * preco_unitario
+                    st.write("")  # Alinhamento estético
+                    st.markdown(f"💰 **R$ {total_item:,.2f}**")
+
                 custo_total_pacote += total_item
-        
-                itens_pacote.append({
-                    "nome": bebida,
-                    "quantidade": qtd,
-                    "preco": preco
-                })
-        
-        st.markdown(f"### 💸 Custo total das bebidas: R$ {custo_total_pacote:,.2f}")
+
+                if qtd > 0:
+                    itens_pacote.append({
+                        "nome": dados_item["nome_completo"],
+                        "quantidade": qtd,
+                        "preco_custo": preco_unitario,
+                        "total": total_item
+                    })
+
+        st.markdown(f"#### 💸 Custo parcial em bebidas: R$ {custo_total_pacote:,.2f}")
+        st.divider()
 
         st.markdown("### 🧊 Extras do pacote")
 
-        # -------------------------
-        # ESTADO
-        # -------------------------
         if "extras_lista" not in st.session_state:
             st.session_state["extras_lista"] = []
-        
-        # -------------------------
-        # INPUTS
-        # -------------------------
-        col1, col2, col3 = st.columns([4,2,1])
-        
+
+        col1, col2, col3 = st.columns([4, 2, 1])
+
         with col1:
-            nome_extra = st.text_input("Nome do extra", placeholder="Ex: 45 esferas de gelo translúcido")
-        
+            nome_extra = st.text_input("Nome do extra", placeholder="Ex: 45 esferas de gelo translúcido", key="input_nome_extra")
+
         with col2:
-            valor_extra = st.number_input("Valor", min_value=0.0, format="%.2f")
-        
+            valor_extra = st.number_input("Valor de Custo", min_value=0.0, format="%.2f", key="input_valor_extra")
+
         with col3:
-            if st.button("➕"):
+            st.write("")  # Espaçador do botão
+            if st.button("➕", use_container_width=True):
                 if nome_extra:
                     st.session_state["extras_lista"].append({
                         "nome": nome_extra,
                         "valor": valor_extra
                     })
-        
-        # -------------------------
-        # LISTA
-        # -------------------------
-        total_extras = 0
-        
+                    st.rerun()
+
+        total_extras = 0.0
         if st.session_state["extras_lista"]:
-        
-            st.markdown("### 📋 Extras adicionados")
-        
+            st.markdown("##### 📋 Extras adicionados:")
             for i, extra in enumerate(st.session_state["extras_lista"]):
-        
-                col1, col2, col3 = st.columns([4,2,1])
-        
-                with col1:
-                    st.write(f"✔ {extra['nome']}")
-        
-                with col2:
+                c1, c2, c3 = st.columns([4, 2, 1])
+                with c1:
+                    st.write(f"✨ {extra['nome']}")
+                with c2:
                     st.write(f"R$ {extra['valor']:,.2f}")
-        
-                with col3:
+                with c3:
                     if st.button("❌", key=f"del_extra_{i}"):
                         st.session_state["extras_lista"].pop(i)
                         st.rerun()
-        
                 total_extras += extra["valor"]
-        
-        st.markdown(f"### 💰 Total Extras: R$ {total_extras:,.2f}")
-        
-        st.markdown("### 💰 Precificação")
 
-        custo = custo_total_pacote + total_extras
-        
-        st.info(f"Custo automático: R$ {custo:,.2f}")
-        
-        # -------------------------
-        # MARGEM
-        # -------------------------
-        margem = st.slider("Margem de lucro (%)", 0, 300, 100)
-        
-        preco_sugerido = custo * (1 + margem / 100)
-        
-        st.metric("💡 Preço sugerido", f"R$ {preco_sugerido:,.2f}")
-        
-        # -------------------------
-        # PREÇO FINAL (EDITÁVEL)
-        # -------------------------
-        preco = st.number_input(
-            "Preço de venda final",
+        st.markdown(f"#### 💰 Total Extras: R$ {total_extras:,.2f}")
+        st.divider()
+
+        st.markdown("### 📊 Precificação & Margem")
+
+        custo_final_calculado = custo_total_pacote + total_extras
+        st.info(f"💵 Custo Total de Insumos: R$ {custo_final_calculado:,.2f}")
+
+        margem = st.slider("Margem de lucro desejada (%)", 0, 300, 100)
+        preco_sugerido = custo_final_calculado * (1 + margem / 100)
+
+        st.metric("💡 Preço final sugerido", f"R$ {preco_sugerido:,.2f}")
+
+        preco_venda_final = st.number_input(
+            "Defina o preço de venda final praticado",
             min_value=0.0,
-            value=float(preco_sugerido)
+            value=float(preco_sugerido),
+            format="%.2f"
         )
-        
-        # -------------------------
-        # LUCRO
-        # -------------------------
-        lucro_preview = preco - custo
-        
+
+        lucro_preview = preco_venda_final - custo_final_calculado
+
         if lucro_preview < 0:
-            st.error(f"⚠️ Prejuízo: R$ {lucro_preview:,.2f}")
+            st.error(f"⚠️ Prejuízo detectado: R$ {lucro_preview:,.2f}")
         else:
-            st.success(f"✅ Lucro estimado: R$ {lucro_preview:,.2f}")
-        
-        st.info(f"Lucro estimado: R$ {lucro_preview:,.2f}")
+            st.success(f"✅ Lucro bruto estimado: R$ {lucro_preview:,.2f}")
 
-        if st.button("💾 Salvar pacote"):
+        if custo_final_calculado > 0:
+            markup = preco_venda_final / custo_final_calculado
+            st.metric("📊 Markup Real", f"{markup:.2f}x")
 
-            dados = json.dumps({
-                "bebidas": itens_pacote,
-                "extras": st.session_state["extras_lista"]
-            })
+        # Salva o pacote estruturado no banco
+        if st.button("💾 Salvar pacote estruturado", type="primary"):
+            if not nome:
+                st.error("Por favor, dê um nome ao pacote antes de salvar!")
+            else:
+                # Estrutura limpa do JSON
+                dados_completos_json = json.dumps({
+                    "bebidas": itens_pacote,
+                    "extras": st.session_state["extras_lista"]
+                })
 
-            supabase.table("pacotes").insert({
-                "nome": nome,
-                "tipo": tipo,
-                "dados": dados,
-                "preco": preco,
-                "custo": custo
-            }).execute()
-            
-            st.success("Pacote salvo!")
-            st.session_state["extras_lista"] = []
-
-        # -------------------------
-        # MARKUP (AQUI)
-        # -------------------------
-        if custo > 0:
-            markup = preco / custo
-            st.metric("📊 Markup", f"{markup:.2f}x")
+                supabase.table("pacotes").insert({
+                    "nome": nome,
+                    "tipo": tipo if tipo else "Não informado",
+                    "dados": dados_completos_json,
+                    "preco": float(preco_venda_final),
+                    "custo": float(custo_final_calculado)
+                }).execute()
+                
+                st.success(f"Pacote '{nome}' salvo com sucesso!")
+                st.session_state["extras_lista"] = []
+                st.rerun()
 
     # -------------------------
-    # LISTA
+    # LISTA DE PACOTES SALVOS
     # -------------------------
     with tab2:
+        response_lista = supabase.table("pacotes").select("*").execute()
+        df_pacotes = pd.DataFrame(response_lista.data)
 
-        response = supabase.table("pacotes").select("*").execute()
-        df = pd.DataFrame(response.data)
-
-        if df.empty:
-            st.info("Nenhum pacote cadastrado")
+        if df_pacotes.empty:
+            st.info("Nenhum pacote cadastrado até o momento.")
         else:
+            # Dicionário prático para o selectbox exibir o Nome do Pacote mas usar o ID por trás
+            opcoes_pacotes = {row["id"]: f"{row['nome']} ({row['tipo']})" for _, row in df_pacotes.iterrows()}
+            id_sel = st.selectbox("Selecione o pacote para visualizar", options=list(opcoes_pacotes.keys()), format_func=lambda x: opcoes_pacotes[x])
 
-            id_sel = st.selectbox("Selecionar pacote", df["id"])
+            pacote = df_pacotes[df_pacotes["id"] == id_sel].iloc[0]
 
-            pacote = df[df["id"] == id_sel].iloc[0]
+            # Carrega a estrutura de dados JSON com segurança
+            try:
+                dados_pacote = json.loads(pacote["dados"])
+            except:
+                dados_pacote = {"bebidas": [], "extras": []}
 
-            dados = json.loads(pacote["dados"])
-            st.write(f"✔ {b['nome']} - {b['quantidade']} un")
+            st.markdown(f"## 📋 Detalhes: {pacote['nome']}")
+            st.caption(f"Tipo de serviço: {pacote['tipo']}")
 
-            st.subheader(pacote["nome"])
+            c1, c2, c3 = st.columns(3)
+            lucro_real = float(pacote["preco"] or 0) - float(pacote["custo"] or 0)
+            
+            c1.metric("💰 Preço Cobrado", f"R$ {float(pacote['preco'] or 0):,.2f}")
+            c2.metric("💸 Custo Total", f"R$ {float(pacote['custo'] or 0):,.2f}")
+            c3.metric("📈 Lucro Líquido", f"R$ {lucro_real:,.2f}")
 
-            lucro = (pacote["preco"] or 0) - (pacote["custo"] or 0)
+            st.write("---")
+            
+            # Exibe as Bebidas Cadastradas no JSON
+            st.subheader("🍸 Bebidas inclusas:")
+            lista_bebidas_salvas = dados_pacote.get("bebidas", [])
+            if not lista_bebidas_salvas:
+                st.write("*Nenhuma bebida registrada neste pacote.*")
+            else:
+                for b in lista_bebidas_salvas:
+                    st.write(f"✔️ **{b['quantidade']} un** de {b['nome']} — *(Custo un: R$ {b['preco_custo']:,.2f})*")
 
-            st.write(f"💰 Preço: R$ {pacote['preco']}")
-            st.write(f"💸 Custo: R$ {pacote['custo']}")
-            st.write(f"📈 Lucro: R$ {lucro}")
+            # Exibe os Extras Cadastrados no JSON
+            st.subheader("✨ Extras inclusos:")
+            lista_extras_salvos = dados_pacote.get("extras", [])
+            if not lista_extras_salvos:
+                st.write("*Nenhum extra registrado neste pacote.*")
+            else:
+                for e in lista_extras_salvos:
+                    st.write(f"➕ {e['nome']} — *(Custo: R$ {e['valor']:,.2f})*")
 
-            st.write("📦 Itens:")
-            for i in dados["itens"]:
-                if i:
-                    st.write(f"✔ {i}")
-
-            st.write("✨ Extras:")
-
-            for e in dados.get("extras", []):
-                st.write(f"+ {e['nome']} → R$ {e['valor']:,.2f}")
-
-            if st.button("🗑 Excluir pacote"):
+            st.write("---")
+            if st.button("🗑 Excluir pacote permanentemente", key="btn_deletar_pacote"):
                 supabase.table("pacotes").delete().eq("id", id_sel).execute()
-
+                st.success("Pacote removido!")
                 st.rerun()
