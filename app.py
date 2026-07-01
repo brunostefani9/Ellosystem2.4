@@ -623,35 +623,45 @@ elif menu == "Estoque":
                             st.rerun()
 
     # =========================
-    # ESTOQUE FÍSICO
+    # ESTOQUE FÍSICO (AGRUPADO E UNIFICADO)
     # =========================
     with tab3:
         dados = supabase.table("estoque").select("*").execute()
-        df = pd.DataFrame(dados.data)
+        df_bruto = pd.DataFrame(dados.data)
 
-        busca = st.text_input("🔍 Buscar")
+        busca = st.text_input("🔍 Buscar por Marca")
 
-        if busca:
-            df = df[df["marca"].str.contains(busca, case=False, na=False)]
+        if busca and not df_bruto.empty:
+            df_bruto = df_bruto[df_bruto["marca"].str.contains(busca, case=False, na=False)]
 
-        if df.empty:
+        if df_bruto.empty:
             st.info("Estoque vazio")
         else:
-            df["produto"] = df["produto"].fillna("Sem produto")
-            df["marca"] = df["marca"].fillna("Sem marca")
-            df["tamanho"] = df["tamanho"].fillna("")
-            df["preco"] = df["preco"].fillna(0)
+            # 1. Limpeza e padronização rápida dos dados brutos
+            df_bruto["produto"] = df_bruto["produto"].fillna("Sem Produto").astype(str).str.title().str.strip()
+            df_bruto["marca"] = df_bruto["marca"].fillna("Sem Marca").astype(str).str.title().str.strip()
+            df_bruto["tamanho"] = df_bruto["tamanho"].fillna("").astype(str).str.strip()
+            
+            df_bruto["quantidade"] = pd.to_numeric(df_bruto["quantidade"], errors="coerce").fillna(0)
+            df_bruto["preco"] = pd.to_numeric(df_bruto["preco"], errors="coerce").fillna(0)
 
-            df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce").fillna(0)
-            df["preco"] = pd.to_numeric(df["preco"], errors="coerce").fillna(0)
+            # 2. AGRUPAMENTO INTELIGENTE: Junta tudo que tem o mesmo produto, marca e tamanho
+            # Isso garante que se houver qualquer linha duplicada por erro no banco, a tela soma tudo em uma linha só!
+            df = df_bruto.groupby(["produto", "marca", "tamanho"], as_index=False).agg({
+                "quantidade": "sum",
+                "preco": "max"  # Pega o maior preço praticado ou o último atualizado
+            })
 
+            # Calcula o valor total de forma segura
             df["valor_total"] = df["quantidade"] * df["preco"]
             total = float(df["valor_total"].sum())
 
+            # Exibe a tabela unificada na tela
             st.dataframe(
                 df,
                 use_container_width=True,
                 column_config={
+                    "quantidade": st.column_config.NumberColumn("🔢 Qtd"),
                     "preco": st.column_config.NumberColumn("💰 Preço", format="R$ %.2f"),
                     "valor_total": st.column_config.NumberColumn("💎 Total", format="R$ %.2f")
                 }
@@ -662,57 +672,38 @@ elif menu == "Estoque":
             st.markdown("---")
             st.subheader("🗑 Remover item")
 
+            # Cria o identificador para o selectbox baseado na tabela já unificada
             df["id_item"] = (
-                df["produto"].astype(str) + " | " +
-                df["marca"].astype(str) + " | " +
-                df["tamanho"].astype(str)
+                df["produto"] + " | " +
+                df["marca"] + " | " +
+                df["tamanho"]
             )
 
-            item = st.selectbox("Selecione", df["id_item"])
+            item = st.selectbox("Selecione o item para excluir", df["id_item"])
 
             if st.button("Excluir item"):
                 row = df[df["id_item"] == item].iloc[0]
 
-                # Se o produto ou marca estiverem nulos/vazios, define um texto padrão para o histórico
-                produto_sel = "" if pd.isna(row["produto"]) else str(row["produto"]).strip()
-                marca_sel = "" if pd.isna(row["marca"]) else str(row["marca"]).strip()
-                tamanho_sel = "" if pd.isna(row["tamanho"]) else str(row["tamanho"]).strip()
-                
-                # Criamos variáveis específicas para o histórico de movimentações
-                # Se estiver vazio, salva como "Sem Produto" ou "Sem Marca" para o banco aceitar
-                produto_historico = produto_sel if produto_sel != "" else "Sem Produto"
-                marca_historico = marca_sel if marca_sel != "" else "Sem Marca"
+                produto_sel = str(row["produto"])
+                marca_sel = str(row["marca"])
+                tamanho_sel = str(row["tamanho"])
+                qtd_sel = float(row["quantidade"])
 
-                try:
-                    qtd_sel = float(row["quantidade"])
-                    if pd.isna(qtd_sel):
-                        qtd_sel = 0.0
-                except:
-                    qtd_sel = 0.0
-
-                # 1. Registra a movimentação usando os textos padrão para evitar rejeição do banco
+                # Registra a movimentação de exclusão
                 supabase.table("movimentacoes").insert({
                     "data": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "produto": produto_historico,
-                    "marca": marca_historico,
+                    "produto": produto_sel,
+                    "marca": marca_sel,
                     "tipo": "Exclusão",
                     "quantidade": qtd_sel,
                     "status": "Manual"
                 }).execute()
 
-                # 2. Executa a exclusão no banco (continua usando a lógica do Is.Null se for vazio)
-                query = supabase.table("estoque").delete()
+                # Deleta do banco todas as variações que possam ter gerado a duplicação
+                query = supabase.table("estoque").delete()\
+                    .eq("produto", produto_sel)\
+                    .eq("marca", marca_sel)
                 
-                if produto_sel == "":
-                    query = query.is_("produto", "null")
-                else:
-                    query = query.eq("produto", produto_sel)
-                    
-                if marca_sel == "":
-                    query = query.is_("marca", "null")
-                else:
-                    query = query.eq("marca", marca_sel)
-                    
                 if tamanho_sel == "":
                     query = query.is_("tamanho", "null")
                 else:
@@ -722,7 +713,6 @@ elif menu == "Estoque":
 
                 st.success("Item removido com sucesso!")
                 st.rerun()
-
     # =========================
     # REGISTROS
     # =========================
