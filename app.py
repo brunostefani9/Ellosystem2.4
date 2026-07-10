@@ -3866,197 +3866,266 @@ elif menu == "Financeiro":
 
 elif menu == "Pacotes":
 
-    st.title("📦 Pacotes / Serviços")
+    st.title("📦 Cadastro de Pacotes")
+    
+    # ==========================
+    # SERVIÇO EM EDIÇÃO
+    # ==========================
+    
+    if "pacote_atual" not in st.session_state:
+        st.session_state.pacote_atual = None
+    
+    lista_pacotes = supabase.table("pacotes").select("*").order("nome").execute().data
+    
+    col1, col2 = st.columns([4,1])
+    
+    with col1:
+    
+        if lista_pacotes:
+    
+            opcoes = {
+                p["nome"]: p["id"]
+                for p in lista_pacotes
+            }
+    
+            selecionado = st.selectbox(
+                "📦 Serviço em edição",
+                ["Novo Serviço"] + list(opcoes.keys())
+            )
+    
+            if selecionado == "Novo Serviço":
+                st.session_state.pacote_atual = None
+            else:
+                st.session_state.pacote_atual = opcoes[selecionado]
+    
+    with col2:
+    
+        st.write("")
+        st.write("")
+    
+        if st.button("➕ Novo"):
+    
+            st.session_state.pacote_atual = None
+            st.rerun()
 
-    import json
-    from datetime import datetime
+    tab1, tab2, tab3 = st.tabs([
+        "📦 Cadastro",
+        "🍾 Produtos",
+        "⚙️ Regras"
+    ])
 
-    tab1, tab2 = st.tabs(["Cadastrar", "Lista"])
-
-    # ==========================================
-    # ABA 1 - PACOTES & ADICIONAIS (NOVO ORÇAMENTO)
-    # ==========================================
+    # ==========================================================
+    # ABA 1 - CADASTRO
+    # ==========================================================
     with tab1:
-        st.subheader("💡 Montar Novo Orçamento")
-    
-        modalidades_disponiveis = ["Bar Completo", "Apenas Mão de Obra"]
-    
-        # --- 1. SELEÇÃO DA MODALIDADE (FORA DO FORMULÁRIO) ---
-        opcao_modalidade = st.selectbox("Selecione a Modalidade Principal:", modalidades_disponiveis)
-    
-        # Definindo preços base e drinks padrões
-        if opcao_modalidade == "Bar Completo":
-            preco_base_pessoa = 55.00
-            drinks_base = "Caipirinha\nCaipiroska\nGin Tônica Tradicional\nDrinks sem Álcool"
-        else:
-            preco_base_pessoa = 25.00
-            drinks_base = "Definido pelo cliente (Apenas mão de obra)"
-    
-        # --- 2. INICIALIZAÇÃO DE SEGURANÇA DAS VARIÁVEIS (EVITA O NAMEERROR) ---
-        activar_whisky = False
-        custo_adicional_whisky = 0.0
-        venda_adicional_whisky = 0.0
-        drinks_whisky_adicionados = ""
-        marca_selecionada = ""
-        qtd_garrafas = 0
-    
-        # --- 3. SEÇÃO DE ADICIONAIS (APENAS SE FOR BAR COMPLETO) ---
-        if opcao_modalidade == "Bar Completo":
-            st.markdown("---")
-            st.markdown("### 🥃 Serviços Adicionais (Opcional)")
-            activar_whisky = st.checkbox("Incluir Bar de Whisky Personalizado")
-            
-            if activar_whisky:
-                st.markdown("#### Configuração do Bar de Whisky")
-                
-                # Conexão com o estoque do Supabase
-                df_estoque = pd.DataFrame(supabase.table("estoque").select("*").execute().data or [])
-                
-                if not df_estoque.empty:
-                    opcoes_whisky = df_estoque[df_estoque["marca"].str.lower().str.contains("whisky|black|red|jack|chivas", na=False)]["marca"].tolist()
-                else:
-                    opcoes_whisky = ["Red Label", "Black Label", "Jack Daniel's", "Chivas Regal"]
-    
-                col_w1, col_w2 = st.columns(2)
-                with col_w1:
-                    marca_selecionada = st.selectbox("Selecione a Marca do Whisky:", opcoes_whisky)
-                with col_w2:
-                    qtd_garrafas = st.number_input("Quantidade de Garrafas:", min_value=1, value=3, step=1)
-    
-                if not df_estoque.empty and marca_selecionada in df_estoque["marca"].values:
-                    preco_custo_unitario = float(df_estoque[df_estoque["marca"] == marca_selecionada]["preco"].values[0])
-                else:
-                    preco_custo_unitario = 120.00  
-    
-                # Cálculos do Whisky
-                custo_adicional_whisky = preco_custo_unitario * qtd_garrafas
-                venda_adicional_whisky = custo_adicional_whisky * 3.0 
-                drinks_whisky_adicionados = f"\nWhisky {marca_selecionada} On The Rocks\nWhisky {marca_selecionada} Sour"
-                
-                st.success(f"📊 Custo das Garrafas: R$ {custo_adicional_whisky:.2f} | Preço de Venda Sugerido: R$ {venda_adicional_whisky:.2f}")
-    
-        # --- 4. FORMULÁRIO PARA DADOS DO CLIENTE E VALORES ---
-        st.markdown("---")
-        with st.form("form_final_evento"):
-            st.markdown("### 👤 Dados do Cliente & Cronograma")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                cliente = st.text_input("Nome do Cliente:")
-                telefone = st.text_input("Telefone / WhatsApp:")
-                data_evento = st.date_input("Data do Evento:")
-                cidade = st.text_input("Cidade:")
-                endereco = st.text_input("Endereço do Local:")
-            with col2:
-                convidados = st.number_input("Número de Convidados:", min_value=1, value=100, step=1)
-                hora_chegada = st.text_input("Chegada da Equipe:", value="18:00")
-                hora_inicio = st.text_input("Início do Bar:", value="20:00")
-                hora_convidados = st.text_input("Chegada dos Convidados:", value="19:30")
-                tipo_evento = st.selectbox("Tipo de Evento:", ["Casamento", "Aniversário", "Corporativo", "Outro"])
-            
-            equipe_padrao = st.text_area("Equipe Escalada (Linha por linha):", value="1 Chefe de Bar\n2 Bartenders")
-    
-            st.markdown("---")
-            st.markdown("### 💰 Resumo Financeiro")
-    
-            # Os cálculos usam as variáveis seguras inicializadas no Passo 2
-            valor_base_evento = preco_base_pessoa * convidados
-            valor_sugerido_calculado = valor_base_evento + venda_adicional_whisky
-            custo_total_estimado = (valor_base_evento * 0.35) + custo_adicional_whisky
-            texto_drinks_final = drinks_base + drinks_whisky_adicionados
-    
-            st.info(f"💡 Preço total sugerido: **R$ {valor_sugerido_calculado:,.2f}** (Base: R$ {valor_base_evento:.2f} + Adicionais: R$ {venda_adicional_whisky:.2f})")
-    
-            col_venda, col_custo = st.columns(2)
-            with col_venda:
-                valor_venda_final = st.number_input("Valor de Venda Final (R$):", value=float(valor_sugerido_calculado))
-            with col_custo:
-                valor_custo_final = st.number_input("Custo Estimado (R$):", value=float(custo_total_estimado))
-    
-            # Botão de envio obrigatório do formulário
-            botao_gerar = st.form_submit_button("🚀 Criar Orçamento Pendente")
-    
-        # --- 5. PROCESSAMENTO DO BANCO DE DADOS ---
-        if botao_gerar:
-            if not cliente.strip():
-                st.error("Por favor, preencha o nome do cliente.")
+
+        pacote = None
+
+        if st.session_state.pacote_atual:
+
+            resposta = supabase.table("pacotes")\
+                .select("*")\
+                .eq("id", st.session_state.pacote_atual)\
+                .single()\
+                .execute()
+
+            pacote = resposta.data
+
+        categorias = [
+            "Receptivo",
+            "Bar Especial",
+            "Estação",
+            "Premium",
+            "Open Bar",
+            "Personalizado"
+        ]
+
+        tipos = [
+            "manual",
+            "whisky",
+            "aperol",
+            "gin",
+            "receita"
+        ]
+
+        with st.form("form_pacote"):
+
+            nome = st.text_input(
+                "Nome do Serviço",
+                value=pacote["nome"] if pacote else ""
+            )
+
+            categoria = st.selectbox(
+                "Categoria",
+                categorias,
+                index=categorias.index(pacote["categoria"]) if pacote else 0
+            )
+
+            tipo_calculo = st.selectbox(
+                "Tipo de Cálculo",
+                tipos,
+                index=tipos.index(pacote["tipo_calculo"]) if pacote else 0
+            )
+
+            descricao = st.text_area(
+                "Descrição",
+                value=pacote["descricao"] if pacote else ""
+            )
+
+            ativo = st.checkbox(
+                "Serviço Ativo",
+                value=pacote["ativo"] if pacote else True
+            )
+
+            salvar = st.form_submit_button("💾 Salvar")
+
+        if salvar:
+
+            if nome.strip() == "":
+
+                st.error("Informe o nome.")
+
             else:
-                dados_evento_supabase = {
-                    "status": "pendente",
-                    "modalidade": opcao_modalidade,
-                    "cliente": cliente,
-                    "telefone": telefone,
-                    "data": str(data_evento),
-                    "cidade": cidade,
-                    "endereco": endereco,
-                    "tipo_evento": tipo_evento,
-                    "convidados": int(convidados),
-                    "hora_chegada": hora_chegada,
-                    "hora_inicio": hora_inicio,
-                    "hora_convidados": hora_convidados,
-                    "venda": valor_venda_final,
-                    "custo": valor_custo_final,
-                    "drinks": texto_drinks_final,
-                    "equipe": equipe_padrao
-                }
-                
-                supabase.table("eventos").insert(dados_evento_supabase).execute()
-                st.success(f"✅ Orçamento para {cliente} enviado com sucesso para a aba de Pendentes!")
+
+                if pacote:
+
+                    supabase.table("pacotes")\
+                        .update({
+
+                            "nome": nome,
+                            "categoria": categoria,
+                            "descricao": descricao,
+                            "tipo_calculo": tipo_calculo,
+                            "ativo": ativo
+
+                        })\
+                        .eq("id", pacote["id"])\
+                        .execute()
+
+                    st.success("Serviço atualizado!")
+
+                else:
+
+                    novo = supabase.table("pacotes")\
+                        .insert({
+
+                            "nome": nome,
+                            "categoria": categoria,
+                            "descricao": descricao,
+                            "tipo_calculo": tipo_calculo,
+                            "ativo": ativo,
+                            "dados": {}
+
+                        })\
+                        .execute()
+
+                    st.session_state.pacote_atual = novo.data[0]["id"]
+
+                    st.success("Serviço criado!")
+
                 st.rerun()
-    # -------------------------
-    # LISTA DE PACOTES SALVOS
-    # -------------------------
+
+        if pacote:
+
+            st.divider()
+
+            if st.button("🗑 Excluir Serviço"):
+
+                supabase.table("pacotes")\
+                    .delete()\
+                    .eq("id", pacote["id"])\
+                    .execute()
+
+                st.session_state.pacote_atual = None
+
+                st.success("Serviço excluído!")
+
+                st.rerun()
+
+     # ==========================================================
+    # ABA 2 - PRODUTOS
+    # ==========================================================
     with tab2:
-        response_lista = supabase.table("pacotes").select("*").execute()
-        df_pacotes = pd.DataFrame(response_lista.data)
 
-        if df_pacotes.empty:
-            st.info("Nenhum pacote cadastrado até o momento.")
+        if not st.session_state.pacote_atual:
+
+            st.info("Primeiro crie ou selecione um serviço.")
+
         else:
-            # Dicionário prático para o selectbox exibir o Nome do Pacote mas usar o ID por trás
-            opcoes_pacotes = {row["id"]: f"{row['nome']} ({row['tipo']})" for _, row in df_pacotes.iterrows()}
-            id_sel = st.selectbox("Selecione o pacote para visualizar", options=list(opcoes_pacotes.keys()), format_func=lambda x: opcoes_pacotes[x])
 
-            pacote = df_pacotes[df_pacotes["id"] == id_sel].iloc[0]
+            st.subheader("Produtos do Serviço")
 
-            # Carrega a estrutura de dados JSON com segurança
-            try:
-                dados_pacote = json.loads(pacote["dados"])
-            except:
-                dados_pacote = {"bebidas": [], "extras": []}
+            estoque = supabase.table("estoque")\
+                .select("*")\
+                .order("produto")\
+                .order("marca")\
+                .execute().data
 
-            st.markdown(f"## 📋 Detalhes: {pacote['nome']}")
-            st.caption(f"Tipo de serviço: {pacote['tipo']}")
+            vinculados = supabase.table("pacote_produtos")\
+                .select("*")\
+                .eq("pacote_id", st.session_state.pacote_atual)\
+                .execute().data
 
-            c1, c2, c3 = st.columns(3)
-            lucro_real = float(pacote["preco"] or 0) - float(pacote["custo"] or 0)
-            
-            c1.metric("💰 Preço Cobrado", f"R$ {float(pacote['preco'] or 0):,.2f}")
-            c2.metric("💸 Custo Total", f"R$ {float(pacote['custo'] or 0):,.2f}")
-            c3.metric("📈 Lucro Líquido", f"R$ {lucro_real:,.2f}")
+            produtos_vinculados = [
+                p["estoque_id"]
+                for p in vinculados
+            ]
 
-            st.write("---")
-            
-            # Exibe as Bebidas Cadastradas no JSON
-            st.subheader("🍸 Bebidas inclusas:")
-            lista_bebidas_salvas = dados_pacote.get("bebidas", [])
-            if not lista_bebidas_salvas:
-                st.write("*Nenhuma bebida registrada neste pacote.*")
-            else:
-                for b in lista_bebidas_salvas:
-                    st.write(f"✔️ **{b['quantidade']} un** de {b['nome']} — *(Custo un: R$ {b['preco_custo']:,.2f})*")
+            with st.form("form_produtos"):
 
-            # Exibe os Extras Cadastrados no JSON
-            st.subheader("✨ Extras inclusos:")
-            lista_extras_salvos = dados_pacote.get("extras", [])
-            if not lista_extras_salvos:
-                st.write("*Nenhum extra registrado neste pacote.*")
-            else:
-                for e in lista_extras_salvos:
-                    st.write(f"➕ {e['nome']} — *(Custo: R$ {e['valor']:,.2f})*")
+                selecionados = []
 
-            st.write("---")
-            if st.button("🗑 Excluir pacote permanentemente", key="btn_deletar_pacote"):
-                supabase.table("pacotes").delete().eq("id", id_sel).execute()
-                st.success("Pacote removido!")
+                for item in estoque:
+
+                    marcado = st.checkbox(
+
+                        f'{item["produto"]} - {item["marca"]}',
+
+                        value=item["id"] in produtos_vinculados,
+
+                        key=f'produto_{item["id"]}'
+
+                    )
+
+                    if marcado:
+
+                        selecionados.append(item["id"])
+
+                salvar_produtos = st.form_submit_button("💾 Salvar Produtos")
+
+            if salvar_produtos:
+
+                supabase.table("pacote_produtos")\
+                    .delete()\
+                    .eq("pacote_id", st.session_state.pacote_atual)\
+                    .execute()
+
+                for produto in selecionados:
+
+                    supabase.table("pacote_produtos")\
+                        .insert({
+
+                            "pacote_id": st.session_state.pacote_atual,
+
+                            "estoque_id": produto,
+
+                            "quantidade_base": None,
+
+                            "unidade": None,
+
+                            "obrigatorio": True
+
+                        })\
+                        .execute()
+
+                st.success("Produtos vinculados com sucesso!")
+
                 st.rerun()
+    # ==========================================================
+    # ABA 3 - REGRAS
+    # ==========================================================
+    with tab3:
+
+        st.info(
+            "Aqui ficarão as regras de cálculo de cada pacote."
+        )
