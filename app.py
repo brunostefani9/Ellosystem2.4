@@ -1791,24 +1791,16 @@ elif menu == "Orçamentos":
                     
                     st.subheader("📦 Serviços Adicionais")
                     
-                    df_pacotes = pd.DataFrame(
-                        supabase.table("pacotes")
-                        .select("*")
-                        .eq("ativo", True)
-                        .execute()
-                        .data or []
-                    )
+                    pacotes = supabase.table("pacotes")\
+                        .select("*")\
+                        .eq("ativo", True)\
+                        .execute().data
                     
                     total_pacotes = 0
-                    custo_pacotes = 0
                     
-                    if df_pacotes.empty:
+                    if pacotes:
                     
-                        st.info("Nenhum serviço cadastrado.")
-                    
-                    else:
-                    
-                        for _, pacote in df_pacotes.iterrows():
+                        for pacote in pacotes:
                     
                             usar = st.checkbox(
                                 pacote["nome"],
@@ -1818,87 +1810,120 @@ elif menu == "Orçamentos":
                             if not usar:
                                 continue
                     
-                            st.markdown("---")
+                            dados = pacote["dados"] or {}
                     
-                            st.markdown(f"### {pacote['nome']}")
+                            percentual = st.number_input(
+                                "Percentual de consumo (%)",
+                                value=float(dados.get("percentual_consumo",30)),
+                                key=f'perc_{pacote["id"]}'
+                            )
                     
-                            regras = pacote.get("dados") or {}
+                            doses = st.number_input(
+                                "Doses por pessoa",
+                                value=float(dados.get("doses_pessoa",4)),
+                                key=f'dose_{pacote["id"]}'
+                            )
                     
-                            percentual = regras.get("percentual_consumo",30)
-                            doses = regras.get("doses_por_pessoa",4)
-                            ml_dose = regras.get("ml_dose",50)
-                            fator = regras.get("fator_venda",3)
+                            ml_dose = st.number_input(
+                                "ML por dose",
+                                value=float(dados.get("ml_dose",50)),
+                                key=f'ml_{pacote["id"]}'
+                            )
                     
-                            consumidores = int(num_convidados * percentual / 100)
+                            markup = st.number_input(
+                                "Markup",
+                                value=float(dados.get("markup",3)),
+                                key=f'markup_{pacote["id"]}'
+                            )
                     
-                            doses_totais = consumidores * doses
+                            pessoas = num_convidados * percentual / 100
                     
-                            ml_total = doses_totais * ml_dose
+                            doses_total = pessoas * doses
+                    
+                            ml_total = doses_total * ml_dose
+                    
+                            st.info(f"Consumo previsto: {ml_total:.0f} ml")
                     
                             produtos = supabase.table("pacote_produtos")\
                                 .select("*")\
                                 .eq("pacote_id", pacote["id"])\
-                                .execute().data or []
+                                .execute().data
                     
-                            custo_servico = 0
+                            custo_pacote = 0
                     
-                            for rel in produtos:
+                            st.markdown("### Marcas")
                     
-                                produto = supabase.table("estoque")\
+                            for produto in produtos:
+                    
+                                estoque = supabase.table("estoque")\
                                     .select("*")\
-                                    .eq("id", rel["estoque_id"])\
+                                    .eq("id", produto["estoque_id"])\
                                     .single()\
                                     .execute().data
                     
-                                if not produto:
-                                    continue
-                    
-                                garrafa_ml = produto["quantidade"]
-                    
-                                preco = produto["preco"]
-                    
-                                garrafas = ml_total / garrafa_ml
-                    
-                                garrafas = int(garrafas) + (
-                                    1 if garrafas % 1 > 0 else 0
-                                )
-                    
-                                col1,col2,col3 = st.columns([5,1,2])
-                    
+                                col1, col2 = st.columns([3,1])
+
                                 with col1:
-                                    st.write(produto["marca"])
-                    
+                                
+                                    usar_produto = st.checkbox(
+                                        estoque["marca"],
+                                        value=True,
+                                        key=f'usar_{produto["id"]}'
+                                    )
+                                
                                 with col2:
-                    
-                                    garrafas = st.number_input(
-                    
-                                        "Garrafas",
-                    
-                                        value=garrafas,
-                    
-                                        min_value=0,
-                    
-                                        key=f'g_{pacote["id"]}_{produto["id"]}'
-                    
+                                
+                                    estoque["participacao"] = st.number_input(
+                                        "%",
+                                        min_value=0.0,
+                                        max_value=100.0,
+                                        value=float(produto["participacao"]),
+                                        key=f'perc_prod_{produto["id"]}'
                                     )
                     
-                                with col3:
+                                if not usar_produto:
+                                    continue
                     
-                                    total = garrafas * preco
+                                participacao = estoque["participacao"]
                     
-                                    st.write(f"R$ {total:,.2f}")
+                                ml_produto = ml_total * participacao / 100
                     
-                                custo_servico += total
+                                tamanho = estoque["tamanho"]
                     
-                            venda = custo_servico * fator
+                                garrafas = math.ceil(ml_produto / tamanho)
                     
-                            custo_pacotes += custo_servico
+                                custo = garrafas * estoque["preco"]
+                    
+                                custo_pacote += custo
+                                if "orcamento_bebidas" not in st.session_state:
+                                    st.session_state["orcamento_bebidas"] = {}
+                                
+                                st.session_state["orcamento_bebidas"][estoque["marca"]] = {
+                                    "quantidade": garrafas,
+                                    "preco": estoque["preco"]
+                                }
+                    
+                                st.write(
+                                    f'🍾 {estoque["marca"]} - {garrafas} garrafas'
+                                )
+                    
+                            venda = custo_pacote * markup
                     
                             total_pacotes += venda
+                            if "custo_servicos" not in st.session_state:
+                                st.session_state["custo_servicos"] = 0
+                            
+                            st.session_state["custo_servicos"] += custo_pacote
                     
                             st.success(
-                                f"Custo R$ {custo_servico:,.2f} | Venda sugerida R$ {venda:,.2f}"
+                                f"Custo: R$ {custo_pacote:,.2f} | Venda: R$ {venda:,.2f}"
                             )
+                    
+                    else:
+                    
+                        st.info("Nenhum serviço cadastrado.")
+                    
+                    st.markdown(f"## 💰 Total Serviços: R$ {total_pacotes:,.2f}")
                     
                     st.divider()
                     
@@ -1910,7 +1935,7 @@ elif menu == "Orçamentos":
                    # =========================
                     # TOTAL
                     # =========================
-                    custo_total = custo_bebidas + custo_frutas + custo_artesanais + custo_extras + total_pacotes
+                    custo_total = custo_bebidas + custo_frutas + custo_artesanais + custo_extras + st.session_state.get("custo_servicos",0)
                     
                     st.divider()
                     
@@ -4152,217 +4177,207 @@ elif menu == "Pacotes":
     # ABA 2 - PRODUTOS
     # ==========================================================
     with tab2:
-
-        if not pacote:
-
-            st.info("Salve ou selecione um serviço primeiro.")
-
+    
+        if not st.session_state.pacote_atual:
+    
+            st.info("Primeiro crie ou selecione um serviço.")
+    
         else:
-
-            st.subheader(f"🍾 Produtos do serviço: {pacote['nome']}")
-
-            estoque = (
-                supabase.table("estoque")
-                .select("*")
-                .order("produto")
-                .order("marca")
-                .execute()
-                .data or []
-            )
-
-            vinculados = (
-                supabase.table("pacote_produtos")
-                .select("*")
-                .eq("pacote_id", pacote["id"])
-                .execute()
-                .data or []
-            )
-
-            vinculados_ids = [x["estoque_id"] for x in vinculados]
-
+    
+            st.subheader("Produtos disponíveis para este serviço")
+    
+            estoque = supabase.table("estoque")\
+                .select("*")\
+                .order("produto")\
+                .order("marca")\
+                .execute().data
+    
+            vinculados = supabase.table("pacote_produtos")\
+                .select("*")\
+                .eq("pacote_id", st.session_state.pacote_atual)\
+                .execute().data
+    
+            produtos_salvos = {}
+    
+            for item in vinculados:
+    
+                produtos_salvos[item["estoque_id"]] = item
+    
             with st.form("form_produtos"):
-
-                selecionados = []
-
+    
+                novos_produtos = []
+    
                 for item in estoque:
-
-                    col1, col2 = st.columns([6,1])
-
-                    with col1:
-
-                        marcar = st.checkbox(
-
-                            f'{item["produto"]} - {item["marca"]}',
-
-                            value=item["id"] in vinculados_ids,
-
-                            key=f'produto_{item["id"]}'
-
-                        )
-
-                    with col2:
-
-                        st.caption(item["unidade"] if "unidade" in item else "")
-
-                    if marcar:
-
-                        selecionados.append(item["id"])
-
-                salvar_produtos = st.form_submit_button(
-                    "💾 Salvar Produtos"
-                )
-
-            if salvar_produtos:
-
+    
+                    salvo = produtos_salvos.get(item["id"])
+    
+                    marcado = st.checkbox(
+                        f'{item["produto"]} - {item["marca"]}',
+                        value=salvo is not None,
+                        key=f'chk_{item["id"]}'
+                    )
+    
+                    if marcado:
+    
+                        col1, col2, col3
+    
+                        = st.columns([2,2,1])
+    
+                        with col1:
+    
+                            participacao = st.number_input(
+    
+                                "Participação (%)",
+    
+                                min_value=0.0,
+    
+                                max_value=100.0,
+    
+                                value=float(salvo["participacao"]) if salvo else 0.0,
+    
+                                key=f'part_{item["id"]}'
+    
+                            )
+    
+                        with col2:
+    
+                            quantidade = st.number_input(
+    
+                                "Qtd Base",
+    
+                                min_value=0.0,
+    
+                                value=float(salvo["quantidade"]) if salvo else 1.0,
+    
+                                key=f'qtd_{item["id"]}'
+    
+                            )
+    
+                        with col3:
+    
+                            unidade = st.text_input(
+    
+                                "Un.",
+    
+                                value=salvo["unidade"] if salvo else "",
+    
+                                key=f'un_{item["id"]}'
+    
+                            )
+    
+                        novos_produtos.append({
+    
+                            "estoque_id": item["id"],
+    
+                            "participacao": participacao,
+    
+                            "quantidade": quantidade,
+    
+                            "unidade": unidade,
+    
+                            "obrigatorio": True
+    
+                        })
+    
+                salvar = st.form_submit_button("💾 Salvar Produtos")
+    
+            if salvar:
+    
                 supabase.table("pacote_produtos")\
                     .delete()\
-                    .eq("pacote_id", pacote["id"])\
+                    .eq("pacote_id", st.session_state.pacote_atual)\
                     .execute()
-
-                for produto in selecionados:
-
+    
+                for produto in novos_produtos:
+    
                     supabase.table("pacote_produtos")\
                         .insert({
-
-                            "pacote_id": pacote["id"],
-
-                            "estoque_id": produto,
-
-                            "quantidade_base": 1,
-
-                            "unidade": "",
-
+    
+                            "pacote_id": st.session_state.pacote_atual,
+    
+                            "estoque_id": produto["estoque_id"],
+    
+                            "participacao": produto["participacao"],
+    
+                            "quantidade": produto["quantidade"],
+    
+                            "unidade": produto["unidade"],
+    
                             "obrigatorio": True
-
+    
                         })\
                         .execute()
-
-                st.success("✅ Produtos vinculados com sucesso!")
-
+    
+                st.success("Produtos salvos!")
+    
                 st.rerun()
-
-            st.divider()
-
-            st.markdown("### Produtos atualmente vinculados")
-
-            vinculados = (
-                supabase.table("pacote_produtos")
-                .select("*")
-                .eq("pacote_id", pacote["id"])
-                .execute()
-                .data or []
-            )
-
-            if not vinculados:
-
-                st.info("Nenhum produto vinculado.")
-
-            else:
-
-                for rel in vinculados:
-
-                    prod = (
-                        supabase.table("estoque")
-                        .select("*")
-                        .eq("id", rel["estoque_id"])
-                        .execute()
-                        .data
-                    )
-
-                    if prod:
-
-                        st.write(
-                            f"✔ {prod[0]['produto']} - {prod[0]['marca']}"
                         )
     # ==========================================================
     # ABA 3 - REGRAS
     # ==========================================================
     with tab3:
-
-        if not pacote:
-
-            st.info("Salve ou selecione um serviço primeiro.")
-
+    
+        if not st.session_state.pacote_atual:
+    
+            st.info("Primeiro selecione um serviço.")
+    
         else:
-
-            st.subheader("⚙️ Configuração do Serviço")
-
-            regras = pacote.get("dados") or {}
-
+    
+            resposta = supabase.table("pacotes")\
+                .select("*")\
+                .eq("id", st.session_state.pacote_atual)\
+                .single()\
+                .execute()
+    
+            pacote = resposta.data
+    
+            dados = pacote.get("dados") or {}
+    
             with st.form("form_regras"):
-
+    
+                st.subheader("Parâmetros padrão do cálculo")
+    
                 percentual = st.number_input(
-
-                    "% dos convidados que consomem",
-
-                    min_value=0,
-
-                    max_value=100,
-
-                    value=int(regras.get("percentual_consumo",30))
-
+                    "Percentual de consumo (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=float(dados.get("percentual_consumo",30))
                 )
-
+    
                 doses = st.number_input(
-
-                    "Doses por consumidor",
-
-                    min_value=1,
-
-                    value=int(regras.get("doses_por_pessoa",4))
-
-                )
-
-                ml_dose = st.number_input(
-
-                    "ML por dose",
-
-                    min_value=1,
-
-                    value=int(regras.get("ml_dose",50))
-
-                )
-
-                fator_venda = st.number_input(
-
-                    "Multiplicador de venda",
-
+                    "Doses por pessoa",
                     min_value=1.0,
-
-                    value=float(regras.get("fator_venda",3.0))
-
+                    value=float(dados.get("doses_pessoa",4))
                 )
-
+    
+                ml_dose = st.number_input(
+                    "ML por dose",
+                    min_value=1.0,
+                    value=float(dados.get("ml_dose",50))
+                )
+    
+                markup = st.number_input(
+                    "Markup",
+                    min_value=1.0,
+                    value=float(dados.get("markup",3))
+                )
+    
                 salvar = st.form_submit_button("💾 Salvar Regras")
-
+    
             if salvar:
-
-                regras["percentual_consumo"] = percentual
-                regras["doses_por_pessoa"] = doses
-                regras["ml_dose"] = ml_dose
-                regras["fator_venda"] = fator_venda
-
+    
+                dados["percentual_consumo"] = percentual
+                dados["doses_pessoa"] = doses
+                dados["ml_dose"] = ml_dose
+                dados["markup"] = markup
+    
                 supabase.table("pacotes")\
                     .update({
-
-                        "dados": regras
-
+                        "dados": dados
                     })\
                     .eq("id", pacote["id"])\
                     .execute()
-
+    
                 st.success("Regras salvas!")
-
+    
                 st.rerun()
-
-            st.divider()
-
-            st.markdown("### 📋 Resumo")
-
-            st.write(f"Consumidores: {percentual}%")
-
-            st.write(f"Doses por pessoa: {doses}")
-
-            st.write(f"ML por dose: {ml_dose}")
-
-            st.write(f"Multiplicador: {fator_venda}x")
