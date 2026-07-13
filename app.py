@@ -5,6 +5,7 @@ def normalizar_nome(nome):
 from supabase import create_client
 import pandas as pd
 from datetime import datetime
+from servicos import calcular_whisky
 
 SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
 SUPABASE_KEY = "sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM"
