@@ -1809,17 +1809,24 @@ elif menu == "Orçamentos":
                     
                             pacote = df_pacotes[df_pacotes["nome"] == nome].iloc[0]
                     
-                            preco_fixo = pacote["preco"] if "preco" in pacote else 0
-                            preco_por_pessoa = pacote["preco_por_pessoa"] if "preco_por_pessoa" in pacote else 0
-                    
-                            if preco_por_pessoa and preco_por_pessoa > 0:
-                                total = preco_por_pessoa * num_convidados
-                                st.write(f"✔ {nome} ({num_convidados} pessoas) → R$ {total:,.2f}")
-                            else:
-                                total = preco_fixo
-                                st.write(f"✔ {nome} → R$ {total:,.2f}")
-                    
-                            total_pacotes += total
+                            # Busca os produtos vinculados ao pacote
+                            relacao = supabase.table("pacote_produtos")\
+                                .select("*")\
+                                .eq("pacote_id", pacote["id"])\
+                                .execute().data or []
+                            
+                            st.write(f"**{nome}**")
+                            
+                            for item in relacao:
+                            
+                                produto = supabase.table("estoque")\
+                                    .select("*")\
+                                    .eq("id", item["estoque_id"])\
+                                    .execute().data
+                            
+                                if produto:
+                            
+                                    st.write(f"• {produto[0]['marca']}")
                     
                     else:
                         st.info("Nenhum pacote cadastrado")
