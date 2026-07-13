@@ -46,3 +46,13 @@ def calcular_whisky(convidados, drinks_por_pessoa, produtos, regras):
         })
 
     return retorno
+
+# ==========================================================
+# MOTOR DOS SERVIÇOS
+# ==========================================================
+
+SERVICOS = {
+
+    "whisky": calcular_whisky,
+
+}
