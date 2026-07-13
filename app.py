@@ -4219,9 +4219,7 @@ elif menu == "Pacotes":
     
                     if marcado:
     
-                        col1, col2, col3
-    
-                        = st.columns([2,2,1])
+                        col1, col2, col3 = st.columns([2, 2, 1])
     
                         with col1:
     
