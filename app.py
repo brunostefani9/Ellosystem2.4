@@ -3972,6 +3972,9 @@ elif menu == "Financeiro":
             )
 
 elif menu == "Pacotes":
+    
+    if "pacote_atual" not in st.session_state:
+        st.session_state["pacote_atual"] = None
 
     st.title("📦 Cadastro de Serviços")
 
