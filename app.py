@@ -4173,12 +4173,15 @@ elif menu == "Pacotes":
 
                 st.rerun()
 
+            if "pacote_atual" not in st.session_state:
+                st.session_state["pacote_atual"] = None
+
     # ==========================================================
     # ABA 2 - PRODUTOS
     # ==========================================================
     with tab2:
     
-        if not st.session_state.pacote_atual:
+        if st.session_state["pacote_atual"] is None:
     
             st.info("Primeiro crie ou selecione um serviço.")
     
@@ -4194,7 +4197,7 @@ elif menu == "Pacotes":
     
             vinculados = supabase.table("pacote_produtos")\
                 .select("*")\
-                .eq("pacote_id", st.session_state.pacote_atual)\
+                .eq("pacote_id", st.session_state["pacote_atual"])
                 .execute().data
     
             produtos_salvos = {}
@@ -4315,7 +4318,7 @@ elif menu == "Pacotes":
     # ==========================================================
     with tab3:
     
-        if not st.session_state.pacote_atual:
+        if st.session_state["pacote_atual"] is None:
     
             st.info("Primeiro selecione um serviço.")
     
@@ -4323,7 +4326,7 @@ elif menu == "Pacotes":
     
             resposta = supabase.table("pacotes")\
                 .select("*")\
-                .eq("id", st.session_state.pacote_atual)\
+                .eq("id", st.session_state["pacote_atual"])
                 .single()\
                 .execute()
     
