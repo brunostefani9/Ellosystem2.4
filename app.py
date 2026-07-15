@@ -4197,7 +4197,7 @@ elif menu == "Pacotes":
     
             vinculados = supabase.table("pacote_produtos")\
                 .select("*")\
-                .eq("pacote_id", st.session_state["pacote_atual"])
+                .eq("pacote_id", st.session_state["pacote_atual"])\
                 .execute().data
     
             produtos_salvos = {}
@@ -4294,7 +4294,7 @@ elif menu == "Pacotes":
                     supabase.table("pacote_produtos")\
                         .insert({
     
-                            "pacote_id": st.session_state.pacote_atual,
+                            "pacote_id": st.session_state["pacote_atual"],
     
                             "estoque_id": produto["estoque_id"],
     
@@ -4326,7 +4326,7 @@ elif menu == "Pacotes":
     
             resposta = supabase.table("pacotes")\
                 .select("*")\
-                .eq("id", st.session_state["pacote_atual"])
+                .eq("id", st.session_state["pacote_atual"])\
                 .single()\
                 .execute()
     
