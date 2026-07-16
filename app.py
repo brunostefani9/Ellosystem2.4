@@ -4118,8 +4118,8 @@ elif menu == "Pacotes":
                     "estoque_id": item["id"],
                     "participacao": participacao,
                     "quantidade": quantidade,
-                    "unidade": item["unidade"]
-
+                    "unidade": None
+                
                 })
 
         st.divider()
@@ -4184,10 +4184,9 @@ elif menu == "Pacotes":
                         "estoque_id": produto["estoque_id"],
                         "participacao": produto["participacao"],
                         "quantidade": produto["quantidade"],
-                        "unidade": produto["unidade"],
                         "obrigatorio": True
-
-                    })\
+                    
+                    })
                     .execute()
 
             st.session_state["editar_pacote"] = None
