@@ -4177,17 +4177,23 @@ elif menu == "Pacotes":
 
             for produto in produtos_servico:
 
-                supabase.table("pacote_produtos")\
-                    .insert({
-            
-                        "pacote_id": pacote_id,
-                        "estoque_id": produto["estoque_id"],
-                        "participacao": produto["participacao"],
-                        "quantidade": produto["quantidade"],
-                        "obrigatorio": True
-            
-                    })\
-                    .execute()
+                try:
+
+                    supabase.table("pacote_produtos")\
+                        .insert({
+                
+                            "pacote_id": pacote_id,
+                            "estoque_id": produto["estoque_id"],
+                            "participacao": produto["participacao"],
+                            "quantidade": produto["quantidade"],
+                            "obrigatorio": True
+                
+                        })\
+                        .execute()
+                
+                except Exception as e:
+                
+                    st.exception(e)
             
             st.session_state["editar_pacote"] = None
             
