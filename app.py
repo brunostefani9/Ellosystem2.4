@@ -4179,20 +4179,20 @@ elif menu == "Pacotes":
 
                 supabase.table("pacote_produtos")\
                     .insert({
-
+            
                         "pacote_id": pacote_id,
                         "estoque_id": produto["estoque_id"],
                         "participacao": produto["participacao"],
                         "quantidade": produto["quantidade"],
                         "obrigatorio": True
-                    
-                    })
+            
+                    })\
                     .execute()
-
+            
             st.session_state["editar_pacote"] = None
-
+            
             st.success("Serviço salvo com sucesso!")
-
+            
             st.rerun()
 
     # ==========================================================
