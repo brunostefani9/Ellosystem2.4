@@ -1798,6 +1798,18 @@ elif menu == "Orçamentos":
                     
                     total_pacotes = 0
                     
+                    # ------------------------------------------------------------
+                    # IMPORTANTE: zera os acumuladores no início do bloco.
+                    # Antes, "custo_servicos" e "orcamento_bebidas" só eram criados
+                    # se não existissem (if "x" not in session_state), e depois
+                    # só recebiam "+=". Como o Streamlit reroda o script inteiro a
+                    # cada interação (marcar checkbox, mudar %, etc.), o valor
+                    # ficava sendo somado em cima do valor antigo indefinidamente,
+                    # inflando o total a cada clique.
+                    # ------------------------------------------------------------
+                    st.session_state["orcamento_bebidas"] = {}
+                    st.session_state["custo_servicos"] = 0
+                    
                     if pacotes:
                     
                         for pacote in pacotes:
@@ -1814,25 +1826,25 @@ elif menu == "Orçamentos":
                     
                             percentual = st.number_input(
                                 "Percentual de consumo (%)",
-                                value=float(dados.get("percentual_consumo",30)),
+                                value=float(dados.get("percentual_consumo", 30)),
                                 key=f'perc_{pacote["id"]}'
                             )
                     
                             doses = st.number_input(
                                 "Doses por pessoa",
-                                value=float(dados.get("doses_pessoa",4)),
+                                value=float(dados.get("doses_pessoa", 4)),
                                 key=f'dose_{pacote["id"]}'
                             )
                     
                             ml_dose = st.number_input(
                                 "ML por dose",
-                                value=float(dados.get("ml_dose",50)),
+                                value=float(dados.get("ml_dose", 50)),
                                 key=f'ml_{pacote["id"]}'
                             )
                     
                             markup = st.number_input(
                                 "Markup",
-                                value=float(dados.get("markup",3)),
+                                value=float(dados.get("markup", 3)),
                                 key=f'markup_{pacote["id"]}'
                             )
                     
@@ -1853,26 +1865,44 @@ elif menu == "Orçamentos":
                     
                             st.markdown("### Marcas")
                     
+                            if not produtos:
+                                st.caption("Nenhuma marca vinculada a este serviço ainda.")
+                    
                             for produto in produtos:
                     
-                                estoque = supabase.table("estoque")\
+                                # -----------------------------------------------------
+                                # Busca sem .single(): se o produto do estoque foi
+                                # excluído mas ainda existe um vínculo órfão em
+                                # "pacote_produtos", .single() lança erro e derruba
+                                # a página inteira. Aqui a gente simplesmente ignora
+                                # o vínculo órfão e segue em frente.
+                                # -----------------------------------------------------
+                                resultado_estoque = supabase.table("estoque")\
                                     .select("*")\
                                     .eq("id", produto["estoque_id"])\
-                                    .single()\
                                     .execute().data
                     
-                                col1, col2 = st.columns([3,1])
-
+                                if not resultado_estoque:
+                                    st.warning(
+                                        f"Produto de estoque (id {produto['estoque_id']}) "
+                                        "não foi encontrado — pode ter sido excluído. Pulando."
+                                    )
+                                    continue
+                    
+                                estoque = resultado_estoque[0]
+                    
+                                col1, col2 = st.columns([3, 1])
+                    
                                 with col1:
-                                
+                    
                                     usar_produto = st.checkbox(
                                         estoque["marca"],
                                         value=True,
                                         key=f'usar_{produto["id"]}'
                                     )
-                                
+                    
                                 with col2:
-                                
+                    
                                     estoque["participacao"] = st.number_input(
                                         "%",
                                         min_value=0.0,
@@ -1888,19 +1918,37 @@ elif menu == "Orçamentos":
                     
                                 ml_produto = ml_total * participacao / 100
                     
-                                tamanho = estoque["tamanho"]
+                                # -----------------------------------------------------
+                                # Proteção contra "tamanho" vazio, None ou não numérico.
+                                # Isso evita o NameError/erro que estava travando a tela
+                                # ao marcar uma marca. Se o valor não puder ser
+                                # convertido, avisamos e pulamos esse produto em vez de
+                                # quebrar a página inteira.
+                                # -----------------------------------------------------
+                                try:
+                                    tamanho = float(estoque["tamanho"])
+                                    if tamanho <= 0:
+                                        raise ValueError("tamanho deve ser maior que zero")
+                                except (TypeError, ValueError):
+                                    st.error(
+                                        f"O campo 'tamanho' do produto **{estoque['marca']}** "
+                                        f"está inválido (valor atual: {estoque.get('tamanho')!r}). "
+                                        "Corrija esse campo na tela de Estoque para incluir esse "
+                                        "item no cálculo."
+                                    )
+                                    continue
                     
                                 garrafas = math.ceil(ml_produto / tamanho)
                     
-                                custo = garrafas * estoque["preco"]
+                                preco = estoque.get("preco") or 0
+                    
+                                custo = garrafas * preco
                     
                                 custo_pacote += custo
-                                if "orcamento_bebidas" not in st.session_state:
-                                    st.session_state["orcamento_bebidas"] = {}
-                                
+                    
                                 st.session_state["orcamento_bebidas"][estoque["marca"]] = {
                                     "quantidade": garrafas,
-                                    "preco": estoque["preco"]
+                                    "preco": preco
                                 }
                     
                                 st.write(
@@ -1910,9 +1958,7 @@ elif menu == "Orçamentos":
                             venda = custo_pacote * markup
                     
                             total_pacotes += venda
-                            if "custo_servicos" not in st.session_state:
-                                st.session_state["custo_servicos"] = 0
-                            
+                    
                             st.session_state["custo_servicos"] += custo_pacote
                     
                             st.success(
@@ -3978,6 +4024,23 @@ elif menu == "Pacotes":
     if "editar_pacote" not in st.session_state:
         st.session_state["editar_pacote"] = None
 
+    # ------------------------------------------------------------
+    # Função auxiliar: limpa os widgets de produtos do session_state
+    # Isso é necessário porque o Streamlit ignora o "value=" de um
+    # widget se a "key" dele já existe no session_state. Sem isso,
+    # ao editar um pacote os checkboxes/valores antigos não somem
+    # e os novos (vindos do banco) não aparecem marcados.
+    # ------------------------------------------------------------
+    def limpar_widgets_produtos():
+        chaves = [
+            k for k in list(st.session_state.keys())
+            if k.startswith("produto_")
+            or k.startswith("part_")
+            or k.startswith("qtd_")
+        ]
+        for k in chaves:
+            del st.session_state[k]
+
     aba_cadastro, aba_gerenciar = st.tabs([
         "➕ Cadastro",
         "📋 Gerenciar"
@@ -4011,6 +4074,8 @@ elif menu == "Pacotes":
 
             for item in vinculados:
                 produtos_edicao[item["estoque_id"]] = item
+
+            st.info(f"✏️ Editando: **{pacote['nome']}**")
 
         st.subheader("📦 Dados do Serviço")
 
@@ -4050,22 +4115,22 @@ elif menu == "Pacotes":
 
         percentual_consumo = st.number_input(
             "Percentual de consumo (%)",
-            value=float(dados.get("percentual_consumo",30))
+            value=float(dados.get("percentual_consumo", 30))
         )
 
         doses_pessoa = st.number_input(
             "Doses por pessoa",
-            value=float(dados.get("doses_pessoa",4))
+            value=float(dados.get("doses_pessoa", 4))
         )
 
         ml_dose = st.number_input(
             "ML por dose",
-            value=float(dados.get("ml_dose",50))
+            value=float(dados.get("ml_dose", 50))
         )
 
         markup = st.number_input(
             "Markup",
-            value=float(dados.get("markup",3))
+            value=float(dados.get("markup", 3))
         )
 
         st.divider()
@@ -4077,6 +4142,9 @@ elif menu == "Pacotes":
             .order("produto")\
             .order("marca")\
             .execute().data
+
+        if not estoque:
+            st.warning("Nenhum produto cadastrado no estoque ainda.")
 
         produtos_servico = []
 
@@ -4092,7 +4160,7 @@ elif menu == "Pacotes":
 
             if marcado:
 
-                c1,c2 = st.columns(2)
+                c1, c2 = st.columns(2)
 
                 with c1:
 
@@ -4114,12 +4182,10 @@ elif menu == "Pacotes":
                     )
 
                 produtos_servico.append({
-
                     "estoque_id": item["id"],
                     "participacao": participacao,
                     "quantidade": quantidade,
                     "unidade": None
-                
                 })
 
         st.divider()
@@ -4128,78 +4194,84 @@ elif menu == "Pacotes":
 
         if st.button(texto_botao, use_container_width=True):
 
-            dados = {
+            if not nome.strip():
+                st.error("Informe o nome do serviço antes de salvar.")
+                st.stop()
 
+            dados = {
                 "percentual_consumo": percentual_consumo,
                 "doses_pessoa": doses_pessoa,
                 "ml_dose": ml_dose,
                 "markup": markup
-
             }
 
-            if pacote:
+            try:
 
-                supabase.table("pacotes")\
-                    .update({
+                if pacote:
 
-                        "nome": nome,
-                        "categoria": categoria,
-                        "descricao": descricao,
-                        "ativo": ativo,
-                        "dados": dados
+                    supabase.table("pacotes")\
+                        .update({
+                            "nome": nome,
+                            "categoria": categoria,
+                            "descricao": descricao,
+                            "ativo": ativo,
+                            "dados": dados
+                        })\
+                        .eq("id", pacote["id"])\
+                        .execute()
 
-                    })\
-                    .eq("id", pacote["id"])\
-                    .execute()
+                    pacote_id = pacote["id"]
 
-                pacote_id = pacote["id"]
+                    supabase.table("pacote_produtos")\
+                        .delete()\
+                        .eq("pacote_id", pacote_id)\
+                        .execute()
 
-                supabase.table("pacote_produtos")\
-                    .delete()\
-                    .eq("pacote_id", pacote_id)\
-                    .execute()
+                else:
 
-            else:
+                    resposta = supabase.table("pacotes")\
+                        .insert({
+                            "nome": nome,
+                            "categoria": categoria,
+                            "descricao": descricao,
+                            "ativo": ativo,
+                            "dados": dados
+                        })\
+                        .execute()
 
-                resposta = supabase.table("pacotes")\
-                    .insert({
+                    pacote_id = resposta.data[0]["id"]
 
-                        "nome": nome,
-                        "categoria": categoria,
-                        "descricao": descricao,
-                        "ativo": ativo,
-                        "dados": dados
-
-                    })\
-                    .execute()
-
-                pacote_id = resposta.data[0]["id"]
-
-            for produto in produtos_servico:
-
-                try:
+                for produto in produtos_servico:
 
                     supabase.table("pacote_produtos")\
                         .insert({
-                
                             "pacote_id": pacote_id,
                             "estoque_id": produto["estoque_id"],
                             "participacao": produto["participacao"],
                             "quantidade": produto["quantidade"],
                             "obrigatorio": True
-                
                         })\
                         .execute()
-                
-                except Exception as e:
-                
-                    st.exception(e)
-            
-            st.session_state["editar_pacote"] = None
-            
-            st.success("Serviço salvo com sucesso!")
-            
-            st.rerun()
+
+                # limpa os widgets antigos para a próxima renderização
+                # não "herdar" valores da edição/cadastro anterior
+                limpar_widgets_produtos()
+
+                st.session_state["editar_pacote"] = None
+
+                st.success("Serviço salvo com sucesso!")
+
+                st.rerun()
+
+            except Exception as e:
+                st.error("Ocorreu um erro ao salvar o serviço.")
+                st.exception(e)
+
+        if pacote:
+            if st.button("✖️ Cancelar edição"):
+                limpar_widgets_produtos()
+                st.session_state["editar_pacote"] = None
+                st.rerun()
 
     # ==========================================================
     # GERENCIAR
@@ -4223,7 +4295,7 @@ elif menu == "Pacotes":
 
                 with st.container(border=True):
 
-                    col1, col2, col3 = st.columns([8,1,1])
+                    col1, col2, col3 = st.columns([8, 1, 1])
 
                     with col1:
 
@@ -4242,6 +4314,9 @@ elif menu == "Pacotes":
                             "✏️",
                             key=f"editar_{pacote['id']}"
                         ):
+                            # limpa widgets antigos ANTES de trocar de pacote,
+                            # senão o Streamlit mantém valores da tela anterior
+                            limpar_widgets_produtos()
 
                             st.session_state["editar_pacote"] = pacote["id"]
 
@@ -4268,6 +4343,7 @@ elif menu == "Pacotes":
                                 st.session_state["editar_pacote"]
                                 == pacote["id"]
                             ):
+                                limpar_widgets_produtos()
                                 st.session_state["editar_pacote"] = None
 
                             st.success("Serviço excluído!")
