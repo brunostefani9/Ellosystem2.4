@@ -3041,7 +3041,7 @@ elif menu == "Cachês":
     # VALORES PADRÃO
     # =====================================
 
-    if subaba in ["Resumo", "Por Pessoa"]:
+    if subaba == "Resumo":
         
         st.subheader("⚙️ Configuração dos Cachês")
     
@@ -3090,7 +3090,7 @@ elif menu == "Cachês":
     # RESUMO
     # =====================================
 
-    if subaba in ["Resumo", "Por Pessoa"]:
+    if subaba == "Resumo":
 
         st.subheader("📊 Simulação de Evento")
 
