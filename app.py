@@ -3346,17 +3346,18 @@ elif menu == "Cachês":
                 for pessoa in dados_pagamento:
     
                     supabase.table("pagamentos_equipe").insert({
-    
+
                         "evento_id": evento_id,
-    
                         "evento": evento_nome.strip(),
-    
                         "nome": pessoa["nome"],
-    
                         "funcao": pessoa["funcao"],
-    
-                        "valor": pessoa["valor"]
-    
+                        "valor": pessoa["valor"],
+                    
+                        "status": "Pendente",
+                        "forma_pagamento": None,
+                        "data_pagamento": None,
+                        "observacao": None
+                    
                     }).execute()
     
                 st.success(
@@ -3450,14 +3451,30 @@ elif menu == "Cachês":
             # ==========================
             # TOTAL
             # ==========================
-    
-            total_pago = df_pagamentos["valor"].sum()
-    
-            st.metric(
+            
+            if "status" not in df_pagamentos.columns:
+                df_pagamentos["status"] = "Pendente"
+            
+            total_pago = df_pagamentos[
+                df_pagamentos["status"] == "Pago"
+            ]["valor"].sum()
+            
+            total_pendente = df_pagamentos[
+                df_pagamentos["status"] != "Pago"
+            ]["valor"].sum()
+            
+            c1, c2 = st.columns(2)
+            
+            c1.metric(
                 "💰 Total Pago",
                 f"R$ {total_pago:,.2f}"
             )
-    
+            
+            c2.metric(
+                "🟡 Pendente",
+                f"R$ {total_pendente:,.2f}"
+            )
+            
             st.divider()
     
             # ==========================
@@ -3465,6 +3482,9 @@ elif menu == "Cachês":
             # ==========================
     
             tabela = df_pagamentos.copy()
+
+            if "status" not in tabela.columns:
+                tabela["status"] = "Pendente"
     
             tabela["valor"] = tabela["valor"].apply(
                 lambda x: f"R$ {x:,.2f}"
@@ -3475,7 +3495,8 @@ elif menu == "Cachês":
                 "evento",
                 "nome",
                 "funcao",
-                "valor"
+                "valor",
+                "status"
             ]
     
             colunas = [
@@ -3489,6 +3510,57 @@ elif menu == "Cachês":
                 hide_index=True
             )
 
+            st.divider()
+
+            st.subheader("💵 Registrar Pagamento")
+
+            if "status" not in df_pagamentos.columns:
+                df_pagamentos["status"] = "Pendente"
+            
+            pendentes = df_pagamentos[df_pagamentos["status"] != "Pago"]
+            
+            if pendentes.empty:
+            
+                st.success("Todos os pagamentos foram realizados!")
+            
+            else:
+            
+                selecionado = st.selectbox(
+                    "Pagamento",
+                    pendentes.apply(
+                        lambda x: f'{x["evento"]} | {x["nome"]} | R$ {x["valor"]:.2f}',
+                        axis=1
+                    )
+                )
+            
+                linha = pendentes[
+                    pendentes.apply(
+                        lambda x: f'{x["evento"]} | {x["nome"]} | R$ {x["valor"]:.2f}',
+                        axis=1
+                    ) == selecionado
+                ].iloc[0]
+            
+                forma = st.selectbox(
+                    "Forma de pagamento",
+                    ["Pix", "Dinheiro", "Transferência"]
+                )
+            
+                observacao = st.text_input("Observação")
+            
+                if st.button("✅ Confirmar Pagamento"):
+            
+                    supabase.table("pagamentos_equipe").update({
+            
+                        "status": "Pago",
+                        "forma_pagamento": forma,
+                        "observacao": observacao,
+                        "data_pagamento": datetime.now().isoformat()
+            
+                    }).eq("id", linha["id"]).execute()
+            
+                    st.success("Pagamento registrado!")
+            
+                    st.rerun()
 
     # =========================
     # 🔹 CONSOLIDADO
@@ -3508,7 +3580,16 @@ elif menu == "Cachês":
             # Indicadores
             # ======================
     
-            total_pago = df_pagamentos["valor"].sum()
+            if "status" not in df_pagamentos.columns:
+                df_pagamentos["status"] = "Pendente"
+            
+            total_pago = df_pagamentos[
+                df_pagamentos["status"] == "Pago"
+            ]["valor"].sum()
+            
+            total_pendente = df_pagamentos[
+                df_pagamentos["status"] != "Pago"
+            ]["valor"].sum()
     
             total_profissionais = df_pagamentos["nome"].nunique()
     
@@ -3520,28 +3601,26 @@ elif menu == "Cachês":
             )
     
             c1, c2, c3, c4 = st.columns(4)
-    
+
             c1.metric(
-                "💰 Total Pago",
+                "💰 Pago",
                 f"R$ {total_pago:,.2f}"
             )
-    
+            
             c2.metric(
+                "🟡 Pendente",
+                f"R$ {total_pendente:,.2f}"
+            )
+            
+            c3.metric(
                 "👥 Profissionais",
                 total_profissionais
             )
-    
-            c3.metric(
+            
+            c4.metric(
                 "🎉 Eventos",
                 total_eventos
             )
-    
-            c4.metric(
-                "📊 Média / Evento",
-                f"R$ {media_evento:,.2f}"
-            )
-    
-            st.divider()
     
             # ======================
             # Escolha do profissional
