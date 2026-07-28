@@ -3219,16 +3219,16 @@ elif menu == "Cachês":
         total_geral = 0
     
         for i in range(qtd_pessoas):
-    
-            st.markdown(f"### Profissional {i+1}")
-    
+
+            st.markdown(f"## 👤 Profissional {i+1}")
+        
             col1, col2, col3 = st.columns(3)
-    
+        
             nome = col1.text_input(
                 "Nome",
                 key=f"nome_{i}"
             )
-    
+        
             funcao = col2.selectbox(
                 "Função",
                 [
@@ -3238,7 +3238,7 @@ elif menu == "Cachês":
                 ],
                 key=f"funcao_{i}"
             )
-    
+        
             horas = col3.number_input(
                 "Horas Trabalhadas",
                 min_value=1.0,
@@ -3246,46 +3246,108 @@ elif menu == "Cachês":
                 step=0.5,
                 key=f"horas_{i}"
             )
-    
+        
+            # ==========================
             # Valor Base
-    
+            # ==========================
+        
             if funcao == "Bartender":
                 valor_base = valor_bartender
-    
+        
             elif funcao == "Barback":
                 valor_base = valor_barback
-    
+        
             else:
                 valor_base = valor_lider
-    
+        
             horas_extra = max(
                 0,
                 horas - limite_horas
             )
-    
-            pagamento = valor_base + (
-                horas_extra * valor_hora_extra
+        
+            valor_horas_extras = horas_extra * valor_hora_extra
+        
+            st.markdown("##### 🚗 Custos Adicionais")
+        
+            c1, c2 = st.columns(2)
+        
+            utiliza_carro = c1.checkbox(
+                "Utilizou carro",
+                key=f"carro_{i}"
             )
-    
-            st.metric(
-                "Pagamento",
-                f"R$ {pagamento:,.2f}"
+        
+            ajuda_custo = c2.number_input(
+                "Ajuda de Custo",
+                min_value=0.0,
+                value=100.0 if utiliza_carro else 0.0,
+                step=10.0,
+                disabled=not utiliza_carro,
+                key=f"ajuda_{i}"
             )
-    
+        
+            despesas = st.number_input(
+                "🧾 Despesas Reembolsáveis",
+                min_value=0.0,
+                value=0.0,
+                step=10.0,
+                key=f"despesas_{i}"
+            )
+        
+            observacao = st.text_area(
+                "Observação",
+                placeholder="Ex.: Pedágio, estacionamento, combustível, alimentação...",
+                key=f"obs_{i}"
+            )
+        
+            pagamento = (
+                valor_base
+                + valor_horas_extras
+                + ajuda_custo
+                + despesas
+            )
+        
+            st.info(
+                f"""
+        **Resumo do Pagamento**
+        
+        💼 Cachê Base: **R$ {valor_base:,.2f}**
+        
+        ⏰ Hora Extra: **R$ {valor_horas_extras:,.2f}**
+        
+        🚗 Ajuda de Custo: **R$ {ajuda_custo:,.2f}**
+        
+        🧾 Despesas: **R$ {despesas:,.2f}**
+        
+        # 💰 TOTAL: **R$ {pagamento:,.2f}**
+        """
+            )
+        
             total_geral += pagamento
-    
+        
             if nome.strip():
-    
+        
                 dados_pagamento.append({
-    
+        
                     "nome": nome.strip(),
-    
+        
                     "funcao": funcao,
-    
-                    "valor": pagamento
-    
+        
+                    "valor": pagamento,
+        
+                    "horas": horas,
+        
+                    "horas_extra": horas_extra,
+        
+                    "valor_base": valor_base,
+        
+                    "ajuda_custo": ajuda_custo,
+        
+                    "despesas": despesas,
+        
+                    "observacao": observacao
+        
                 })
-    
+        
             st.divider()
     
         st.metric(
@@ -3349,14 +3411,24 @@ elif menu == "Cachês":
 
                         "evento_id": evento_id,
                         "evento": evento_nome.strip(),
+                    
                         "nome": pessoa["nome"],
                         "funcao": pessoa["funcao"],
+                    
                         "valor": pessoa["valor"],
+                    
+                        "valor_base": pessoa["valor_base"],
+                        "horas": pessoa["horas"],
+                        "horas_extra": pessoa["horas_extra"],
+                    
+                        "ajuda_custo": pessoa["ajuda_custo"],
+                        "despesas": pessoa["despesas"],
+                    
+                        "observacao": pessoa["observacao"],
                     
                         "status": "Pendente",
                         "forma_pagamento": None,
-                        "data_pagamento": None,
-                        "observacao": None
+                        "data_pagamento": None
                     
                     }).execute()
     
