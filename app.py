@@ -3299,7 +3299,7 @@ elif menu == "Cachês":
         
             observacao = st.text_area(
                 "Observação",
-                placeholder="Pedágio, combustível..."
+                placeholder="Pedágio, combustível...",
                 key=f"obs_{i}"
             )
         
