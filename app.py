@@ -3038,54 +3038,53 @@ elif menu == "Cachês":
     st.divider()
 
     # =====================================
-    # VALORES PADRÃO
+    # CONFIGURAÇÕES DE CACHÊ
     # =====================================
 
     if subaba in ["Resumo", "Por Pessoa"]:
-        
+
         st.subheader("⚙️ Configuração dos Cachês")
-    
+
         col1, col2, col3 = st.columns(3)
-    
+
         valor_bartender = col1.number_input(
             "🍸 Bartender",
             min_value=0.0,
             value=250.00,
             step=10.0
         )
-    
+
         valor_barback = col2.number_input(
             "🧰 Barback",
             min_value=0.0,
             value=180.00,
             step=10.0
         )
-    
+
         valor_lider = col3.number_input(
             "👑 Líder",
             min_value=0.0,
             value=300.00,
             step=10.0
         )
-    
+
         col1, col2 = st.columns(2)
-    
+
         limite_horas = col1.number_input(
             "⏱ Horas inclusas",
             min_value=1.0,
             value=7.0,
             step=0.5
         )
-    
+
         valor_hora_extra = col2.number_input(
             "💰 Valor Hora Extra",
             min_value=0.0,
             value=40.0,
             step=5.0
         )
-    
-        st.divider()
 
+        st.divider()
     # =====================================
     # RESUMO
     # =====================================
@@ -3200,19 +3199,22 @@ elif menu == "Cachês":
     # =========================
     elif subaba == "Por Pessoa":
 
-        st.subheader("👤 Pagamento Individual")
-    
-        evento_nome = st.text_input(
-            "Nome do Evento"
+        st.subheader("👤 Lançamento de Pagamentos")
+
+        col1, col2 = st.columns([3,1])
+        
+        evento_nome = col1.text_input(
+            "Referência",
+            placeholder="Ex.: Casamento João e Maria"
         )
-    
-        qtd_pessoas = st.number_input(
-            "Quantidade de profissionais",
+        
+        qtd_pessoas = col2.number_input(
+            "Profissionais",
             min_value=1,
             max_value=30,
             value=3
         )
-    
+        
         st.divider()
     
         dados_pagamento = []
@@ -3220,7 +3222,7 @@ elif menu == "Cachês":
     
         for i in range(qtd_pessoas):
 
-            st.markdown(f"## 👤 Profissional {i+1}")
+            st.markdown(f"### 👤 Profissional {i+1}")
         
             col1, col2, col3 = st.columns(3)
         
@@ -3267,7 +3269,7 @@ elif menu == "Cachês":
         
             valor_horas_extras = horas_extra * valor_hora_extra
         
-            st.markdown("##### 🚗 Custos Adicionais")
+            st.caption("Custos adicionais")
         
             c1, c2 = st.columns(2)
         
@@ -3285,8 +3287,10 @@ elif menu == "Cachês":
                 key=f"ajuda_{i}"
             )
         
-            despesas = st.number_input(
-                "🧾 Despesas Reembolsáveis",
+            c3, c4 = st.columns(2)
+
+            despesas = c3.number_input(
+                "🧾 Despesas",
                 min_value=0.0,
                 value=0.0,
                 step=10.0,
@@ -3295,7 +3299,7 @@ elif menu == "Cachês":
         
             observacao = st.text_area(
                 "Observação",
-                placeholder="Ex.: Pedágio, estacionamento, combustível, alimentação...",
+                placeholder="Pedágio, combustível..."
                 key=f"obs_{i}"
             )
         
@@ -3306,20 +3310,23 @@ elif menu == "Cachês":
                 + despesas
             )
         
-            st.info(
-                f"""
-        **Resumo do Pagamento**
-        
-        💼 Cachê Base: **R$ {valor_base:,.2f}**
-        
-        ⏰ Hora Extra: **R$ {valor_horas_extras:,.2f}**
-        
-        🚗 Ajuda de Custo: **R$ {ajuda_custo:,.2f}**
-        
-        🧾 Despesas: **R$ {despesas:,.2f}**
-        
-        # 💰 TOTAL: **R$ {pagamento:,.2f}**
-        """
+            st.divider()
+
+            c1, c2, c3 = st.columns(3)
+            
+            c1.metric(
+                "💼 Base",
+                f"R$ {valor_base:,.2f}"
+            )
+            
+            c2.metric(
+                "⏰ Extras",
+                f"R$ {valor_horas_extras + ajuda_custo + despesas:,.2f}"
+            )
+            
+            c3.metric(
+                "💰 Total",
+                f"R$ {pagamento:,.2f}"
             )
         
             total_geral += pagamento
@@ -3382,26 +3389,9 @@ elif menu == "Cachês":
     
             try:
     
-                # Procura evento existente
-    
-                consulta = supabase.table("eventos")\
-                    .select("*")\
-                    .eq("nome", evento_nome.strip())\
-                    .execute()
-    
-                if consulta.data:
-    
-                    evento_id = consulta.data[0]["id"]
-    
-                else:
-    
-                    novo = supabase.table("eventos").insert({
-    
-                        "nome": evento_nome.strip()
-    
-                    }).execute()
-    
-                    evento_id = novo.data[0]["id"]
+                # Apenas utiliza a referência informada
+
+                referencia = evento_nome.strip()
     
                 # Salvar pagamentos
     
@@ -3409,8 +3399,7 @@ elif menu == "Cachês":
     
                     supabase.table("pagamentos_equipe").insert({
 
-                        "evento_id": evento_id,
-                        "evento": evento_nome.strip(),
+                        "evento": referencia,
                     
                         "nome": pessoa["nome"],
                         "funcao": pessoa["funcao"],
@@ -3432,9 +3421,7 @@ elif menu == "Cachês":
                     
                     }).execute()
     
-                st.success(
-                    "✅ Pagamentos salvos com sucesso!"
-                )
+                st.success(f"✅ {len(dados_pagamento)} pagamentos registrados com sucesso!")
     
             except Exception as erro:
     
@@ -3474,7 +3461,7 @@ elif menu == "Cachês":
             col1, col2 = st.columns(2)
     
             filtro_evento = col1.text_input(
-                "🔎 Pesquisar Evento"
+                "🔎 Pesquisar Referência"
             )
     
             filtro_nome = col2.text_input(
@@ -3483,28 +3470,27 @@ elif menu == "Cachês":
     
             if filtro_evento:
     
-                df_pagamentos = df_pagamentos[
-                    df_pagamentos["evento"]
-                    .astype(str)
-                    .str.contains(
-                        filtro_evento,
-                        case=False,
-                        na=False
-                    )
-                ]
+                col1, col2, col3 = st.columns(3)
+
+                filtro_evento = col1.text_input(
+                    "🔎 Referência"
+                )
+                
+                filtro_nome = col2.text_input(
+                    "👤 Profissional"
+                )
+                
+                filtro_status = col3.selectbox(
+                    "Status",
+                    ["Todos", "Pendente", "Pago"]
+                )
+
+                if filtro_status != "Todos":
     
-            if filtro_nome:
-    
-                df_pagamentos = df_pagamentos[
-                    df_pagamentos["nome"]
-                    .astype(str)
-                    .str.contains(
-                        filtro_nome,
-                        case=False,
-                        na=False
-                    )
-                ]
-    
+                    df_pagamentos = df_pagamentos[
+                        df_pagamentos["status"] == filtro_status
+                    ]
+                    
             # ==========================
             # ORDENAÇÃO
             # ==========================
@@ -3519,7 +3505,7 @@ elif menu == "Cachês":
                 df_pagamentos["created_at"] = df_pagamentos[
                     "created_at"
                 ].dt.strftime("%d/%m/%Y %H:%M")
-    
+                
             # ==========================
             # TOTAL
             # ==========================
@@ -3535,145 +3521,10 @@ elif menu == "Cachês":
                 df_pagamentos["status"] != "Pago"
             ]["valor"].sum()
             
-            c1, c2 = st.columns(2)
+            total_registrado = df_pagamentos["valor"].sum()
             
-            c1.metric(
-                "💰 Total Pago",
-                f"R$ {total_pago:,.2f}"
-            )
+            c1, c2, c3 = st.columns(3)
             
-            c2.metric(
-                "🟡 Pendente",
-                f"R$ {total_pendente:,.2f}"
-            )
-            
-            st.divider()
-    
-            # ==========================
-            # FORMATA VALOR
-            # ==========================
-    
-            tabela = df_pagamentos.copy()
-
-            if "status" not in tabela.columns:
-                tabela["status"] = "Pendente"
-    
-            tabela["valor"] = tabela["valor"].apply(
-                lambda x: f"R$ {x:,.2f}"
-            )
-    
-            colunas = [
-                "created_at",
-                "evento",
-                "nome",
-                "funcao",
-                "valor",
-                "status"
-            ]
-    
-            colunas = [
-                c for c in colunas
-                if c in tabela.columns
-            ]
-    
-            st.dataframe(
-                tabela[colunas],
-                use_container_width=True,
-                hide_index=True
-            )
-
-            st.divider()
-
-            st.subheader("💵 Registrar Pagamento")
-
-            if "status" not in df_pagamentos.columns:
-                df_pagamentos["status"] = "Pendente"
-            
-            pendentes = df_pagamentos[df_pagamentos["status"] != "Pago"]
-            
-            if pendentes.empty:
-            
-                st.success("Todos os pagamentos foram realizados!")
-            
-            else:
-            
-                selecionado = st.selectbox(
-                    "Pagamento",
-                    pendentes.apply(
-                        lambda x: f'{x["evento"]} | {x["nome"]} | R$ {x["valor"]:.2f}',
-                        axis=1
-                    )
-                )
-            
-                linha = pendentes[
-                    pendentes.apply(
-                        lambda x: f'{x["evento"]} | {x["nome"]} | R$ {x["valor"]:.2f}',
-                        axis=1
-                    ) == selecionado
-                ].iloc[0]
-            
-                forma = st.selectbox(
-                    "Forma de pagamento",
-                    ["Pix", "Dinheiro", "Transferência"]
-                )
-            
-                observacao = st.text_input("Observação")
-            
-                if st.button("✅ Confirmar Pagamento"):
-            
-                    supabase.table("pagamentos_equipe").update({
-            
-                        "status": "Pago",
-                        "forma_pagamento": forma,
-                        "observacao": observacao,
-                        "data_pagamento": datetime.now().isoformat()
-            
-                    }).eq("id", linha["id"]).execute()
-            
-                    st.success("Pagamento registrado!")
-            
-                    st.rerun()
-
-    # =========================
-    # 🔹 CONSOLIDADO
-    # =========================
-    elif subaba == "Consolidado":
-    
-        st.subheader("📈 Consolidado de Cachês")
-    
-        df_pagamentos = carregar_tabela("pagamentos_equipe")
-    
-        if df_pagamentos.empty:
-            st.info("Nenhum pagamento encontrado.")
-    
-        else:
-    
-            # ======================
-            # Indicadores
-            # ======================
-    
-            if "status" not in df_pagamentos.columns:
-                df_pagamentos["status"] = "Pendente"
-            
-            total_pago = df_pagamentos[
-                df_pagamentos["status"] == "Pago"
-            ]["valor"].sum()
-            
-            total_pendente = df_pagamentos[
-                df_pagamentos["status"] != "Pago"
-            ]["valor"].sum()
-    
-            total_profissionais = df_pagamentos["nome"].nunique()
-    
-            total_eventos = df_pagamentos["evento"].nunique()
-    
-            media_evento = (
-                total_pago / total_eventos
-                if total_eventos > 0 else 0
-            )
-    
-            c1, c2, c3, c4 = st.columns(4)
-
             c1.metric(
                 "💰 Pago",
                 f"R$ {total_pago:,.2f}"
@@ -3685,112 +3536,363 @@ elif menu == "Cachês":
             )
             
             c3.metric(
+                "📊 Registrado",
+                f"R$ {total_registrado:,.2f}"
+            )
+            
+            st.divider()
+            
+            # ==========================
+            # TABELA
+            # ==========================
+            
+            tabela = df_pagamentos.copy()
+            
+            if "status" not in tabela.columns:
+                tabela["status"] = "Pendente"
+            
+            if "forma_pagamento" not in tabela.columns:
+                tabela["forma_pagamento"] = ""
+            
+            if "ajuda_custo" not in tabela.columns:
+                tabela["ajuda_custo"] = 0
+            
+            if "despesas" not in tabela.columns:
+                tabela["despesas"] = 0
+            
+            if "valor_base" not in tabela.columns:
+                tabela["valor_base"] = 0
+            
+            for coluna in ["valor_base","ajuda_custo","despesas","valor"]:
+                tabela[coluna] = tabela[coluna].apply(
+                    lambda x: f"R$ {x:,.2f}"
+                )
+            
+            colunas = [
+                "created_at",
+                "evento",
+                "nome",
+                "funcao",
+                "valor_base",
+                "ajuda_custo",
+                "despesas",
+                "valor",
+                "status",
+                "forma_pagamento"
+            ]
+            
+            colunas = [c for c in colunas if c in tabela.columns]
+            
+            st.dataframe(
+                tabela[colunas],
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            st.divider()
+            
+            # ==========================
+            # REGISTRAR PAGAMENTO
+            # ==========================
+            
+            st.subheader("💵 Registrar Pagamento")
+            
+            pendentes = df_pagamentos[
+                df_pagamentos["status"] != "Pago"
+            ]
+            
+            if pendentes.empty:
+            
+                st.success("Todos os pagamentos já foram registrados.")
+            
+            else:
+            
+                opcoes = pendentes.apply(
+                    lambda x: f'{x["nome"]} | {x["evento"]} | R$ {x["valor"]:.2f}',
+                    axis=1
+                )
+            
+                selecionado = st.selectbox(
+                    "Profissional",
+                    opcoes
+                )
+            
+                linha = pendentes[
+                    opcoes == selecionado
+                ].iloc[0]
+            
+                col1, col2 = st.columns(2)
+            
+                forma = col1.selectbox(
+                    "Forma de pagamento",
+                    [
+                        "Pix",
+                        "Dinheiro",
+                        "Transferência",
+                        "Cartão"
+                    ]
+                )
+            
+                observacao = col2.text_input(
+                    "Observação"
+                )
+            
+                st.info(
+                    f"""
+            **Profissional:** {linha['nome']}
+            
+            **Evento:** {linha['evento']}
+            
+            **Valor:** R$ {linha['valor']:,.2f}
+            """
+                )
+            
+                if st.button(
+                    "✅ Confirmar Pagamento",
+                    use_container_width=True
+                ):
+            
+                    supabase.table("pagamentos_equipe").update({
+            
+                        "status": "Pago",
+                        "forma_pagamento": forma,
+                        "observacao": observacao,
+                        "data_pagamento": datetime.now().isoformat()
+            
+                    }).eq("id", linha["id"]).execute()
+            
+                    st.success("Pagamento registrado com sucesso!")
+            
+                    st.rerun()
+
+    # =========================
+    # 🔹 CONSOLIDADO
+    # =========================
+    elif subaba == "Consolidado":
+
+        st.subheader("📈 Consolidado de Cachês")
+
+        df_pagamentos = carregar_tabela("pagamentos_equipe")
+
+        if df_pagamentos.empty:
+
+            st.info("Nenhum pagamento encontrado.")
+
+        else:
+
+            if "status" not in df_pagamentos.columns:
+                df_pagamentos["status"] = "Pendente"
+
+            total_geral = df_pagamentos["valor"].sum()
+
+            total_pago = (
+                df_pagamentos[
+                    df_pagamentos["status"] == "Pago"
+                ]["valor"].sum()
+            )
+
+            total_pendente = (
+                df_pagamentos[
+                    df_pagamentos["status"] != "Pago"
+                ]["valor"].sum()
+            )
+
+            total_profissionais = (
+                df_pagamentos["nome"].nunique()
+            )
+
+            total_eventos = (
+                df_pagamentos["evento"].nunique()
+            )
+
+            c1, c2, c3, c4, c5 = st.columns(5)
+
+            c1.metric(
+                "💰 Total",
+                f"R$ {total_geral:,.2f}"
+            )
+
+            c2.metric(
+                "✅ Pago",
+                f"R$ {total_pago:,.2f}"
+            )
+
+            c3.metric(
+                "🟡 Pendente",
+                f"R$ {total_pendente:,.2f}"
+            )
+
+            c4.metric(
                 "👥 Profissionais",
                 total_profissionais
             )
-            
-            c4.metric(
+
+            c5.metric(
                 "🎉 Eventos",
                 total_eventos
             )
-    
-            # ======================
-            # Escolha do profissional
-            # ======================
-    
+
+            st.divider()
+
             profissionais = sorted(
                 df_pagamentos["nome"].dropna().unique()
             )
-    
+
             profissional = st.selectbox(
                 "👤 Selecione o profissional",
                 ["Todos"] + profissionais
             )
-    
+
             if profissional != "Todos":
-    
+
                 df_prof = df_pagamentos[
                     df_pagamentos["nome"] == profissional
                 ]
-    
-                st.divider()
-    
+
+                st.subheader(f"👤 {profissional}")
+
                 c1, c2, c3, c4 = st.columns(4)
-    
+
                 c1.metric(
-                    "Eventos Trabalhados",
+                    "Eventos",
                     df_prof["evento"].nunique()
                 )
-    
+
                 c2.metric(
                     "Total Recebido",
                     f"R$ {df_prof['valor'].sum():,.2f}"
                 )
-    
+
                 c3.metric(
                     "Maior Cachê",
                     f"R$ {df_prof['valor'].max():,.2f}"
                 )
-    
+
                 c4.metric(
                     "Média",
                     f"R$ {df_prof['valor'].mean():,.2f}"
                 )
-    
+
                 st.divider()
-    
-                st.write("### Histórico do profissional")
-    
+
                 tabela = df_prof.copy()
-    
+
                 if "created_at" in tabela.columns:
-    
+
                     tabela["created_at"] = pd.to_datetime(
                         tabela["created_at"]
                     ).dt.strftime("%d/%m/%Y")
-    
-                tabela["valor"] = tabela["valor"].apply(
-                    lambda x: f"R$ {x:,.2f}"
-                )
-    
+
+                for coluna in [
+                    "valor_base",
+                    "ajuda_custo",
+                    "despesas",
+                    "valor"
+                ]:
+
+                    if coluna in tabela.columns:
+
+                        tabela[coluna] = tabela[coluna].apply(
+                            lambda x: f"R$ {x:,.2f}"
+                        )
+
+                colunas = [
+                    "created_at",
+                    "evento",
+                    "funcao",
+                    "valor_base",
+                    "ajuda_custo",
+                    "despesas",
+                    "valor",
+                    "status"
+                ]
+
+                colunas = [
+                    c for c in colunas
+                    if c in tabela.columns
+                ]
+
                 st.dataframe(
-                    tabela[
-                        [
-                            "created_at",
-                            "evento",
-                            "funcao",
-                            "valor"
-                        ]
-                    ],
+                    tabela[colunas],
                     use_container_width=True,
                     hide_index=True
                 )
-    
+
             st.divider()
     
+            # ======================
+            # RANKING
+            # ======================
+
             st.subheader("🏆 Ranking de Profissionais")
-    
+
             ranking = (
                 df_pagamentos
                 .groupby("nome", as_index=False)
                 .agg(
                     Eventos=("evento", "nunique"),
-                    Total=("valor", "sum")
+                    Pagamentos=("valor", "count"),
+                    Total=("valor", "sum"),
+                    Média=("valor", "mean"),
+                    Pagos=("status", lambda x: (x == "Pago").sum()),
+                    Pendentes=("status", lambda x: (x != "Pago").sum())
                 )
                 .sort_values(
-                    "Total",
+                    by="Total",
                     ascending=False
                 )
             )
-    
+
             ranking["Total"] = ranking["Total"].apply(
                 lambda x: f"R$ {x:,.2f}"
             )
-    
+
+            ranking["Média"] = ranking["Média"].apply(
+                lambda x: f"R$ {x:,.2f}"
+            )
+
             st.dataframe(
                 ranking,
                 use_container_width=True,
                 hide_index=True
+            )
+
+            st.divider()
+
+            # ======================
+            # RESUMO POR FUNÇÃO
+            # ======================
+
+            st.subheader("📊 Resumo por Função")
+
+            resumo = (
+                df_pagamentos
+                .groupby("funcao", as_index=False)
+                .agg(
+                    Profissionais=("nome", "nunique"),
+                    Pagamentos=("valor", "count"),
+                    Total=("valor", "sum")
+                )
+                .sort_values(
+                    by="Total",
+                    ascending=False
+                )
+            )
+
+            resumo["Total"] = resumo["Total"].apply(
+                lambda x: f"R$ {x:,.2f}"
+            )
+
+            st.dataframe(
+                resumo,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.divider()
+
+            st.success(
+                f"💰 Total movimentado em cachês: R$ {df_pagamentos['valor'].sum():,.2f}"
             )
             
 elif menu == "Vendas":
