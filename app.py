@@ -3241,12 +3241,30 @@ elif menu == "Cachês":
                 key=f"funcao_{i}"
             )
         
-            horas = col3.number_input(
-                "Horas Trabalhadas",
+            col3a, col3b, col3c = st.columns(3)
+
+            horas = col3a.number_input(
+                "Horas",
                 min_value=1.0,
                 value=7.0,
                 step=0.5,
                 key=f"horas_{i}"
+            )
+            
+            horas_extra = col3b.number_input(
+                "Horas Extras",
+                min_value=0.0,
+                value=0.0,
+                step=0.5,
+                key=f"horas_extra_{i}"
+            )
+            
+            valor_hora_extra_individual = col3c.number_input(
+                "Valor Hora Extra",
+                min_value=0.0,
+                value=valor_hora_extra,
+                step=5.0,
+                key=f"valor_hextra_{i}"
             )
         
             # ==========================
@@ -3262,12 +3280,10 @@ elif menu == "Cachês":
             else:
                 valor_base = valor_lider
         
-            horas_extra = max(
-                0,
-                horas - limite_horas
+            valor_horas_extras = (
+                horas_extra
+                * valor_hora_extra_individual
             )
-        
-            valor_horas_extras = horas_extra * valor_hora_extra
         
             st.caption("Custos adicionais")
         
@@ -3344,6 +3360,8 @@ elif menu == "Cachês":
                     "horas": horas,
         
                     "horas_extra": horas_extra,
+
+                    "valor_hora_extra": valor_hora_extra_individual,
         
                     "valor_base": valor_base,
         
@@ -3409,6 +3427,7 @@ elif menu == "Cachês":
                         "valor_base": pessoa["valor_base"],
                         "horas": pessoa["horas"],
                         "horas_extra": pessoa["horas_extra"],
+                        "valor_hora_extra": pessoa["valor_hora_extra"],
                     
                         "ajuda_custo": pessoa["ajuda_custo"],
                         "despesas": pessoa["despesas"],
