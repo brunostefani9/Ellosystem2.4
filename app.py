@@ -3359,9 +3359,9 @@ elif menu == "Cachês":
         
                     "horas": horas,
         
-                    "horas_extra": horas_extra,
+                    "horas_extras": horas_extras,
 
-                    "valor_hora_extra": valor_hora_extra_individual,
+                    "valor_horas_extras": valor_hora_extra_individual,
         
                     "valor_base": valor_base,
         
@@ -3426,8 +3426,7 @@ elif menu == "Cachês":
                     
                         "valor_base": pessoa["valor_base"],
                         "horas": pessoa["horas"],
-                        "horas_extras": pessoa["horas_extra"],
-                        "valor_hora_extra": pessoa["valor_hora_extra"],
+                        "horas_extras": pessoa["horas_extras"],
                     
                         "ajuda_custo": pessoa["ajuda_custo"],
                         "despesas": pessoa["despesas"],
