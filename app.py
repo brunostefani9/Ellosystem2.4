@@ -3251,7 +3251,7 @@ elif menu == "Cachês":
                 key=f"horas_{i}"
             )
             
-            horas_extra = col3b.number_input(
+            horas_extras = col3b.number_input(
                 "Horas Extras",
                 min_value=0.0,
                 value=0.0,
@@ -3281,7 +3281,7 @@ elif menu == "Cachês":
                 valor_base = valor_lider
         
             valor_horas_extras = (
-                horas_extra
+                horas_extras
                 * valor_hora_extra_individual
             )
         
@@ -3360,8 +3360,6 @@ elif menu == "Cachês":
                     "horas": horas,
         
                     "horas_extras": horas_extras,
-
-                    "valor_horas_extras": valor_hora_extra_individual,
         
                     "valor_base": valor_base,
         
