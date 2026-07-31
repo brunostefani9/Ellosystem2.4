@@ -3473,39 +3473,51 @@ elif menu == "Cachês":
             # ==========================
             # FILTROS
             # ==========================
-    
-            col1, col2 = st.columns(2)
-    
+            
+            col1, col2, col3 = st.columns(3)
+            
             filtro_evento = col1.text_input(
                 "🔎 Pesquisar Referência"
             )
-    
+            
             filtro_nome = col2.text_input(
                 "👤 Pesquisar Profissional"
             )
-    
+            
+            filtro_status = col3.selectbox(
+                "Status",
+                ["Todos", "Pendente", "Pago"]
+            )
+            
             if filtro_evento:
-    
-                col1, col2, col3 = st.columns(3)
-
-                filtro_evento = col1.text_input(
-                    "🔎 Referência"
-                )
-                
-                filtro_nome = col2.text_input(
-                    "👤 Profissional"
-                )
-                
-                filtro_status = col3.selectbox(
-                    "Status",
-                    ["Todos", "Pendente", "Pago"]
-                )
-
-                if filtro_status != "Todos":
-    
-                    df_pagamentos = df_pagamentos[
-                        df_pagamentos["status"] == filtro_status
-                    ]
+            
+                df_pagamentos = df_pagamentos[
+                    df_pagamentos["evento"]
+                    .astype(str)
+                    .str.contains(
+                        filtro_evento,
+                        case=False,
+                        na=False
+                    )
+                ]
+            
+            if filtro_nome:
+            
+                df_pagamentos = df_pagamentos[
+                    df_pagamentos["nome"]
+                    .astype(str)
+                    .str.contains(
+                        filtro_nome,
+                        case=False,
+                        na=False
+                    )
+                ]
+            
+            if filtro_status != "Todos":
+            
+                df_pagamentos = df_pagamentos[
+                    df_pagamentos["status"] == filtro_status
+                ]
                     
             # ==========================
             # ORDENAÇÃO
