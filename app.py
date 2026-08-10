@@ -830,19 +830,25 @@ elif menu == "Relatórios":
     if not df_fin.empty:
         df_fin["data"] = pd.to_datetime(df_fin["data"], errors="coerce")
 
-    # aplicar filtro
-    if data_inicio and data_fim:
-        if not df_vendas.empty:
-            df_vendas = df_vendas[
-                (df_vendas["data"] >= pd.to_datetime(data_inicio)) &
-                (df_vendas["data"] <= pd.to_datetime(data_fim))
-            ]
-
-        if not df_fin.empty:
-            df_fin = df_fin[
-                (df_fin["data"] >= pd.to_datetime(data_inicio)) &
-                (df_fin["data"] <= pd.to_datetime(data_fim))
-            ]
+    # =========================
+    # APLICAR FILTRO DE PERÍODO
+    # =========================
+    
+    if periodo != "Todos os eventos":
+    
+        if data_inicio and data_fim:
+    
+            if not df_vendas.empty:
+                df_vendas = df_vendas[
+                    (df_vendas["data"] >= pd.to_datetime(data_inicio)) &
+                    (df_vendas["data"] <= pd.to_datetime(data_fim))
+                ]
+    
+            if not df_fin.empty:
+                df_fin = df_fin[
+                    (df_fin["data"] >= pd.to_datetime(data_inicio)) &
+                    (df_fin["data"] <= pd.to_datetime(data_fim))
+                ]
 
     # =========================
     # ABAS
