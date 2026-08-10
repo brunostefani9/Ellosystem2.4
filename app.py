@@ -763,12 +763,58 @@ elif menu == "Relatórios":
 
     st.title("📊 Dashboard Geral")
 
-    # =========================
-    # FILTRO GLOBAL
-    # =========================
-    col1, col2 = st.columns(2)
-    data_inicio = col1.date_input("📅 Data inicial")
-    data_fim = col2.date_input("📅 Data final")
+    from datetime import date
+
+    col1, col2, col3 = st.columns(3)
+    
+    periodo = col1.selectbox(
+        "📅 Período",
+        [
+            "Este ano",
+            "Todos os eventos",
+            "Personalizado"
+        ]
+    )
+    
+    if periodo == "Este ano":
+    
+        data_inicio = date(date.today().year, 1, 1)
+        data_fim = date.today()
+    
+        col2.date_input(
+            "📅 Data inicial",
+            value=data_inicio,
+            disabled=True
+        )
+    
+        col3.date_input(
+            "📅 Data final",
+            value=data_fim,
+            disabled=True
+        )
+    
+    elif periodo == "Todos os eventos":
+    
+        data_inicio = None
+        data_fim = None
+    
+        col2.write("📅 Data inicial")
+        col2.info("Desde o primeiro registro")
+    
+        col3.write("📅 Data final")
+        col3.info("Até hoje")
+    
+    else:
+    
+        data_inicio = col2.date_input(
+            "📅 Data inicial",
+            value=date(date.today().year, 1, 1)
+        )
+    
+        data_fim = col3.date_input(
+            "📅 Data final",
+            value=date.today()
+        )
 
     # =========================
     # CARREGAR DADOS
