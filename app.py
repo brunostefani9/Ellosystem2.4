@@ -4771,7 +4771,7 @@ elif menu == "Financeiro":
                                 "forma_pagamento":
                                     forma,
 
-                                "descrição":
+                                "descricao":
                                     descricao,
 
                                 "valor":
