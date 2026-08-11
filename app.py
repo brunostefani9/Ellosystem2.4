@@ -3248,12 +3248,12 @@ elif menu == "Cachês":
         st.info(f"💡 Dica: Utilize esses valores para compor a proposta comercial do evento.")
 
     # =====================================
-    # SUBABA 2: POR PESSOA (Lançamento)
+    # SUBABA 2: POR PESSOA (Lançamento Automático)
     # =====================================
     elif subaba == "Por Pessoa":
         st.subheader("👤 Lançamento de Pagamentos por Profissional")
 
-        # Busca os eventos para vincular evento_id caso exista a tabela
+        # Busca os eventos para vincular evento_id
         eventos_db = []
         try:
             eventos_db = supabase.table("eventos").select("id, cliente, data").execute().data or []
@@ -3273,6 +3273,14 @@ elif menu == "Cachês":
             evento_id_uuid = None
 
         qtd_pessoas = col2.number_input("Qtd. Profissionais", min_value=1, max_value=30, value=2)
+
+        st.divider()
+
+        # Configuração de Pagamento (Status e Forma)
+        st.subheader("💳 Status do Pagamento")
+        c_st1, c_st2 = st.columns(2)
+        ja_pago = c_st1.checkbox("Marcar como JÁ PAGO (lança saída no Financeiro na hora)", value=True)
+        forma_pagto_padrao = c_st2.selectbox("Forma de Pagamento", ["Pix", "Dinheiro", "Transferência", "Cartão"], disabled=not ja_pago)
 
         st.divider()
 
@@ -3305,7 +3313,7 @@ elif menu == "Cachês":
             ajuda_custo = c2.number_input("Ajuda de Custo", min_value=0.0, value=100.0 if utiliza_carro else 0.0, step=10.0, disabled=not utiliza_carro, key=f"ajuda_{i}")
             despesas = c3.number_input("Despesas Diversas", min_value=0.0, value=0.0, step=10.0, key=f"despesas_{i}")
 
-            observacao = st.text_input("Observação", placeholder="Ex.: Reembolso de Uber, Uber noturno, etc.", key=f"obs_{i}")
+            observacao = st.text_input("Observação", placeholder="Ex.: Reembolso de Uber, etc.", key=f"obs_{i}")
 
             pagamento = valor_base + valor_horas_extras + ajuda_custo + despesas
 
@@ -3339,8 +3347,16 @@ elif menu == "Cachês":
                 st.stop()
 
             try:
+                agora_iso = datetime.now().isoformat()
+                data_hoje = str(datetime.now().date())
+
                 for pessoa in dados_pagamento:
-                    payload = {
+                    status_final = "Pago" if ja_pago else "Pendente"
+                    forma_final = forma_pagto_padrao if ja_pago else None
+                    data_pagto_final = agora_iso if ja_pago else None
+
+                    # 1. Insere na tabela pagamentos_equipe
+                    payload_equipe = {
                         "evento_id": evento_id_uuid,
                         "evento": evento_nome_ref,
                         "nome": pessoa["nome"],
@@ -3352,18 +3368,32 @@ elif menu == "Cachês":
                         "ajuda_custo": float(pessoa["ajuda_custo"]),
                         "despesas": float(pessoa["despesas"]),
                         "observacao": pessoa["observacao"],
-                        "status": "Pendente",
-                        "forma_pagamento": None,
-                        "data_pagamento": None
+                        "status": status_final,
+                        "forma_pagamento": forma_final,
+                        "data_pagamento": data_pagto_final
                     }
-                    supabase.table("pagamentos_equipe").insert(payload).execute()
+                    supabase.table("pagamentos_equipe").insert(payload_equipe).execute()
+
+                    # 2. Se for 'Pago', lança AUTOMATICAMENTE na tabela Financeiro
+                    if ja_pago:
+                        try:
+                            payload_financeiro = {
+                                "data": data_hoje,
+                                "tipo": "Saída",
+                                "categoria": "Equipe / Cachê",
+                                "forma_pagamento": forma_final,
+                                "descricao": f"Cachê - {pessoa['nome']} ({evento_nome_ref})",
+                                "valor": float(pessoa["valor"])
+                            }
+                            supabase.table("Financeiro").insert(payload_financeiro).execute()
+                        except Exception as e_fin:
+                            st.warning(f"Salvo na equipe, mas erro ao criar saída no Financeiro para {pessoa['nome']}: {e_fin}")
 
                 st.success(f"✅ {len(dados_pagamento)} registro(s) salvo(s) com sucesso!")
                 st.rerun()
 
             except Exception as erro:
                 st.error(f"Erro ao salvar registros: {erro}")
-
     # =====================================
     # SUBABA 3: HISTÓRICO & BAIXA DE PAGAMENTOS
     # =====================================
