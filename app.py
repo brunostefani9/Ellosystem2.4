@@ -4405,7 +4405,7 @@ elif menu == "Financeiro":
                     "tipo": tipo,
                     "categoria": categoria,
                     "forma_pagamento": forma,
-                    "descricao": descricao,
+                    "descrição": descricao,
                     "valor": valor
                 }).execute()
                 
