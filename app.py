@@ -4463,10 +4463,6 @@ elif menu == "Financeiro":
 
                 st.bar_chart(mensal)
 
-                # =================================================
-                # GASTOS POR CATEGORIA
-                # =================================================
-
                 st.subheader("💸 Gastos por categoria")
 
                 if "categoria" in df.columns:
@@ -4484,10 +4480,6 @@ elif menu == "Financeiro":
                             use_container_width=True
                         )
 
-                # =================================================
-                # ENTRADAS POR FORMA
-                # =================================================
-
                 st.subheader("💳 Entradas por forma")
 
                 if "forma_pagamento" in df.columns:
@@ -4504,10 +4496,6 @@ elif menu == "Financeiro":
                             formas,
                             use_container_width=True
                         )
-
-                # =================================================
-                # SALDO ACUMULADO
-                # =================================================
 
                 df_ordenado = df.sort_values("data").copy()
 
@@ -4589,10 +4577,6 @@ elif menu == "Financeiro":
                     evento.get("venda", 0) or 0
                 )
 
-                # =============================================
-                # RECEBIMENTOS DESTE EVENTO
-                # =============================================
-
                 if not recebimentos.empty:
 
                     receb_evento = recebimentos[
@@ -4628,10 +4612,6 @@ elif menu == "Financeiro":
                 else:
                     status_fin = "🔴 NÃO RECEBIDO"
 
-                # =============================================
-                # CARD
-                # =============================================
-
                 st.markdown(
                     f"""
                     ### 🎉 {cliente}
@@ -4647,10 +4627,6 @@ elif menu == "Financeiro":
                     **Situação:** {status_fin}
                     """
                 )
-
-                # =============================================
-                # RECEBIMENTO
-                # =============================================
 
                 with st.expander(
                     f"➕ Registrar recebimento — {cliente}"
@@ -4720,7 +4696,6 @@ elif menu == "Financeiro":
                         else:
 
                             try:
-                                # 1. SALVA RECEBIMENTO DO EVENTO
                                 supabase.table(
                                     "recebimentos_eventos"
                                 ).insert({
@@ -4733,7 +4708,6 @@ elif menu == "Financeiro":
                                     "status": "recebido"
                                 }).execute()
 
-                                # 2. LANÇA NO FINANCEIRO
                                 supabase.table(
                                     "Financeiro"
                                 ).insert({
@@ -4745,18 +4719,12 @@ elif menu == "Financeiro":
                                     "valor": valor_recebimento
                                 }).execute()
 
-                                st.success(
-                                    "💰 Recebimento registrado no evento e no Financeiro!"
-                                )
+                                st.toast("✅ Recebimento registrado no Financeiro!", icon="🎉")
                                 st.rerun()
 
                             except Exception as e:
                                 st.error("❌ Erro ao registrar recebimento no Supabase:")
                                 st.exception(e)
-
-                # =============================================
-                # HISTÓRICO DE RECEBIMENTOS
-                # =============================================
 
                 if not receb_evento.empty:
 
@@ -4877,22 +4845,15 @@ elif menu == "Financeiro":
                         supabase.table(
                             "Financeiro"
                         ).insert({
-
                             "data": str(data_lancamento),
-
                             "tipo": tipo,
-
                             "categoria": categoria,
-
                             "forma_pagamento": forma,
-
                             "descricao": descricao,
-
                             "valor": float(valor)
-
                         }).execute()
 
-                        st.success("✅ Lançamento criado no Financeiro!")
+                        st.toast("✅ Lançamento criado com sucesso!", icon="💰")
                         st.rerun()
 
                     except Exception as e:
@@ -4907,6 +4868,35 @@ elif menu == "Financeiro":
     with tab4:
 
         st.subheader("📄 Extrato financeiro")
+
+        # Botão utilitário para trazer recebimentos antigos de eventos para a aba Financeiro
+        col_title, col_sync = st.columns([3, 1])
+        with col_sync:
+            if st.button("🔄 Sincronizar Histórico"):
+                rec_data = supabase.table("recebimentos_eventos").select("*").execute().data or []
+                fin_data = supabase.table("Financeiro").select("*").execute().data or []
+                
+                descricoes_existentes = {f.get("descricao") for f in fin_data if f.get("descricao")}
+
+                novos = []
+                for rec in rec_data:
+                    desc = rec.get("descricao")
+                    if desc and desc not in descricoes_existentes:
+                        novos.append({
+                            "data": str(rec.get("data_recebimento")),
+                            "tipo": "Entrada",
+                            "categoria": "Evento",
+                            "forma_pagamento": rec.get("forma_pagamento"),
+                            "descricao": desc,
+                            "valor": float(rec.get("valor", 0))
+                        })
+
+                if novos:
+                    supabase.table("Financeiro").insert(novos).execute()
+                    st.toast(f"✅ {len(novos)} recebimentos passados sincronizados!", icon="🔄")
+                    st.rerun()
+                else:
+                    st.toast("Tudo atualizado! Nenhum registro pendente.", icon="ℹ️")
 
         response = (
             supabase
@@ -4933,7 +4923,15 @@ elif menu == "Financeiro":
                 errors="coerce"
             ).fillna(0)
 
-            filtro = st.selectbox(
+            # Converte a coluna data para datetime para permitir filtragem
+            df["data_dt"] = pd.to_datetime(df["data"], errors="coerce").dt.date
+
+            # =================================================
+            # FILTROS (TIPO E PERÍODO DE DATAS)
+            # =================================================
+            col_f1, col_f2, col_f3 = st.columns(3)
+
+            filtro = col_f1.selectbox(
                 "Filtrar tipo",
                 [
                     "Todos",
@@ -4942,42 +4940,74 @@ elif menu == "Financeiro":
                 ]
             )
 
-            if filtro != "Todos":
+            # Define datas padrão: do início do mês atual até hoje
+            data_min_padrao = date.today().replace(day=1)
+            data_max_padrao = date.today()
 
-                df = df[
-                    df["tipo"] == filtro
+            data_inicio = col_f2.date_input(
+                "Data inicial",
+                value=data_min_padrao
+            )
+
+            data_fim = col_f3.date_input(
+                "Data final",
+                value=data_max_padrao
+            )
+
+            # Aplicando o filtro de tipo
+            if filtro != "Todos":
+                df = df[df["tipo"] == filtro]
+
+            # Aplicando o filtro de intervalo de data
+            if data_inicio and data_fim:
+                df = df[(df["data_dt"] >= data_inicio) & (df["data_dt"] <= data_fim)]
+
+            # =================================================
+            # TABELA E TOTALIZADOR DO PERÍODO
+            # =================================================
+            if df.empty:
+                st.warning("Nenhum lançamento encontrado para o período/filtro selecionado.")
+            else:
+                colunas = [
+                    "data",
+                    "tipo",
+                    "categoria",
+                    "forma_pagamento",
+                    "descricao",
+                    "valor"
                 ]
 
-            colunas = [
-                "data",
-                "tipo",
-                "categoria",
-                "forma_pagamento",
-                "descricao",
-                "valor"
-            ]
+                colunas_existentes = [
+                    c for c in colunas
+                    if c in df.columns
+                ]
 
-            colunas_existentes = [
-                c for c in colunas
-                if c in df.columns
-            ]
+                st.dataframe(
+                    df[colunas_existentes],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "valor": st.column_config.NumberColumn(
+                            "💰 Valor",
+                            format="R$ %.2f"
+                        ),
+                        "data": "📅 Data",
+                        "tipo": "Tipo",
+                        "categoria": "Categoria",
+                        "forma_pagamento": "Forma",
+                        "descricao": "Descrição"
+                    }
+                )
 
-            st.dataframe(
-                df[colunas_existentes],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "valor": st.column_config.NumberColumn(
-                        "💰 Valor",
-                        format="R$ %.2f"
-                    ),
-                    "data": "📅 Data",
-                    "tipo": "Tipo",
-                    "categoria": "Categoria",
-                    "forma_pagamento": "Forma",
-                    "descricao": "Descricao"
-                }
-            )
+                # Totalizador dos itens filtrados
+                total_entradas = df[df["tipo"] == "Entrada"]["valor"].sum()
+                total_saidas = df[df["tipo"] == "Saída"]["valor"].sum()
+                saldo_periodo = total_entradas - total_saidas
+
+                st.caption(
+                    f"**Total do período filtrado:** Entradas: R$ {total_entradas:,.2f} | "
+                    f"Saídas: R$ {total_saidas:,.2f} | **Saldo:** R$ {saldo_periodo:,.2f}"
+                )
 
 elif menu == "Pacotes":
 
