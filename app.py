@@ -817,6 +817,105 @@ elif menu == "Relatórios":
         )
 
     # =========================
+    # 📅 PRÓXIMOS EVENTOS
+    # =========================
+    
+    st.subheader("📅 Próximos Eventos")
+    
+    df_proximos = pd.DataFrame(
+        supabase.table("eventos")
+        .select("*")
+        .eq("status", "aprovado")
+        .execute().data or []
+    )
+    
+    if df_proximos.empty:
+    
+        st.info("Nenhum evento aprovado no momento.")
+    
+    else:
+    
+        # Converte a data do evento
+        df_proximos["data_evento"] = pd.to_datetime(
+            df_proximos["data"],
+            errors="coerce"
+        )
+    
+        hoje = pd.Timestamp.today().normalize()
+    
+        # Somente eventos de hoje em diante
+        df_proximos = df_proximos[
+            df_proximos["data_evento"] >= hoje
+        ].copy()
+    
+        # Ordena pelos eventos mais próximos
+        df_proximos = df_proximos.sort_values(
+            "data_evento"
+        )
+    
+        if df_proximos.empty:
+    
+            st.info("Nenhum próximo evento confirmado.")
+    
+        else:
+    
+            # Mostrar no máximo os próximos 6 dias com eventos
+            datas_eventos = (
+                df_proximos["data_evento"]
+                .dt.normalize()
+                .drop_duplicates()
+                .head(6)
+            )
+    
+            colunas = st.columns(
+                min(len(datas_eventos), 3)
+            )
+    
+            for i, data_evento in enumerate(datas_eventos):
+    
+                eventos_dia = df_proximos[
+                    df_proximos["data_evento"].dt.normalize()
+                    == data_evento
+                ]
+    
+                quantidade = len(eventos_dia)
+    
+                with colunas[i % 3]:
+    
+                    st.markdown(
+                        f"""
+                        ### 📅 {data_evento.strftime("%d/%m")}
+                        """
+                    )
+    
+                    st.metric(
+                        "Eventos",
+                        quantidade
+                    )
+    
+                    for _, evento in eventos_dia.iterrows():
+    
+                        cliente = evento.get(
+                            "cliente",
+                            "Cliente não informado"
+                        )
+    
+                        convidados = evento.get(
+                            "convidados",
+                            0
+                        )
+    
+                        st.caption(
+                            f"🥂 **{cliente}**"
+                        )
+    
+                        st.caption(
+                            f"👥 {convidados} convidados"
+                        )
+    
+            st.divider()
+    
+    # =========================
     # CARREGAR DADOS
     # =========================
     df_vendas = carregar_tabela("vendas")
