@@ -971,12 +971,22 @@ elif menu == "Relatórios":
 
         margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
 
-        col1, col2, col3, col4 = st.columns(4)
+        # Cálculo da Reserva de Caixa PJ baseado no lucro filtrado
+        reserva_caixa_30 = max(0, total_lucro) * 0.30
+        reserva_caixa_35 = max(0, total_lucro) * 0.35
+
+        # 5 Colunas incluindo a Reserva de Caixa PJ
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         col1.metric("💰 Faturamento", f"R$ {total_vendas:,.2f}")
         col2.metric("💸 Custos", f"R$ {total_custo:,.2f}")
         col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
         col4.metric("📊 Margem", f"{margem:.1f}%")
+        col5.metric(
+            "🛡️ Reserva Caixa PJ",
+            f"R$ {reserva_caixa_30:,.2f}",
+            help=f"Meta de retenção no caixa (30% a 35% do lucro): R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}"
+        )
 
         st.divider()
 
@@ -4302,7 +4312,7 @@ elif menu == "Financeiro":
     ])
 
     # =========================================================
-    # 📊 RESUMO
+    # 📊 RESUMO (FINANCEIRO)
     # =========================================================
     with tab1:
 
@@ -4318,44 +4328,44 @@ elif menu == "Financeiro":
                 errors="coerce"
             ).fillna(0)
 
-            entrada = df[
-                df["tipo"] == "Entrada"
-            ]["valor"].sum()
-
-            saida = df[
-                df["tipo"] == "Saída"
-            ]["valor"].sum()
+            entrada = df[df["tipo"] == "Entrada"]["valor"].sum()
+            saida = df[df["tipo"] == "Saída"]["valor"].sum()
 
         saldo = entrada - saida
 
         # =====================================================
-        # KPIs
+        # CÁLCULO DA RESERVA DE CAIXA PJ (30% A 35% DO LUCRO)
         # =====================================================
+        caixa_30_total = 0.0
+        caixa_35_total = 0.0
+        try:
+            evt_data = supabase.table("eventos").select("venda, custo").eq("status", "aprovado").execute().data or []
+            for ev in evt_data:
+                venda = float(ev.get("venda", 0) or 0)
+                custo = float(ev.get("custo", 0) or 0)
+                lucro = max(0, venda - custo)
+                caixa_30_total += lucro * 0.30
+                caixa_35_total += lucro * 0.35
+        except Exception:
+            pass
 
-        col1, col2, col3, col4 = st.columns(4)
+        # =====================================================
+        # KPIs (5 COLUNAS)
+        # =====================================================
+        col1, col2, col3, col4, col5 = st.columns(5)
 
-        col1.metric(
-            "💰 Entradas",
-            f"R$ {entrada:,.2f}"
-        )
-
-        col2.metric(
-            "💸 Saídas",
-            f"R$ {saida:,.2f}"
-        )
-
-        col3.metric(
-            "🏦 Saldo",
-            f"R$ {saldo:,.2f}"
-        )
-
-        col4.metric(
-            "📈 Resultado",
-            f"R$ {saldo:,.2f}"
+        col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
+        col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
+        col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
+        col4.metric("📈 Resultado", f"R$ {saldo:,.2f}")
+        col5.metric(
+            "🛡️ Reserva Caixa PJ",
+            f"R$ {caixa_30_total:,.2f}",
+            help=f"Recomendado guardar entre R$ {caixa_30_total:,.2f} (30%) e R$ {caixa_35_total:,.2f} (35%) do lucro dos eventos aprovados."
         )
 
         st.divider()
-
+        
         # =====================================================
         # CONTAS A RECEBER
         # =====================================================
@@ -4573,9 +4583,15 @@ elif menu == "Financeiro":
                     ""
                 )
 
-                valor_contratado = float(
-                    evento.get("venda", 0) or 0
-                )
+                # =============================================
+                # CÁLCULOS FINANCEIROS E DE CAIXA DO EVENTO
+                # =============================================
+                valor_contratado = float(evento.get("venda", 0) or 0)
+                custo_evento = float(evento.get("custo", 0) or 0)
+
+                lucro_evento = max(0, valor_contratado - custo_evento)
+                reserva_caixa_30 = lucro_evento * 0.30
+                reserva_caixa_35 = lucro_evento * 0.35
 
                 if not recebimentos.empty:
 
@@ -4612,17 +4628,23 @@ elif menu == "Financeiro":
                 else:
                     status_fin = "🔴 NÃO RECEBIDO"
 
+                # =============================================
+                # CARD DETALHADO DO EVENTO
+                # =============================================
                 st.markdown(
                     f"""
                     ### 🎉 {cliente}
 
-                    📅 **Evento:** {data_evento}
+                    📅 **Data do Evento:** {data_evento}
 
-                    💰 **Valor contratado:** R$ {valor_contratado:,.2f}
+                    💰 **Valor Venda:** R$ {valor_contratado:,.2f}  
+                    💸 **Custo Estimado:** R$ {custo_evento:,.2f}  
+                    📈 **Lucro Estimado:** R$ {lucro_evento:,.2f}  
+                    🛡️ **Caixa PJ Recomendado (30% a 35%):** R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}
 
-                    💵 **Recebido:** R$ {recebido:,.2f}
+                    ---
 
-                    🟡 **A receber:** R$ {a_receber:,.2f}
+                    💵 **Recebido:** R$ {recebido:,.2f} | 🟡 **A receber:** R$ {a_receber:,.2f}
 
                     **Situação:** {status_fin}
                     """
