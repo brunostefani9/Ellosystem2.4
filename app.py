@@ -4754,30 +4754,44 @@ elif menu == "Financeiro":
                             # =================================
                             # 2. LANÇA NO FINANCEIRO
                             # =================================
-
-                            supabase.table(
-                                "Financeiro"
-                            ).insert({
-
-                                "data":
-                                    str(data_recebimento),
-
-                                "tipo":
-                                    "Entrada",
-
-                                "categoria":
-                                    "Evento",
-
-                                "forma_pagamento":
-                                    forma,
-
-                                "descricao":
-                                    descricao,
-
-                                "valor":
-                                    valor_recebimento
-
-                            }).execute()
+                            
+                            try:
+                            
+                                supabase.table(
+                                    "Financeiro"
+                                ).insert({
+                            
+                                    "data":
+                                        str(data_recebimento),
+                            
+                                    "tipo":
+                                        "Entrada",
+                            
+                                    "categoria":
+                                        "Evento",
+                            
+                                    "forma_pagamento":
+                                        forma,
+                            
+                                    "descricao":
+                                        descricao,
+                            
+                                    "valor":
+                                        float(valor_recebimento)
+                            
+                                }).execute()
+                            
+                                st.success(
+                                    "✅ Lançamento criado no Financeiro!"
+                                )
+                            
+                            except Exception as e:
+                            
+                                st.error(
+                                    "❌ Erro ao lançar no Financeiro:"
+                                )
+                            
+                                st.exception(e)
 
                             st.success(
                                 "💰 Recebimento registrado no evento e no Financeiro!"
@@ -4932,6 +4946,17 @@ elif menu == "Financeiro":
     with tab4:
 
         st.subheader("📄 Extrato financeiro")
+
+        st.write("🔎 TESTE FINANCEIRO")
+
+        teste_financeiro = (
+            supabase
+            .table("Financeiro")
+            .select("*")
+            .execute()
+        )
+        
+        st.write(teste_financeiro.data)
 
         response = (
             supabase
