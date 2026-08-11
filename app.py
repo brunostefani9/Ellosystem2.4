@@ -4898,37 +4898,32 @@ elif menu == "Financeiro":
 
                 else:
 
-                    supabase.table(
-                        "Financeiro"
-                    ).insert({
+                    try:
 
-                        "data":
-                            datetime.now().strftime(
-                                "%Y-%m-%d"
-                            ),
-
-                        "tipo":
-                            tipo,
-
-                        "categoria":
-                            categoria,
-
-                        "forma_pagamento":
-                            forma,
-
-                        "descrição":
-                            descricao,
-
-                        "valor":
-                            valor
-
-                    }).execute()
-
-                    st.success(
-                        "✅ Lançamento registrado!"
-                    )
-
-                    st.rerun()
+                        resposta_financeiro = supabase.table(
+                            "Financeiro"
+                        ).insert({
+                    
+                            "data": str(data_recebimento),
+                    
+                            "tipo": "Entrada",
+                    
+                            "categoria": "Evento",
+                    
+                            "forma_pagamento": forma,
+                    
+                            "descricao": descricao,
+                    
+                            "valor": float(valor_recebimento)
+                    
+                        }).execute()
+                    
+                        st.success("✅ Lançamento criado no Financeiro!")
+                    
+                    except Exception as e:
+                    
+                        st.error("❌ Erro ao lançar no Financeiro:")
+                        st.exception(e)
 
 
     # =========================================================
