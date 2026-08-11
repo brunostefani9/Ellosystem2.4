@@ -4983,7 +4983,7 @@ elif menu == "Financeiro":
                 "tipo",
                 "categoria",
                 "forma_pagamento",
-                "descrição",
+                "descricao",
                 "valor"
             ]
 
@@ -5005,7 +5005,7 @@ elif menu == "Financeiro":
                     "tipo": "Tipo",
                     "categoria": "Categoria",
                     "forma_pagamento": "Forma",
-                    "descrição": "Descrição"
+                    "descricao": "Descricao"
                 }
             )
 
