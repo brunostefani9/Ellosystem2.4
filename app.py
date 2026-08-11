@@ -4,7 +4,7 @@ def normalizar_nome(nome):
     return str(nome).strip().lower()
 from supabase import create_client
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from servicos import SERVICOS
 
 SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
