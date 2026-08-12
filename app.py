@@ -2235,7 +2235,7 @@ elif menu == "Orçamentos":
                     # =========================
                     # 💾 SALVAR ORÇAMENTO (RESTAURADO)
                     # =========================
-                    if st.button("💾 Salvar orçamento"):
+                    if st.button("💾 Salvar orçamento", key="salvar_bar_completo"):
                         
                         # 🎯 A CRIAÇÃO DO TEXTO TEM QUE FICAR AQUI DENTRO!
                         texto_drinks = "\n".join(selecao) if selecao else ""
@@ -2575,107 +2575,7 @@ elif menu == "Orçamentos":
                 f"R$ {valor_final_venda:,.2f}"
             )
 
-            # =========================
-            # SALVAR ORÇAMENTO
-            # =========================
-
-            if st.button(
-                "💾 Salvar orçamento",
-                key="salvar_servico_personalizado"
-            ):
-
-                response = supabase.table("eventos").insert({
-
-                    "cliente": nome_cliente,
-                    "data": str(data_evento),
-                    "cidade": cidade_evento,
-                    "telefone": telefone,
-                    "endereco": endereco,
-
-                    "tipo_evento": tipo_evento_sp,
-                    "modalidade": "Serviço Personalizado",
-
-                    "hora_chegada": str(hora_chegada),
-                    "hora_inicio": str(hora_inicio),
-                    "hora_convidados": str(hora_convidados),
-
-                    "convidados": 0,
-
-                    # Envia para o banco o custo ajustado (0 ou apenas taxas/extras)
-                    "custo": custo_financeiro_real,
-                    "venda": valor_final_venda,
-
-                    "comissao_percentual": percentual_comissao,
-                    "comissao_valor": valor_comissao,
-
-                    "equipe": nomes_equipe,
-
-                    "status": "pendente"
-
-                }).execute()
-
-                evento_id = response.data[0]["id"]
-
-                # EQUIPE
-                for i in range(qtd_pessoas):
-
-                    nome = st.session_state.get(f"sp_nome_{i}", "")
-                    funcao = st.session_state.get(f"sp_funcao_{i}", "")
-
-                    if nome.strip():
-
-                        supabase.table("evento_itens").insert({
-
-                            "evento_id": evento_id,
-                            "produto": f"{funcao} - {nome}",
-                            "quantidade": 1,
-                            "unidade": "profissional",
-                            "categoria": "Equipe"
-
-                        }).execute()
-
-                # LOCAÇÕES
-                locacoes = {
-                    "Copos": valor_copos,
-                    "Taças": valor_tacas,
-                    "Decoração": valor_decoracao
-                }
-
-                for nome, valor in locacoes.items():
-
-                    if valor > 0:
-
-                        supabase.table("evento_itens").insert({
-
-                            "evento_id": evento_id,
-                            "produto": nome,
-                            "quantidade": valor,
-                            "unidade": "R$",
-                            "categoria": "Locação"
-
-                        }).execute()
-
-                # EXTRAS
-                extras = {
-                    "Transporte": transporte,
-                    "Outros": outros
-                }
-
-                for nome, valor in extras.items():
-
-                    if valor > 0:
-
-                        supabase.table("evento_itens").insert({
-
-                            "evento_id": evento_id,
-                            "produto": nome,
-                            "quantidade": valor,
-                            "unidade": "R$",
-                            "categoria": "Custos"
-
-                        }).execute()
-
-                st.success("✅ Orçamento salvo com sucesso!")
+            
             # =========================
             # SALVAR ORÇAMENTO
             # =========================
