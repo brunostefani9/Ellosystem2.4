@@ -4009,7 +4009,7 @@ elif menu == "Financeiro":
                 )
 
     # =========================================================
-    # 🎉 EVENTOS
+    # 🎉 EVENTOS (COM ADITIVOS INTEGRADOS NOS CÁLCULOS)
     # =========================================================
     with tab2:
         st.subheader("🎉 Controle Financeiro dos Eventos")
@@ -4031,6 +4031,14 @@ elif menu == "Financeiro":
             .data or []
         )
     
+        # Busca a tabela de aditivos salvos
+        aditivos_df = pd.DataFrame(
+            supabase.table("aditivos_evento")
+            .select("*")
+            .execute()
+            .data or []
+        )
+    
         if eventos.empty:
             st.info("Nenhum evento aprovado para controlar.")
         else:
@@ -4039,31 +4047,51 @@ elif menu == "Financeiro":
                 cliente = evento.get("cliente", "Cliente")
                 data_evento = evento.get("data", "")
     
-                # =============================================
-                # CÁLCULOS FINANCEIROS E DE CAIXA DO EVENTO
-                # =============================================
-                valor_contratado = float(evento.get("venda", 0) or 0)
-                custo_evento = float(evento.get("custo", 0) or 0)
+                # ---------------------------------------------
+                # CÁLCULO DE ADITIVOS DO EVENTO
+                # ---------------------------------------------
+                total_aditivos_cliente = 0.0
+                total_aditivos_equipe = 0.0
+                aditivos_evento = pd.DataFrame()
     
-                lucro_evento = max(0.0, valor_contratado - custo_evento)
+                if not aditivos_df.empty:
+                    # Filtra aditivos pelo evento_id (convertendo para int para evitar divergências)
+                    aditivos_evento = aditivos_df[
+                        aditivos_df["evento_id"].astype(str) == str(evento_id)
+                    ].copy()
+                    
+                    if not aditivos_evento.empty:
+                        total_aditivos_cliente = pd.to_numeric(aditivos_evento["valor_cliente"], errors="coerce").fillna(0).sum()
+                        total_aditivos_equipe = pd.to_numeric(aditivos_evento["valor_equipe"], errors="coerce").fillna(0).sum()
+    
+                # ---------------------------------------------
+                # CÁLCULOS FINANCEIROS TOTAIS (CONTRATO + ADITIVOS)
+                # ---------------------------------------------
+                valor_contrato_base = float(evento.get("venda", 0) or 0)
+                custo_base = float(evento.get("custo", 0) or 0)
+    
+                # Somando os aditivos nos totais do evento
+                valor_contratado_total = valor_contrato_base + total_aditivos_cliente
+                custo_evento_total = custo_base + total_aditivos_equipe
+    
+                lucro_evento = max(0.0, valor_contratado_total - custo_evento_total)
                 reserva_caixa_30 = lucro_evento * 0.30
                 reserva_caixa_35 = lucro_evento * 0.35
     
                 if not recebimentos.empty:
                     receb_evento = recebimentos[
-                        recebimentos["evento_id"] == evento_id
+                        recebimentos["evento_id"].astype(str) == str(evento_id)
                     ].copy()
                 else:
                     receb_evento = pd.DataFrame()
     
                 if not receb_evento.empty:
-                    recebido = pd.to_numeric(
-                        receb_evento["valor"], errors="coerce"
-                    ).fillna(0).sum()
+                    recebido = pd.to_numeric(receb_evento["valor"], errors="coerce").fillna(0).sum()
                 else:
                     recebido = 0.0
     
-                a_receber = max(0.0, valor_contratado - recebido)
+                # Saldo a receber considerando o valor total ajustado com aditivos
+                a_receber = max(0.0, valor_contratado_total - recebido)
     
                 if a_receber <= 0:
                     status_fin = "🟢 PAGO"
@@ -4073,15 +4101,20 @@ elif menu == "Financeiro":
                     status_fin = "🔴 NÃO RECEBIDO"
     
                 # =============================================
-                # CARD DETALHADO DO EVENTO (DESIGN MELLHORADO)
+                # CARD DETALHADO DO EVENTO (MÉTRICAS ATUALIZADAS)
                 # =============================================
                 st.markdown(f"### 🎉 {cliente}")
                 st.caption(f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}")
     
-                # Linha 1: Visão Geral de Custos e Lucro
+                # Linha 1: Visão Geral (Totais com aditivos)
                 m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Valor Venda", f"R$ {valor_contratado:,.2f}")
-                m2.metric("Custo Estimado", f"R$ {custo_evento:,.2f}")
+                
+                # Exibe o valor total e destaca se houver aditivos
+                delta_venda = f"+ R$ {total_aditivos_cliente:,.2f} aditivos" if total_aditivos_cliente > 0 else None
+                delta_custo = f"+ R$ {total_aditivos_equipe:,.2f} aditivos" if total_aditivos_equipe > 0 else None
+                
+                m1.metric("Valor Venda Total", f"R$ {valor_contratado_total:,.2f}", delta=delta_venda)
+                m2.metric("Custo Estimado Total", f"R$ {custo_evento_total:,.2f}", delta=delta_custo, delta_color="inverse")
                 m3.metric("Lucro Estimado", f"R$ {lucro_evento:,.2f}")
                 m4.metric("Reserva Caixa PJ (30%-35%)", f"R$ {reserva_caixa_30:,.2f} a {reserva_caixa_35:,.2f}")
     
@@ -4139,7 +4172,7 @@ elif menu == "Financeiro":
                         else:
                             try:
                                 supabase.table("recebimentos_eventos").insert({
-                                    "evento_id": evento_id,
+                                    "evento_id": int(evento_id),
                                     "data_recebimento": str(data_recebimento),
                                     "data_prevista": str(data_prevista),
                                     "valor": valor_recebimento,
@@ -4161,16 +4194,14 @@ elif menu == "Financeiro":
                                 st.rerun()
     
                             except Exception as e:
-                                st.error("❌ Erro ao registrar recebimento no Supabase:")
-                                st.exception(e)
+                                st.error(f"❌ Erro ao registrar recebimento no Supabase: {e}")
     
                 # =============================================
-                # EXPANDER 2: REGISTRAR ADITIVOS / HORAS EXTRAS (COM FORMULÁRIO)
+                # EXPANDER 2: REGISTRAR ADITIVOS / HORAS EXTRAS
                 # =============================================
                 with st.expander(f"➕ Aditivos / Horas Extras — {cliente}"):
                     st.markdown("##### Lançar Adicional (Horas Extras, Quebra de Copos, etc.)")
                     
-                    # Utilizar st.form garante que o botão processe os campos corretamente
                     with st.form(key=f"form_aditivo_{evento_id}"):
                         col_a, col_b, col_c = st.columns(3)
                         tipo_aditivo = col_a.selectbox("Tipo de Aditivo", ["Hora Extra", "Quebra de Copos", "Consumo Extra", "Outros"], key=f"tipo_adt_{evento_id}")
@@ -4192,7 +4223,6 @@ elif menu == "Financeiro":
                         data_hoje = str(datetime.now().date())
                         
                         try:
-                            # Trata o id caso venha como int, string ou int64 do pandas
                             evt_id_convertido = int(evento_id)
     
                             # 1. Tabela aditivos_evento
@@ -4231,11 +4261,31 @@ elif menu == "Financeiro":
                                     "valor": float(valor_repassado_equipe)
                                 }).execute()
     
-                            st.success("✅ Aditivo e lançamentos financeiros registrados com sucesso!")
+                            st.toast("✅ Aditivo e lançamentos salvos com sucesso!", icon="➕")
                             st.rerun()
     
                         except Exception as e:
                             st.error(f"❌ Erro ao registrar aditivo no Supabase: {e}")
+    
+                # =============================================
+                # EXIBIÇÃO DOS ADITIVOS LANÇADOS
+                # =============================================
+                if not aditivos_evento.empty:
+                    st.markdown("#### ➕ Aditivos e Extras Lançados")
+                    tabela_adt = aditivos_evento[
+                        ["tipo", "valor_cliente", "valor_equipe", "status", "descricao"]
+                    ].copy()
+                    tabela_adt = tabela_adt.rename(
+                        columns={
+                            "tipo": "Tipo",
+                            "valor_cliente": "Valor Cliente (R$)",
+                            "valor_equipe": "Repasse Equipe (R$)",
+                            "status": "Status",
+                            "descricao": "Observação"
+                        }
+                    )
+                    st.dataframe(tabela_adt, use_container_width=True, hide_index=True)
+    
                 # =============================================
                 # HISTÓRICO DE RECEBIMENTOS
                 # =============================================
@@ -4255,12 +4305,7 @@ elif menu == "Financeiro":
                     )
     
                     historico["Valor"] = pd.to_numeric(historico["Valor"], errors="coerce")
-    
-                    st.dataframe(
-                        historico,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    st.dataframe(historico, use_container_width=True, hide_index=True)
     
                 st.divider()
 
