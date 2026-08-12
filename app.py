@@ -3740,7 +3740,6 @@ elif menu == "Financeiro":
 
     st.title("💰 Financeiro")
 
-    # 5 Abas declaradas e associadas corretamente
     tab1, tab_pendentes, tab2, tab3, tab4 = st.tabs([
         "📊 Resumo",
         "🔔 Pendências / A Receber",
@@ -3753,7 +3752,6 @@ elif menu == "Financeiro":
     # 📊 TAB 1: RESUMO (FINANCEIRO)
     # =========================================================
     with tab1:
-
         response = supabase.table("Financeiro").select("*").execute()
         df = pd.DataFrame(response.data or [])
 
@@ -3767,7 +3765,6 @@ elif menu == "Financeiro":
 
         saldo = entrada - saida
 
-        # CÁLCULO DA RESERVA (FIXO EM 35% SOBRE O LUCRO DE VENDAS)
         caixa_35_total = 0.0
         try:
             vendas_data = supabase.table("vendas").select("lucro").execute().data or []
@@ -3782,9 +3779,7 @@ elif menu == "Financeiro":
         except Exception:
             pass
         
-        # KPIs (5 COLUNAS)
         col1, col2, col3, col4, col5 = st.columns(5)
-        
         col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
         col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
         col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
@@ -3797,7 +3792,6 @@ elif menu == "Financeiro":
 
         st.divider()
 
-        # CONTAS A RECEBER
         try:
             eventos_aprovados = pd.DataFrame(
                 supabase.table("eventos")
@@ -3847,7 +3841,6 @@ elif menu == "Financeiro":
 
         st.divider()
 
-        # GRÁFICOS
         if not df.empty:
             df["data"] = pd.to_datetime(df["data"], errors="coerce")
             df = df.dropna(subset=["data"])
@@ -3904,11 +3897,11 @@ elif menu == "Financeiro":
                 st.error("⚠️ Você está gastando mais do que ganha!")
 
     # =========================================================
-    # 🔔 TAB: PENDÊNCIAS / A RECEBER
+    # 🔔 TAB 2: PENDÊNCIAS / A RECEBER (ABA DE AÇÃO)
     # =========================================================
     with tab_pendentes:
         st.subheader("🔔 Eventos com Saldo Pendente")
-        st.caption("Apenas eventos com valores a receber pendentes.")
+        st.caption("Central de ações para lançar pagamentos e aditivos de eventos em aberto.")
         
         eventos = pd.DataFrame(
             supabase.table("eventos")
@@ -3971,13 +3964,9 @@ elif menu == "Financeiro":
         
                 valor_contrato_base = float(evento.get("venda", 0) or 0)
                 custo_evento_total = float(evento.get("custo", 0) or 0)
-                valor_contratado_total = (
-                    valor_contrato_base + total_aditivos_cliente
-                )
+                valor_contratado_total = valor_contrato_base + total_aditivos_cliente
         
-                lucro_evento = max(
-                    0.0, valor_contratado_total - custo_evento_total
-                )
+                lucro_evento = max(0.0, valor_contratado_total - custo_evento_total)
                 reserva_caixa_35 = lucro_evento * 0.35
         
                 if not recebimentos.empty:
@@ -3997,12 +3986,11 @@ elif menu == "Financeiro":
                 recebido = receb_contrato + total_aditivos_pagos
                 a_receber = max(0.0, valor_contratado_total - recebido)
         
-                # FILTRO CRUCIAL: Só renderiza o card se ainda houver saldo a receber
-                if a_receber > 0:
+                # FILTRO COM ARREDONDAMENTO: impede erros de precisão decimal
+                if round(a_receber, 2) > 0:
                     eventos_com_pendencia += 1
-        
                     status_fin = "🟡 PARCIAL" if recebido > 0 else "🔴 NÃO RECEBIDO"
-        
+
                     st.markdown(f"### 🎉 {cliente}")
                     st.caption(
                         f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}"
@@ -4030,18 +4018,185 @@ elif menu == "Financeiro":
                     c1, c2 = st.columns(2)
                     c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
                     c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
-        
+
+                    # REGISTRAR RECEBIMENTO
+                    with st.expander(f"💰 Registrar Recebimento — {cliente}"):
+                        col1, col2 = st.columns(2)
+                        valor_recebimento = col1.number_input(
+                            "Valor recebido",
+                            min_value=0.0,
+                            max_value=float(a_receber),
+                            value=float(a_receber),
+                            step=50.0,
+                            key=f"p_valor_rec_{evento_id}",
+                        )
+                        data_recebimento = col2.date_input(
+                            "Data do recebimento",
+                            value=date.today(),
+                            key=f"p_data_rec_{evento_id}",
+                        )
+                        forma = st.selectbox(
+                            "Forma de pagamento",
+                            ["Pix", "Dinheiro", "Cartão", "Transferência"],
+                            key=f"p_forma_rec_{evento_id}",
+                        )
+                        data_prevista = st.date_input(
+                            "📅 Data prevista para cobrança do restante",
+                            value=date.today(),
+                            key=f"p_data_prev_{evento_id}",
+                        )
+                        descricao = st.text_input(
+                            "Descrição",
+                            value=f"Recebimento evento {cliente}",
+                            key=f"p_desc_rec_{evento_id}",
+                        )
+
+                        if st.button(
+                            "💾 Confirmar Recebimento",
+                            key=f"p_registrar_rec_{evento_id}",
+                            use_container_width=True,
+                        ):
+                            if valor_recebimento <= 0:
+                                st.warning("Informe um valor maior que zero.")
+                            elif valor_recebimento > a_receber:
+                                st.warning(
+                                    "O valor não pode ser maior que o saldo a receber."
+                                )
+                            else:
+                                try:
+                                    supabase.table("recebimentos_eventos").insert({
+                                        "evento_id": int(evento_id),
+                                        "data_recebimento": str(data_recebimento),
+                                        "data_prevista": str(data_prevista),
+                                        "valor": valor_recebimento,
+                                        "forma_pagamento": forma,
+                                        "descricao": descricao,
+                                        "status": "recebido",
+                                    }).execute()
+
+                                    supabase.table("Financeiro").insert({
+                                        "data": str(data_recebimento),
+                                        "tipo": "Entrada",
+                                        "categoria": "Evento",
+                                        "forma_pagamento": forma,
+                                        "descricao": descricao,
+                                        "valor": valor_recebimento,
+                                    }).execute()
+
+                                    st.toast(
+                                        "✅ Recebimento registrado no Financeiro!",
+                                        icon="🎉",
+                                    )
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(
+                                        f"❌ Erro ao registrar recebimento: {e}"
+                                    )
+
+                    # REGISTRAR ADITIVOS
+                    with st.expander(
+                        f"➕ Aditivos / Horas Extras — {cliente}"
+                    ):
+                        with st.form(key=f"p_form_aditivo_{evento_id}"):
+                            col_a, col_b = st.columns(2)
+                            tipo_aditivo = col_a.selectbox(
+                                "Tipo de Aditivo",
+                                [
+                                    "Hora Extra",
+                                    "Quebra de Copos",
+                                    "Consumo Extra",
+                                    "Outros",
+                                ],
+                                key=f"p_tipo_adt_{evento_id}",
+                            )
+                            valor_cobrado_cliente = col_b.number_input(
+                                "💰 Cobrado do Cliente (R$)",
+                                min_value=0.0,
+                                value=400.0,
+                                step=50.0,
+                                key=f"p_v_cli_{evento_id}",
+                            )
+
+                            col_st, col_fpg = st.columns(2)
+                            status_aditivo = col_st.selectbox(
+                                "Status",
+                                ["Pago", "Pendente"],
+                                key=f"p_st_adt_{evento_id}",
+                            )
+                            forma_pagto_aditivo = col_fpg.selectbox(
+                                "Forma de Pagamento",
+                                ["Pix", "Dinheiro", "Cartão", "Transferência"],
+                                key=f"p_fpg_adt_{evento_id}",
+                            )
+
+                            obs_aditivo = st.text_input(
+                                "Observação / Detalhes",
+                                placeholder="Ex.: 2h extras contratadas no local",
+                                key=f"p_obs_adt_{evento_id}",
+                            )
+
+                            btn_salvar_aditivo = st.form_submit_button(
+                                "💾 Salvar Aditivo", use_container_width=True
+                            )
+
+                        if btn_salvar_aditivo:
+                            agora_iso = datetime.now().isoformat()
+                            data_hoje = str(datetime.now().date())
+
+                            try:
+                                payload_aditivo = {
+                                    "evento_id": int(evento_id),
+                                    "evento": str(cliente),
+                                    "tipo": str(tipo_aditivo),
+                                    "descricao": str(obs_aditivo),
+                                    "valor_cliente": float(valor_cobrado_cliente),
+                                    "valor_equipe": 0.0,
+                                    "status": str(status_aditivo),
+                                    "forma_pagamento": str(forma_pagto_aditivo)
+                                    if status_aditivo == "Pago"
+                                    else None,
+                                    "data_pagamento": agora_iso
+                                    if status_aditivo == "Pago"
+                                    else None,
+                                }
+                                supabase.table("aditivos_evento").insert(
+                                    payload_aditivo
+                                ).execute()
+
+                                if (
+                                    status_aditivo == "Pago"
+                                    and valor_cobrado_cliente > 0
+                                ):
+                                    supabase.table("Financeiro").insert({
+                                        "data": data_hoje,
+                                        "tipo": "Entrada",
+                                        "categoria": f"Aditivo - {tipo_aditivo}",
+                                        "forma_pagamento": str(forma_pagto_aditivo),
+                                        "descricao": f"Aditivo ({tipo_aditivo}) - {cliente}",
+                                        "valor": float(valor_cobrado_cliente),
+                                    }).execute()
+
+                                st.toast(
+                                    "✅ Aditivo e faturamento atualizados!",
+                                    icon="➕",
+                                )
+                                st.rerun()
+                            except Exception as e:
+                                st.error(
+                                    f"❌ Erro ao registrar aditivo: {e}"
+                                )
+
                     st.markdown("---")
         
             if eventos_com_pendencia == 0:
                 st.success("🎉 Nenhum evento com saldo pendente no momento!")
 
     # =========================================================
-    # 🎉 TAB 3: EVENTOS
+    # 🎉 TAB 3: EVENTOS (ABA DE HISTÓRICO / CONSULTA APENAS)
     # =========================================================
     with tab2:
-        st.subheader("🎉 Controle Financeiro dos Eventos")
-        st.caption("Somente eventos aprovados aparecem aqui.")
+        st.subheader("🎉 Historico Financeiro dos Eventos")
+        st.caption("Visão geral de todos os eventos aprovados e seus históricos de recebimentos.")
         
         eventos = pd.DataFrame(
             supabase.table("eventos")
@@ -4062,7 +4217,7 @@ elif menu == "Financeiro":
         )
         
         if eventos.empty:
-            st.info("Nenhum evento aprovado para controlar.")
+            st.info("Nenhum evento cadastrado.")
         else:
             for _, evento in eventos.iterrows():
                 evento_id = evento["id"]
@@ -4102,13 +4257,9 @@ elif menu == "Financeiro":
         
                 valor_contrato_base = float(evento.get("venda", 0) or 0)
                 custo_evento_total = float(evento.get("custo", 0) or 0)
-                valor_contratado_total = (
-                    valor_contrato_base + total_aditivos_cliente
-                )
+                valor_contratado_total = valor_contrato_base + total_aditivos_cliente
         
-                lucro_evento = max(
-                    0.0, valor_contratado_total - custo_evento_total
-                )
+                lucro_evento = max(0.0, valor_contratado_total - custo_evento_total)
                 reserva_caixa_35 = lucro_evento * 0.35
         
                 if not recebimentos.empty:
@@ -4128,7 +4279,7 @@ elif menu == "Financeiro":
                 recebido = receb_contrato + total_aditivos_pagos
                 a_receber = max(0.0, valor_contratado_total - recebido)
         
-                if a_receber <= 0:
+                if round(a_receber, 2) <= 0:
                     status_fin = "🟢 PAGO"
                 elif recebido > 0:
                     status_fin = "🟡 PARCIAL"
@@ -4162,216 +4313,20 @@ elif menu == "Financeiro":
                 c1, c2 = st.columns(2)
                 c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
                 c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
-        
-                st.markdown("---")
 
-                # EXPANDER 1: REGISTRAR RECEBIMENTO
-                with st.expander(f"💰 Registrar Recebimento — {cliente}"):
-                    col1, col2 = st.columns(2)
-                    valor_recebimento = col1.number_input(
-                        "Valor recebido",
-                        min_value=0.0,
-                        max_value=float(a_receber) if a_receber > 0 else 0.0,
-                        value=float(a_receber) if a_receber > 0 else 0.0,
-                        step=50.0,
-                        key=f"valor_rec_{evento_id}",
-                    )
-                    data_recebimento = col2.date_input(
-                        "Data do recebimento",
-                        value=date.today(),
-                        key=f"data_rec_{evento_id}",
-                    )
-                    forma = st.selectbox(
-                        "Forma de pagamento",
-                        ["Pix", "Dinheiro", "Cartão", "Transferência"],
-                        key=f"forma_rec_{evento_id}",
-                    )
-                    data_prevista = st.date_input(
-                        "📅 Data prevista para cobrança do restante",
-                        value=date.today(),
-                        key=f"data_prev_{evento_id}",
-                    )
-                    descricao = st.text_input(
-                        "Descrição",
-                        value=f"Recebimento evento {cliente}",
-                        key=f"desc_rec_{evento_id}",
-                    )
-
-                    if st.button(
-                        "💾 Confirmar Recebimento",
-                        key=f"registrar_rec_{evento_id}",
-                        use_container_width=True,
-                    ):
-                        if valor_recebimento <= 0:
-                            st.warning("Informe um valor maior que zero.")
-                        elif valor_recebimento > a_receber:
-                            st.warning(
-                                "O valor não pode ser maior que o saldo a receber."
-                            )
-                        else:
-                            try:
-                                supabase.table("recebimentos_eventos").insert({
-                                    "evento_id": int(evento_id),
-                                    "data_recebimento": str(data_recebimento),
-                                    "data_prevista": str(data_prevista),
-                                    "valor": valor_recebimento,
-                                    "forma_pagamento": forma,
-                                    "descricao": descricao,
-                                    "status": "recebido",
-                                }).execute()
-
-                                supabase.table("Financeiro").insert({
-                                    "data": str(data_recebimento),
-                                    "tipo": "Entrada",
-                                    "categoria": "Evento",
-                                    "forma_pagamento": forma,
-                                    "descricao": descricao,
-                                    "valor": valor_recebimento,
-                                }).execute()
-
-                                st.toast(
-                                    "✅ Recebimento registrado no Financeiro!",
-                                    icon="🎉",
-                                )
-                                st.rerun()
-                            except Exception as e:
-                                st.error(
-                                    f"❌ Erro ao registrar recebimento no Supabase: {e}"
-                                )
-
-                # EXPANDER 2: REGISTRAR ADITIVOS / HORAS EXTRAS
-                with st.expander(
-                    f"➕ Aditivos / Horas Extras — {cliente}"
-                ):
-                    st.markdown(
-                        "##### Lançar Adicional (Horas Extras, Quebra de Copos, etc.)"
-                    )
-
-                    with st.form(key=f"form_aditivo_{evento_id}"):
-                        col_a, col_b = st.columns(2)
-                        tipo_aditivo = col_a.selectbox(
-                            "Tipo de Aditivo",
-                            [
-                                "Hora Extra",
-                                "Quebra de Copos",
-                                "Consumo Extra",
-                                "Outros",
-                            ],
-                            key=f"tipo_adt_{evento_id}",
-                        )
-                        valor_cobrado_cliente = col_b.number_input(
-                            "💰 Cobrado do Cliente (R$)",
-                            min_value=0.0,
-                            value=400.0,
-                            step=50.0,
-                            key=f"v_cli_{evento_id}",
-                        )
-
-                        col_st, col_fpg = st.columns(2)
-                        status_aditivo = col_st.selectbox(
-                            "Status",
-                            ["Pago", "Pendente"],
-                            key=f"st_adt_{evento_id}",
-                        )
-                        forma_pagto_aditivo = col_fpg.selectbox(
-                            "Forma de Pagamento",
-                            ["Pix", "Dinheiro", "Cartão", "Transferência"],
-                            key=f"fpg_adt_{evento_id}",
-                        )
-
-                        obs_aditivo = st.text_input(
-                            "Observação / Detalhes",
-                            placeholder="Ex.: 2h extras contratadas no local",
-                            key=f"obs_adt_{evento_id}",
-                        )
-
-                        btn_salvar_aditivo = st.form_submit_button(
-                            "💾 Salvar Aditivo", use_container_width=True
-                        )
-
-                    if btn_salvar_aditivo:
-                        agora_iso = datetime.now().isoformat()
-                        data_hoje = str(datetime.now().date())
-
-                        try:
-                            payload_aditivo = {
-                                "evento_id": int(evento_id),
-                                "evento": str(cliente),
-                                "tipo": str(tipo_aditivo),
-                                "descricao": str(obs_aditivo),
-                                "valor_cliente": float(valor_cobrado_cliente),
-                                "valor_equipe": 0.0,
-                                "status": str(status_aditivo),
-                                "forma_pagamento": str(forma_pagto_aditivo)
-                                if status_aditivo == "Pago"
-                                else None,
-                                "data_pagamento": agora_iso
-                                if status_aditivo == "Pago"
-                                else None,
-                            }
-                            supabase.table("aditivos_evento").insert(
-                                payload_aditivo
-                            ).execute()
-
-                            if (
-                                status_aditivo == "Pago"
-                                and valor_cobrado_cliente > 0
-                            ):
-                                supabase.table("Financeiro").insert({
-                                    "data": data_hoje,
-                                    "tipo": "Entrada",
-                                    "categoria": f"Aditivo - {tipo_aditivo}",
-                                    "forma_pagamento": str(forma_pagto_aditivo),
-                                    "descricao": f"Aditivo ({tipo_aditivo}) - {cliente}",
-                                    "valor": float(valor_cobrado_cliente),
-                                }).execute()
-
-                            st.toast(
-                                "✅ Aditivo e faturamento atualizados!",
-                                icon="➕",
-                            )
-                            st.rerun()
-                        except Exception as e:
-                            st.error(
-                                f"❌ Erro ao registrar aditivo no Supabase: {e}"
-                            )
-
-                # EXIBIÇÃO DOS ADITIVOS LANÇADOS
+                # EXIBIÇÃO DE ADITIVOS (CONSULTA)
                 if not aditivos_evento.empty:
-                    st.markdown("#### ➕ Aditivos Lançados")
+                    st.markdown("#### ➕ Aditivos Registrados")
                     for idx, aditivo in aditivos_evento.iterrows():
-                        adt_id = aditivo["id"]
                         tipo = aditivo.get("tipo", "Aditivo")
                         valor_adt = float(aditivo.get("valor_cliente", 0) or 0)
                         status_adt = aditivo.get("status", "Pendente")
                         obs = aditivo.get("descricao", "")
+                        st.write(
+                            f"• **{tipo}**: R$ {valor_adt:,.2f} | **Status:** {status_adt} | *{obs}*"
+                        )
 
-                        col_info, col_btn = st.columns([5, 1])
-                        with col_info:
-                            st.write(
-                                f"• **{tipo}**: R$ {valor_adt:,.2f} | **Status:** {status_adt} | *{obs}*"
-                            )
-
-                        with col_btn:
-                            if st.button(
-                                "🗑️ Excluir",
-                                key=f"del_adt_{adt_id}",
-                                use_container_width=True,
-                            ):
-                                try:
-                                    supabase.table("aditivos_evento").delete().eq(
-                                        "id", adt_id
-                                    ).execute()
-                                    supabase.table("Financeiro").delete().eq(
-                                        "descricao",
-                                        f"Aditivo ({tipo}) - {cliente}",
-                                    ).execute()
-                                    st.toast("🗑️ Aditivo removido!", icon="✅")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Erro ao excluir aditivo: {e}")
-
-                # HISTÓRICO DE RECEBIMENTOS
+                # HISTÓRICO DE RECEBIMENTOS (CONSULTA)
                 if not receb_evento.empty:
                     st.markdown("#### 💳 Histórico de recebimentos")
                     historico = receb_evento[
@@ -4529,7 +4484,6 @@ elif menu == "Financeiro":
                 "Data final", value=data_max_padrao
             )
 
-            # Aplicação dos Filtros
             df_filtrado = df.copy()
 
             if filtro != "Todos":
@@ -4556,7 +4510,6 @@ elif menu == "Financeiro":
                 hide_index=True,
             )
 
-            # Opção de Exclusão de Lançamentos do Extrato
             with st.expander("🗑️ Excluir um lançamento"):
                 lancamento_id = st.selectbox(
                     "Selecione o lançamento pelo ID para excluir",
