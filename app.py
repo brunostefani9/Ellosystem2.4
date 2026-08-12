@@ -4165,39 +4165,46 @@ elif menu == "Financeiro":
                                 st.exception(e)
     
                 # =============================================
-                # EXPANDER 2: REGISTRAR ADITIVOS / HORAS EXTRAS
+                # EXPANDER 2: REGISTRAR ADITIVOS / HORAS EXTRAS (COM FORMULÁRIO)
                 # =============================================
                 with st.expander(f"➕ Aditivos / Horas Extras — {cliente}"):
                     st.markdown("##### Lançar Adicional (Horas Extras, Quebra de Copos, etc.)")
                     
-                    col_a, col_b, col_c = st.columns(3)
-                    tipo_aditivo = col_a.selectbox("Tipo de Aditivo", ["Hora Extra", "Quebra de Copos", "Consumo Extra", "Outros"], key=f"tipo_adt_{evento_id}")
-                    valor_cobrado_cliente = col_b.number_input("💰 Cobrado do Cliente (R$)", min_value=0.0, value=600.0, step=50.0, key=f"v_cli_{evento_id}")
-                    valor_repassado_equipe = col_c.number_input("👥 Repasse Equipe (R$)", min_value=0.0, value=200.0, step=50.0, key=f"v_eqp_{evento_id}")
-                    
-                    st.caption(f"💡 Margem da Empresa neste aditivo: **R$ {valor_cobrado_cliente - valor_repassado_equipe:,.2f}**")
-                    
-                    col_st, col_fpg = st.columns(2)
-                    status_aditivo = col_st.selectbox("Status", ["Pago", "Pendente"], key=f"st_adt_{evento_id}")
-                    forma_pagto_aditivo = col_fpg.selectbox("Forma de Pagamento", ["Pix", "Dinheiro", "Cartão", "Transferência"], disabled=(status_aditivo == "Pendente"), key=f"fpg_adt_{evento_id}")
-                    
-                    obs_aditivo = st.text_input("Observação / Detalhes", placeholder="Ex.: 1h extra contratada no local", key=f"obs_adt_{evento_id}")
-                    
-                    if st.button("💾 Salvar Aditivo", key=f"btn_adt_{evento_id}", use_container_width=True):
+                    # Utilizar st.form garante que o botão processe os campos corretamente
+                    with st.form(key=f"form_aditivo_{evento_id}"):
+                        col_a, col_b, col_c = st.columns(3)
+                        tipo_aditivo = col_a.selectbox("Tipo de Aditivo", ["Hora Extra", "Quebra de Copos", "Consumo Extra", "Outros"], key=f"tipo_adt_{evento_id}")
+                        valor_cobrado_cliente = col_b.number_input("💰 Cobrado do Cliente (R$)", min_value=0.0, value=600.0, step=50.0, key=f"v_cli_{evento_id}")
+                        valor_repassado_equipe = col_c.number_input("👥 Repasse Equipe (R$)", min_value=0.0, value=200.0, step=50.0, key=f"v_eqp_{evento_id}")
+                        
+                        st.caption(f"💡 Margem da Empresa neste aditivo: **R$ {valor_cobrado_cliente - valor_repassado_equipe:,.2f}**")
+                        
+                        col_st, col_fpg = st.columns(2)
+                        status_aditivo = col_st.selectbox("Status", ["Pago", "Pendente"], key=f"st_adt_{evento_id}")
+                        forma_pagto_aditivo = col_fpg.selectbox("Forma de Pagamento", ["Pix", "Dinheiro", "Cartão", "Transferência"], key=f"fpg_adt_{evento_id}")
+                        
+                        obs_aditivo = st.text_input("Observação / Detalhes", placeholder="Ex.: 1h extra contratada no local", key=f"obs_adt_{evento_id}")
+                        
+                        btn_salvar_aditivo = st.form_submit_button("💾 Salvar Aditivo", use_container_width=True)
+    
+                    if btn_salvar_aditivo:
                         agora_iso = datetime.now().isoformat()
                         data_hoje = str(datetime.now().date())
                         
                         try:
+                            # Trata o id caso venha como int, string ou int64 do pandas
+                            evt_id_convertido = int(evento_id)
+    
                             # 1. Tabela aditivos_evento
                             payload_aditivo = {
-                                "evento_id": int(evento_id),
-                                "evento": cliente,
-                                "tipo": tipo_aditivo,
-                                "descricao": obs_aditivo,
+                                "evento_id": evt_id_convertido,
+                                "evento": str(cliente),
+                                "tipo": str(tipo_aditivo),
+                                "descricao": str(obs_aditivo),
                                 "valor_cliente": float(valor_cobrado_cliente),
                                 "valor_equipe": float(valor_repassado_equipe),
-                                "status": status_aditivo,
-                                "forma_pagamento": forma_pagto_aditivo if status_aditivo == "Pago" else None,
+                                "status": str(status_aditivo),
+                                "forma_pagamento": str(forma_pagto_aditivo) if status_aditivo == "Pago" else None,
                                 "data_pagamento": agora_iso if status_aditivo == "Pago" else None
                             }
                             supabase.table("aditivos_evento").insert(payload_aditivo).execute()
@@ -4208,7 +4215,7 @@ elif menu == "Financeiro":
                                     "data": data_hoje,
                                     "tipo": "Entrada",
                                     "categoria": f"Aditivo - {tipo_aditivo}",
-                                    "forma_pagamento": forma_pagto_aditivo,
+                                    "forma_pagamento": str(forma_pagto_aditivo),
                                     "descricao": f"Aditivo ({tipo_aditivo}) - {cliente}",
                                     "valor": float(valor_cobrado_cliente)
                                 }).execute()
@@ -4219,7 +4226,7 @@ elif menu == "Financeiro":
                                     "data": data_hoje,
                                     "tipo": "Saída",
                                     "categoria": "Equipe / Hora Extra",
-                                    "forma_pagamento": forma_pagto_aditivo,
+                                    "forma_pagamento": str(forma_pagto_aditivo),
                                     "descricao": f"Repasse Hora Extra Equipe - {cliente}",
                                     "valor": float(valor_repassado_equipe)
                                 }).execute()
@@ -4228,8 +4235,7 @@ elif menu == "Financeiro":
                             st.rerun()
     
                         except Exception as e:
-                            st.error(f"Erro ao registrar aditivo: {e}")
-    
+                            st.error(f"❌ Erro ao registrar aditivo no Supabase: {e}")
                 # =============================================
                 # HISTÓRICO DE RECEBIMENTOS
                 # =============================================
