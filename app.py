@@ -3767,13 +3767,10 @@ elif menu == "Financeiro":
 
         saldo = entrada - saida
 
-        # CÁLCULO DA RESERVA (30% A 35% SOBRE O LUCRO DE VENDAS)
-        caixa_30_total = 0.0
+        # CÁLCULO DA RESERVA (FIXO EM 35% SOBRE O LUCRO DE VENDAS)
         caixa_35_total = 0.0
         try:
-            vendas_data = (
-                supabase.table("vendas").select("lucro").execute().data or []
-            )
+            vendas_data = supabase.table("vendas").select("lucro").execute().data or []
             if vendas_data:
                 df_vendas_temp = pd.DataFrame(vendas_data)
                 lucro_acumulado = (
@@ -3781,22 +3778,21 @@ elif menu == "Financeiro":
                     .fillna(0)
                     .sum()
                 )
-                caixa_30_total = max(0, lucro_acumulado) * 0.30
                 caixa_35_total = max(0, lucro_acumulado) * 0.35
         except Exception:
             pass
-
+        
         # KPIs (5 COLUNAS)
         col1, col2, col3, col4, col5 = st.columns(5)
-
+        
         col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
         col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
         col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
         col4.metric("📈 Resultado", f"R$ {saldo:,.2f}")
         col5.metric(
-            "🛡️ Reserva Caixa PJ",
-            f"R$ {caixa_30_total:,.2f}",
-            help=f"30% a 35% sobre o lucro total acumulado: R$ {caixa_30_total:,.2f} a R$ {caixa_35_total:,.2f}",
+            "🛡️ Reserva Caixa PJ (35%)",
+            f"R$ {caixa_35_total:,.2f}",
+            help="35% fixos sobre o lucro total acumulado",
         )
 
         st.divider()
@@ -3971,7 +3967,7 @@ elif menu == "Financeiro":
     with tab2:
         st.subheader("🎉 Controle Financeiro dos Eventos")
         st.caption("Somente eventos aprovados aparecem aqui.")
-
+    
         eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
@@ -3981,19 +3977,15 @@ elif menu == "Financeiro":
             .data
             or []
         )
-
+    
         recebimentos = pd.DataFrame(
-            supabase.table("recebimentos_eventos")
-            .select("*")
-            .execute()
-            .data
-            or []
+            supabase.table("recebimentos_eventos").select("*").execute().data or []
         )
-
+    
         aditivos_df = pd.DataFrame(
             supabase.table("aditivos_evento").select("*").execute().data or []
         )
-
+    
         if eventos.empty:
             st.info("Nenhum evento aprovado para controlar.")
         else:
@@ -4001,16 +3993,16 @@ elif menu == "Financeiro":
                 evento_id = evento["id"]
                 cliente = evento.get("cliente", "Cliente")
                 data_evento = evento.get("data", "")
-
+    
                 total_aditivos_cliente = 0.0
                 total_aditivos_pagos = 0.0
                 aditivos_evento = pd.DataFrame()
-
+    
                 if not aditivos_df.empty:
                     aditivos_evento = aditivos_df[
                         aditivos_df["evento_id"].astype(str) == str(evento_id)
                     ].copy()
-
+    
                     if not aditivos_evento.empty:
                         total_aditivos_cliente = (
                             pd.to_numeric(
@@ -4032,26 +4024,26 @@ elif menu == "Financeiro":
                                 .fillna(0)
                                 .sum()
                             )
-
+    
                 valor_contrato_base = float(evento.get("venda", 0) or 0)
                 custo_evento_total = float(evento.get("custo", 0) or 0)
                 valor_contratado_total = (
                     valor_contrato_base + total_aditivos_cliente
                 )
-
+    
+                # CÁLCULO FIXO EM 35%
                 lucro_evento = max(
                     0.0, valor_contratado_total - custo_evento_total
                 )
-                reserva_caixa_30 = lucro_evento * 0.30
                 reserva_caixa_35 = lucro_evento * 0.35
-
+    
                 if not recebimentos.empty:
                     receb_evento = recebimentos[
                         recebimentos["evento_id"].astype(str) == str(evento_id)
                     ].copy()
                 else:
                     receb_evento = pd.DataFrame()
-
+    
                 receb_contrato = (
                     pd.to_numeric(receb_evento["valor"], errors="coerce")
                     .fillna(0)
@@ -4061,26 +4053,26 @@ elif menu == "Financeiro":
                 )
                 recebido = receb_contrato + total_aditivos_pagos
                 a_receber = max(0.0, valor_contratado_total - recebido)
-
+    
                 if a_receber <= 0:
                     status_fin = "🟢 PAGO"
                 elif recebido > 0:
                     status_fin = "🟡 PARCIAL"
                 else:
                     status_fin = "🔴 NÃO RECEBIDO"
-
+    
                 st.markdown(f"### 🎉 {cliente}")
                 st.caption(
                     f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}"
                 )
-
+    
                 m1, m2, m3, m4 = st.columns(4)
                 delta_venda = (
                     f"+ R$ {total_aditivos_cliente:,.2f} aditivos"
                     if total_aditivos_cliente > 0
                     else None
                 )
-
+    
                 m1.metric(
                     "Valor Venda Total",
                     f"R$ {valor_contratado_total:,.2f}",
@@ -4089,14 +4081,14 @@ elif menu == "Financeiro":
                 m2.metric("Custo Estimado", f"R$ {custo_evento_total:,.2f}")
                 m3.metric("Lucro Estimado", f"R$ {lucro_evento:,.2f}")
                 m4.metric(
-                    "Reserva Caixa PJ (30%-35%)",
-                    f"R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}",
+                    "🛡️ Reserva Caixa PJ (35%)",
+                    f"R$ {reserva_caixa_35:,.2f}",
                 )
-
+    
                 c1, c2 = st.columns(2)
                 c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
                 c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
-
+    
                 st.markdown("---")
 
                 # EXPANDER 1: REGISTRAR RECEBIMENTO
