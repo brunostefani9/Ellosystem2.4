@@ -4243,22 +4243,36 @@ elif menu == "Financeiro":
                             st.error(f"❌ Erro ao registrar aditivo no Supabase: {e}")
     
                 # =============================================
-                # EXIBIÇÃO DOS ADITIVOS LANÇADOS
+                # EXIBIÇÃO DOS ADITIVOS LANÇADOS (COM OPÇÃO DE EXCLUSÃO)
                 # =============================================
                 if not aditivos_evento.empty:
                     st.markdown("#### ➕ Aditivos Lançados")
-                    tabela_adt = aditivos_evento[
-                        ["tipo", "valor_cliente", "status", "descricao"]
-                    ].copy()
-                    tabela_adt = tabela_adt.rename(
-                        columns={
-                            "tipo": "Tipo",
-                            "valor_cliente": "Valor Adicional (R$)",
-                            "status": "Status",
-                            "descricao": "Observação"
-                        }
-                    )
-                    st.dataframe(tabela_adt, use_container_width=True, hide_index=True)
+                    
+                    for idx, aditivo in aditivos_evento.iterrows():
+                        adt_id = aditivo["id"]
+                        tipo = aditivo.get("tipo", "Aditivo")
+                        valor_adt = float(aditivo.get("valor_cliente", 0) or 0)
+                        status_adt = aditivo.get("status", "Pendente")
+                        obs = aditivo.get("descricao", "")
+    
+                        col_info, col_btn = st.columns([5, 1])
+                        
+                        with col_info:
+                            st.write(f"• **{tipo}**: R$ {valor_adt:,.2f} | **Status:** {status_adt} | *{obs}*")
+                        
+                        with col_btn:
+                            if st.button("🗑️ Excluir", key=f"del_adt_{adt_id}", use_container_width=True):
+                                try:
+                                    # 1. Remove do aditivos_evento
+                                    supabase.table("aditivos_evento").delete().eq("id", adt_id).execute()
+                                    
+                                    # 2. Remove do Financeiro se houver lançamento
+                                    supabase.table("Financeiro").delete().eq("descricao", f"Aditivo ({tipo}) - {cliente}").execute()
+                                    
+                                    st.toast("🗑️ Aditivo removido!", icon="✅")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro ao excluir aditivo: {e}")
     
                 # =============================================
                 # HISTÓRICO DE RECEBIMENTOS
