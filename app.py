@@ -3242,17 +3242,16 @@ elif menu == "Cachês":
             )
             evento_obj = opcoes_evt[evt_sel_nome]
 
-            # CORREÇÃO: Garante conversão segura para string/UUID do evento
-            evento_id_uuid = (
-                str(evento_obj["id"]) if evento_obj.get("id") else None
-            )
+            # Converte o ID para int de forma segura
+            raw_id = evento_obj.get("id")
+            evento_id_num = int(raw_id) if raw_id is not None else None
             evento_nome_ref = evt_sel_nome
         else:
             evento_nome_ref = col1.text_input(
                 "Nome do Evento / Referência",
                 placeholder="Ex.: Formatura Vitória",
             )
-            evento_id_uuid = None
+            evento_id_num = None
 
         qtd_pessoas = col2.number_input(
             "Qtd. Profissionais", min_value=1, max_value=30, value=2
@@ -3391,11 +3390,9 @@ elif menu == "Cachês":
                     forma_final = forma_pagto_padrao if ja_pago else None
                     data_pagto_final = agora_iso if ja_pago else None
 
-                    # 1. Insere na tabela pagamentos_equipe
+                    # 1. Insere na tabela pagamentos_equipe enviando int8
                     payload_equipe = {
-                        "evento_id": str(evento_id_uuid)
-                        if evento_id_uuid
-                        else None,  # ✅ Trata o campo de UUID corretamente
+                        "evento_id": evento_id_num,  # ✅ Envia o inteiro compatível com int8
                         "evento": evento_nome_ref,
                         "nome": pessoa["nome"],
                         "funcao": pessoa["funcao"],
