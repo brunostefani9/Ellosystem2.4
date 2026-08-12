@@ -3906,7 +3906,7 @@ elif menu == "Financeiro":
     # =========================================================
     # 🔔 TAB: PENDÊNCIAS / A RECEBER
     # =========================================================
-    with tab_pendencias:  # Ajuste a variável da sua aba se tiver outro nome (ex: tab1_5)
+    with tab_pendentes:  # Ajuste a variável da sua aba se tiver outro nome (ex: tab1_5)
         st.subheader("🔔 Eventos com Saldo Pendente")
         st.caption("Apenas eventos com valores a receber pendentes.")
     
