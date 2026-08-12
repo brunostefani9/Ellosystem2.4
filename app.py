@@ -3904,62 +3904,137 @@ elif menu == "Financeiro":
                 st.error("⚠️ Você está gastando mais do que ganha!")
 
     # =========================================================
-    # 🔔 TAB 2: PENDÊNCIAS / A RECEBER
+    # 🔔 TAB: PENDÊNCIAS / A RECEBER
     # =========================================================
-    with tab_pendentes:
+    with tab_pendencias:  # Ajuste a variável da sua aba se tiver outro nome (ex: tab1_5)
         st.subheader("🔔 Eventos com Saldo Pendente")
-
-        eventos_pend = pd.DataFrame(
+        st.caption("Apenas eventos com valores a receber pendentes.")
+    
+        eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
-            .in_("status", ["aprovado", "finalizado", "concluido"])
+            .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
+            .order("data")
             .execute()
             .data
             or []
         )
-        rec_pend = pd.DataFrame(
-            supabase.table("recebimentos_eventos")
-            .select("*")
-            .execute()
-            .data
-            or []
+    
+        recebimentos = pd.DataFrame(
+            supabase.table("recebimentos_eventos").select("*").execute().data or []
         )
-
-        if eventos_pend.empty:
-            st.success("🎉 Não há pendências registradas!")
+    
+        aditivos_df = pd.DataFrame(
+            supabase.table("aditivos_evento").select("*").execute().data or []
+        )
+    
+        if eventos.empty:
+            st.info("Nenhum evento encontrado.")
         else:
-            pendencias_lista = []
-            for _, evt in eventos_pend.iterrows():
-                e_id = evt["id"]
-                venda = float(evt.get("venda", 0) or 0)
-
-                rec_evt = rec_pend[rec_pend["evento_id"] == e_id] if not rec_pend.empty else pd.DataFrame()
-                pago = pd.to_numeric(rec_evt["valor"], errors="coerce").sum() if not rec_evt.empty else 0.0
-
-                saldo_restante = venda - pago
-                if saldo_restante > 0:
-                    pendencias_lista.append({
-                        "Cliente": evt.get("cliente", "N/A"),
-                        "Data do Evento": evt.get("data", "N/A"),
-                        "Valor Total": venda,
-                        "Valor Recebido": pago,
-                        "Saldo a Receber": saldo_restante
-                    })
-
-            if pendencias_lista:
-                df_pend = pd.DataFrame(pendencias_lista)
-                st.dataframe(
-                    df_pend,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Valor Total": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Valor Recebido": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "Saldo a Receber": st.column_config.NumberColumn(format="R$ %.2f"),
-                    }
+            eventos_com_pendencia = 0
+    
+            for _, evento in eventos.iterrows():
+                evento_id = evento["id"]
+                cliente = evento.get("cliente", "Cliente")
+                data_evento = evento.get("data", "")
+    
+                total_aditivos_cliente = 0.0
+                total_aditivos_pagos = 0.0
+                aditivos_evento = pd.DataFrame()
+    
+                if not aditivos_df.empty:
+                    aditivos_evento = aditivos_df[
+                        aditivos_df["evento_id"].astype(str) == str(evento_id)
+                    ].copy()
+    
+                    if not aditivos_evento.empty:
+                        total_aditivos_cliente = (
+                            pd.to_numeric(
+                                aditivos_evento["valor_cliente"],
+                                errors="coerce",
+                            )
+                            .fillna(0)
+                            .sum()
+                        )
+                        aditivos_pagos = aditivos_evento[
+                            aditivos_evento["status"].str.lower() == "pago"
+                        ]
+                        if not aditivos_pagos.empty:
+                            total_aditivos_pagos = (
+                                pd.to_numeric(
+                                    aditivos_pagos["valor_cliente"],
+                                    errors="coerce",
+                                )
+                                .fillna(0)
+                                .sum()
+                            )
+    
+                valor_contrato_base = float(evento.get("venda", 0) or 0)
+                custo_evento_total = float(evento.get("custo", 0) or 0)
+                valor_contratado_total = (
+                    valor_contrato_base + total_aditivos_cliente
                 )
-            else:
-                st.success("🟢 Todos os eventos contratados já foram quitados!")
+    
+                lucro_evento = max(
+                    0.0, valor_contratado_total - custo_evento_total
+                )
+                reserva_caixa_35 = lucro_evento * 0.35
+    
+                if not recebimentos.empty:
+                    receb_evento = recebimentos[
+                        recebimentos["evento_id"].astype(str) == str(evento_id)
+                    ].copy()
+                else:
+                    receb_evento = pd.DataFrame()
+    
+                receb_contrato = (
+                    pd.to_numeric(receb_evento["valor"], errors="coerce")
+                    .fillna(0)
+                    .sum()
+                    if not receb_evento.empty
+                    else 0.0
+                )
+                recebido = receb_contrato + total_aditivos_pagos
+                a_receber = max(0.0, valor_contratado_total - recebido)
+    
+                # FILTRO CRUCIAL: Só renderiza o card se ainda houver saldo a receber
+                if a_receber > 0:
+                    eventos_com_pendencia += 1
+    
+                    status_fin = "🟡 PARCIAL" if recebido > 0 else "🔴 NÃO RECEBIDO"
+    
+                    st.markdown(f"### 🎉 {cliente}")
+                    st.caption(
+                        f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}"
+                    )
+    
+                    m1, m2, m3, m4 = st.columns(4)
+                    delta_venda = (
+                        f"+ R$ {total_aditivos_cliente:,.2f} aditivos"
+                        if total_aditivos_cliente > 0
+                        else None
+                    )
+    
+                    m1.metric(
+                        "Valor Venda Total",
+                        f"R$ {valor_contratado_total:,.2f}",
+                        delta=delta_venda,
+                    )
+                    m2.metric("Custo Estimado", f"R$ {custo_evento_total:,.2f}")
+                    m3.metric("Lucro Estimado", f"R$ {lucro_evento:,.2f}")
+                    m4.metric(
+                        "🛡️ Reserva Caixa PJ (35%)",
+                        f"R$ {reserva_caixa_35:,.2f}",
+                    )
+    
+                    c1, c2 = st.columns(2)
+                    c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
+                    c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
+    
+                    st.markdown("---")
+    
+            if eventos_com_pendencia == 0:
+                st.success("🎉 Nenhum evento com saldo pendente no momento!")
 
     # =========================================================
     # 🎉 TAB 3: EVENTOS
