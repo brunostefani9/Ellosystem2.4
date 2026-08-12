@@ -2470,9 +2470,27 @@ elif menu == "Orçamentos":
             # =========================
             # PRECIFICAÇÃO
             # =========================
-        
+
             st.subheader("📈 Precificação")
-        
+
+            # Opção para zerar custo da mão de obra
+            sem_custo_equipe = st.checkbox(
+                "🚫 Ignorar custo de mão de obra neste orçamento (lançar cachês separadamente)",
+                key="sp_sem_custo_equipe"
+            )
+
+            # Recalcula o custo_total dependendo do checkbox
+            if sem_custo_equipe:
+                custo_financeiro_real = (
+                    valor_copos +
+                    valor_tacas +
+                    valor_decoracao +
+                    transporte +
+                    outros
+                )
+            else:
+                custo_financeiro_real = custo_total
+
             margem = st.slider(
                 "Margem de lucro (%)",
                 0,
@@ -2480,9 +2498,10 @@ elif menu == "Orçamentos":
                 100,
                 key="sp_margem"
             )
-        
+
+            # O preço base de venda usa o custo total original (ou ajustado)
             preco_venda = custo_total * (1 + margem / 100)
-        
+
             desconto = st.slider(
                 "Desconto (%)",
                 0,
@@ -2490,71 +2509,173 @@ elif menu == "Orçamentos":
                 0,
                 key="sp_desconto"
             )
-        
+
             preco_com_desconto = preco_venda * (1 - desconto / 100)
-        
+
             st.subheader("🤝 Comissão")
-        
+
             incluir_comissao = st.checkbox(
                 "Incluir comissão",
                 key="sp_comissao"
             )
-        
+
             valor_comissao = 0
             percentual_comissao = 0
-        
+
             if incluir_comissao:
-        
+
                 percentual_comissao = st.number_input(
                     "Percentual (%)",
                     value=10.0,
                     key="sp_percentual"
                 )
-        
+
                 valor_comissao = (
                     preco_com_desconto *
                     percentual_comissao / 100
                 )
-        
+
             valor_final_venda = preco_com_desconto + valor_comissao
-        
-            lucro = valor_final_venda - custo_total
-        
+
+            # Lucro agora desconta apenas o custo_financeiro_real
+            lucro = valor_final_venda - custo_financeiro_real
+
             st.divider()
-        
+
             st.subheader("📊 Resumo Financeiro")
-        
+
             col1, col2, col3, col4 = st.columns(4)
-        
+
             with col1:
                 st.metric(
                     "💰 Custo",
-                    f"R$ {custo_total:,.2f}"
+                    f"R$ {custo_financeiro_real:,.2f}"
                 )
-        
+
             with col2:
                 st.metric(
                     "📈 Venda",
                     f"R$ {preco_com_desconto:,.2f}"
                 )
-        
+
             with col3:
                 st.metric(
                     "💵 Lucro",
                     f"R$ {lucro:,.2f}"
                 )
-        
+
             with col4:
                 st.metric(
                     "🤝 Comissão",
                     f"R$ {valor_comissao:,.2f}"
                 )
-        
+
             st.metric(
                 "🏆 VALOR FINAL",
                 f"R$ {valor_final_venda:,.2f}"
             )
-        
+
+            # =========================
+            # SALVAR ORÇAMENTO
+            # =========================
+
+            if st.button(
+                "💾 Salvar orçamento",
+                key="salvar_servico_personalizado"
+            ):
+
+                response = supabase.table("eventos").insert({
+
+                    "cliente": nome_cliente,
+                    "data": str(data_evento),
+                    "cidade": cidade_evento,
+                    "telefone": telefone,
+                    "endereco": endereco,
+
+                    "tipo_evento": tipo_evento_sp,
+                    "modalidade": "Serviço Personalizado",
+
+                    "hora_chegada": str(hora_chegada),
+                    "hora_inicio": str(hora_inicio),
+                    "hora_convidados": str(hora_convidados),
+
+                    "convidados": 0,
+
+                    # Envia para o banco o custo ajustado (0 ou apenas taxas/extras)
+                    "custo": custo_financeiro_real,
+                    "venda": valor_final_venda,
+
+                    "comissao_percentual": percentual_comissao,
+                    "comissao_valor": valor_comissao,
+
+                    "equipe": nomes_equipe,
+
+                    "status": "pendente"
+
+                }).execute()
+
+                evento_id = response.data[0]["id"]
+
+                # EQUIPE
+                for i in range(qtd_pessoas):
+
+                    nome = st.session_state.get(f"sp_nome_{i}", "")
+                    funcao = st.session_state.get(f"sp_funcao_{i}", "")
+
+                    if nome.strip():
+
+                        supabase.table("evento_itens").insert({
+
+                            "evento_id": evento_id,
+                            "produto": f"{funcao} - {nome}",
+                            "quantidade": 1,
+                            "unidade": "profissional",
+                            "categoria": "Equipe"
+
+                        }).execute()
+
+                # LOCAÇÕES
+                locacoes = {
+                    "Copos": valor_copos,
+                    "Taças": valor_tacas,
+                    "Decoração": valor_decoracao
+                }
+
+                for nome, valor in locacoes.items():
+
+                    if valor > 0:
+
+                        supabase.table("evento_itens").insert({
+
+                            "evento_id": evento_id,
+                            "produto": nome,
+                            "quantidade": valor,
+                            "unidade": "R$",
+                            "categoria": "Locação"
+
+                        }).execute()
+
+                # EXTRAS
+                extras = {
+                    "Transporte": transporte,
+                    "Outros": outros
+                }
+
+                for nome, valor in extras.items():
+
+                    if valor > 0:
+
+                        supabase.table("evento_itens").insert({
+
+                            "evento_id": evento_id,
+                            "produto": nome,
+                            "quantidade": valor,
+                            "unidade": "R$",
+                            "categoria": "Custos"
+
+                        }).execute()
+
+                st.success("✅ Orçamento salvo com sucesso!")
             # =========================
             # SALVAR ORÇAMENTO
             # =========================
