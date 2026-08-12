@@ -759,6 +759,7 @@ elif menu == "Estoque":
             )
 
         st.info("Movimentações com status 'Teste' não afetam o estoque físico")
+        
 elif menu == "Relatórios":
 
     st.title("📊 Dashboard Geral")
@@ -777,177 +778,94 @@ elif menu == "Relatórios":
     )
     
     if periodo == "Este ano":
-    
         data_inicio = date(date.today().year, 1, 1)
         data_fim = date.today()
-    
-        col2.date_input(
-            "📅 Data inicial",
-            value=data_inicio,
-            disabled=True
-        )
-    
-        col3.date_input(
-            "📅 Data final",
-            value=data_fim,
-            disabled=True
-        )
+        col2.date_input("📅 Data inicial", value=data_inicio, disabled=True)
+        col3.date_input("📅 Data final", value=data_fim, disabled=True)
     
     elif periodo == "Todos os eventos":
-    
         data_inicio = None
         data_fim = None
-    
         col2.write("📅 Data inicial")
         col2.info("Desde o primeiro registro")
-    
         col3.write("📅 Data final")
         col3.info("Até hoje")
     
     else:
-    
-        data_inicio = col2.date_input(
-            "📅 Data inicial",
-            value=date(date.today().year, 1, 1)
-        )
-    
-        data_fim = col3.date_input(
-            "📅 Data final",
-            value=date.today()
-        )
+        data_inicio = col2.date_input("📅 Data inicial", value=date(date.today().year, 1, 1))
+        data_fim = col3.date_input("📅 Data final", value=date.today())
 
     # =========================
     # 📅 PRÓXIMOS EVENTOS
     # =========================
-    
     st.subheader("📅 Próximos Eventos")
     
     df_proximos = pd.DataFrame(
         supabase.table("eventos")
         .select("*")
-        .eq("status", "aprovado")
+        .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
         .execute().data or []
     )
     
     if df_proximos.empty:
-    
-        st.info("Nenhum evento aprovado no momento.")
-    
+        st.info("Nenhum evento cadastrado no momento.")
     else:
-    
-        # Converte a data do evento
-        df_proximos["data_evento"] = pd.to_datetime(
-            df_proximos["data"],
-            errors="coerce"
-        )
-    
+        df_proximos["data_evento"] = pd.to_datetime(df_proximos["data"], errors="coerce")
         hoje = pd.Timestamp.today().normalize()
-    
-        # Somente eventos de hoje em diante
-        df_proximos = df_proximos[
-            df_proximos["data_evento"] >= hoje
-        ].copy()
-    
-        # Ordena pelos eventos mais próximos
-        df_proximos = df_proximos.sort_values(
-            "data_evento"
-        )
-    
-        if df_proximos.empty:
-    
+        
+        # Filtra eventos futuros
+        df_proximos_futuros = df_proximos[df_proximos["data_evento"] >= hoje].sort_values("data_evento")
+        
+        if df_proximos_futuros.empty:
             st.info("Nenhum próximo evento confirmado.")
-    
         else:
-    
-            # Mostrar no máximo os próximos 6 dias com eventos
-            datas_eventos = (
-                df_proximos["data_evento"]
-                .dt.normalize()
-                .drop_duplicates()
-                .head(6)
-            )
-    
-            colunas = st.columns(
-                min(len(datas_eventos), 3)
-            )
-    
+            datas_eventos = df_proximos_futuros["data_evento"].dt.normalize().drop_duplicates().head(6)
+            colunas = st.columns(min(len(datas_eventos), 3))
+            
             for i, data_evento in enumerate(datas_eventos):
-    
-                eventos_dia = df_proximos[
-                    df_proximos["data_evento"].dt.normalize()
-                    == data_evento
-                ]
-    
+                eventos_dia = df_proximos_futuros[df_proximos_futuros["data_evento"].dt.normalize() == data_evento]
                 quantidade = len(eventos_dia)
-    
+                
                 with colunas[i % 3]:
-    
-                    st.markdown(
-                        f"""
-                        ### 📅 {data_evento.strftime("%d/%m")}
-                        """
-                    )
-    
-                    st.metric(
-                        "Eventos",
-                        quantidade
-                    )
-    
+                    st.markdown(f"### 📅 {data_evento.strftime('%d/%m')}")
+                    st.metric("Eventos", quantidade)
+                    
                     for _, evento in eventos_dia.iterrows():
-    
-                        cliente = evento.get(
-                            "cliente",
-                            "Cliente não informado"
-                        )
-    
-                        convidados = evento.get(
-                            "convidados",
-                            0
-                        )
-    
-                        st.caption(
-                            f"🥂 **{cliente}**"
-                        )
-    
-                        st.caption(
-                            f"👥 {convidados} convidados"
-                        )
-    
-            st.divider()
-    
+                        cliente = evento.get("cliente", "Cliente não informado")
+                        convidados = evento.get("convidados", 0)
+                        st.caption(f"🥂 **{cliente}**")
+                        st.caption(f"👥 {convidados} convidados")
+
+    st.divider()
+
     # =========================
-    # CARREGAR DADOS
+    # CARREGAR DADOS ATUALIZADOS
     # =========================
-    df_vendas = carregar_tabela("vendas")
+    df_eventos_raw = pd.DataFrame(supabase.table("eventos").select("*").in_("status", ["aprovado", "finalizado", "concluido", "pago"]).execute().data or [])
+    df_aditivos_raw = pd.DataFrame(supabase.table("aditivos_evento").select("*").execute().data or [])
     df_fin = carregar_tabela("Financeiro")
     df_itens = carregar_tabela("evento_itens")
-    
-    # converter datas
-    if not df_vendas.empty:
-        df_vendas["data"] = pd.to_datetime(df_vendas["data"], errors="coerce")
 
+    # Tratamento de datas
+    if not df_eventos_raw.empty:
+        df_eventos_raw["data"] = pd.to_datetime(df_eventos_raw["data"], errors="coerce")
     if not df_fin.empty:
         df_fin["data"] = pd.to_datetime(df_fin["data"], errors="coerce")
 
     # =========================
     # APLICAR FILTRO DE PERÍODO
     # =========================
-    
-    if periodo != "Todos os eventos":
-    
-        if data_inicio and data_fim:
-    
-            if not df_vendas.empty:
-                df_vendas = df_vendas[
-                    (df_vendas["data"] >= pd.to_datetime(data_inicio)) &
-                    (df_vendas["data"] <= pd.to_datetime(data_fim))
-                ]
-    
-            if not df_fin.empty:
-                df_fin = df_fin[
-                    (df_fin["data"] >= pd.to_datetime(data_inicio)) &
-                    (df_fin["data"] <= pd.to_datetime(data_fim))
-                ]
+    if periodo != "Todos os eventos" and data_inicio and data_fim:
+        if not df_eventos_raw.empty:
+            df_eventos_raw = df_eventos_raw[
+                (df_eventos_raw["data"] >= pd.to_datetime(data_inicio)) &
+                (df_eventos_raw["data"] <= pd.to_datetime(data_fim))
+            ]
+        if not df_fin.empty:
+            df_fin = df_fin[
+                (df_fin["data"] >= pd.to_datetime(data_inicio)) &
+                (df_fin["data"] <= pd.to_datetime(data_fim))
+            ]
 
     # =========================
     # ABAS
@@ -964,49 +882,56 @@ elif menu == "Relatórios":
     # 📊 VISÃO GERAL
     # =========================
     with tab1:
+        # Cálculo de Vendas Base + Aditivos
+        vendas_base = pd.to_numeric(df_eventos_raw["venda"], errors="coerce").fillna(0).sum() if not df_eventos_raw.empty else 0.0
+        
+        # Aditivos vinculados aos eventos filtrados
+        if not df_eventos_raw.empty and not df_aditivos_raw.empty and "evento_id" in df_aditivos_raw.columns:
+            aditivos_filtrados = df_aditivos_raw[df_aditivos_raw["evento_id"].isin(df_eventos_raw["id"])]
+            tot_aditivos = pd.to_numeric(aditivos_filtrados["valor_cliente"], errors="coerce").fillna(0).sum()
+        else:
+            tot_aditivos = pd.to_numeric(df_aditivos_raw["valor_cliente"], errors="coerce").fillna(0).sum() if not df_aditivos_raw.empty else 0.0
 
-        total_vendas = df_vendas["valor_venda"].sum() if not df_vendas.empty else 0
-        total_custo = df_vendas["custo"].sum() if not df_vendas.empty else 0
-        total_lucro = df_vendas["lucro"].sum() if not df_vendas.empty else 0
+        total_faturamento = vendas_base + tot_aditivos
 
-        margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0
+        # Custo real (Soma das saídas do caixa)
+        total_custo = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum() if not df_fin.empty else 0.0
+        
+        total_lucro = total_faturamento - total_custo
+        margem = (total_lucro / total_faturamento * 100) if total_faturamento > 0 else 0.0
 
-        # Reserva de Caixa PJ calculada estritamente sobre o LUCRO
+        # Reserva de Caixa PJ (30% a 35% do lucro)
         reserva_caixa_30 = max(0, total_lucro) * 0.30
         reserva_caixa_35 = max(0, total_lucro) * 0.35
 
         col1, col2, col3, col4, col5 = st.columns(5)
 
-        col1.metric("💰 Faturamento", f"R$ {total_vendas:,.2f}")
+        col1.metric("💰 Faturamento", f"R$ {total_faturamento:,.2f}")
         col2.metric("💸 Custos", f"R$ {total_custo:,.2f}")
         col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
         col4.metric("📊 Margem", f"{margem:.1f}%")
         col5.metric(
             "🛡️ Reserva Caixa PJ",
             f"R$ {reserva_caixa_30:,.2f}",
-            help=f"Reserva de caixa sobre o lucro (30% a 35%): R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}"
+            help=f"Reserva sobre o lucro (30% a 35%): R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}"
         )
 
         st.divider()
 
-        if not df_vendas.empty:
-            vendas_dia = df_vendas.groupby(df_vendas["data"].dt.date)["valor_venda"].sum()
+        if not df_eventos_raw.empty:
+            vendas_dia = df_eventos_raw.groupby(df_eventos_raw["data"].dt.date)["venda"].sum()
             st.line_chart(vendas_dia)
 
     # =========================
     # 💰 FINANCEIRO (Relatórios)
     # =========================
     with tab2:
-
         entradas = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum() if not df_fin.empty else 0
         saidas = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum() if not df_fin.empty else 0
-
         saldo = entradas - saidas
 
-        # Busca o lucro acumulado das vendas no período para manter a regra sobre o lucro
-        total_lucro_vendas = df_vendas["lucro"].sum() if not df_vendas.empty else 0
-        reserva_caixa_30_fin = max(0, total_lucro_vendas) * 0.30
-        reserva_caixa_35_fin = max(0, total_lucro_vendas) * 0.35
+        reserva_caixa_30_fin = max(0, total_lucro) * 0.30
+        reserva_caixa_35_fin = max(0, total_lucro) * 0.35
 
         col1, col2, col3, col4 = st.columns(4)
 
@@ -1016,7 +941,7 @@ elif menu == "Relatórios":
         col4.metric(
             "🛡️ Reserva Caixa PJ",
             f"R$ {reserva_caixa_30_fin:,.2f}",
-            help=f"Meta de reserva (30% a 35% do lucro das vendas): R$ {reserva_caixa_30_fin:,.2f} a R$ {reserva_caixa_35_fin:,.2f}"
+            help=f"Meta de reserva (30% a 35% do lucro): R$ {reserva_caixa_30_fin:,.2f} a R$ {reserva_caixa_35_fin:,.2f}"
         )
 
         st.divider()
@@ -1029,27 +954,21 @@ elif menu == "Relatórios":
     # 📈 VENDAS
     # =========================
     with tab3:
-
-        if not df_vendas.empty:
-
-            vendas_mes = df_vendas.groupby(
-                df_vendas["data"].dt.to_period("M")
-            )["valor_venda"].sum()
+        if not df_eventos_raw.empty:
+            vendas_mes = df_eventos_raw.groupby(df_eventos_raw["data"].dt.to_period("M"))["venda"].sum()
 
             st.subheader("📅 Vendas por mês")
             st.bar_chart(vendas_mes)
 
             st.divider()
 
-            top_clientes = df_vendas.groupby("cliente")["valor_venda"].sum() \
-                                    .sort_values(ascending=False).head(5)
+            top_clientes = df_eventos_raw.groupby("cliente")["venda"].sum().sort_values(ascending=False).head(5)
 
             st.subheader("🏆 Top Clientes")
             st.dataframe(top_clientes)
 
-            ticket_medio = df_vendas["valor_venda"].mean()
+            ticket_medio = df_eventos_raw["venda"].mean()
             st.metric("🎟 Ticket Médio", f"R$ {ticket_medio:,.2f}")
-
         else:
             st.info("Sem dados de vendas")
 
@@ -1057,23 +976,17 @@ elif menu == "Relatórios":
     # 🎯 METAS
     # =========================
     with tab4:
-
         meta_mensal = st.number_input("Meta mensal (R$)", value=10000.0)
 
-        if not df_vendas.empty:
-
+        if not df_eventos_raw.empty:
             mes_atual = pd.Timestamp.now().to_period("M")
-
-            vendas_mes = df_vendas[
-                df_vendas["data"].dt.to_period("M") == mes_atual
-            ]["valor_venda"].sum()
+            vendas_mes = df_eventos_raw[df_eventos_raw["data"].dt.to_period("M") == mes_atual]["venda"].sum()
 
             progresso = (vendas_mes / meta_mensal * 100) if meta_mensal > 0 else 0
 
             st.metric("📊 Vendas no mês", f"R$ {vendas_mes:,.2f}")
             st.progress(min(progresso / 100, 1.0))
             st.write(f"{progresso:.1f}% da meta")
-
         else:
             st.info("Sem vendas no mês")
 
@@ -1081,11 +994,8 @@ elif menu == "Relatórios":
     # 📦 PRODUTOS
     # =========================
     with tab5:
-
         if not df_itens.empty:
-
-            ranking = df_itens.groupby("produto")["quantidade"].sum() \
-                              .sort_values(ascending=False).head(10)
+            ranking = df_itens.groupby("produto")["quantidade"].sum().sort_values(ascending=False).head(10)
 
             st.subheader("🔥 Produtos mais utilizados")
             st.bar_chart(ranking)
@@ -1095,7 +1005,6 @@ elif menu == "Relatórios":
             categorias = df_itens.groupby("categoria")["quantidade"].sum()
             st.subheader("📊 Consumo por categoria")
             st.bar_chart(categorias)
-
         else:
             st.info("Sem dados de produtos")
 
