@@ -3789,14 +3789,14 @@ elif menu == "Financeiro":
         # KPIs (5 COLUNAS)
         col1, col2, col3, col4, col5 = st.columns(5)
 
-        col1.metric("💰 Entradas", formato_brl(entrada))
-        col2.metric("💸 Saídas", formato_brl(saida))
-        col3.metric("🏦 Saldo", formato_brl(saldo))
-        col4.metric("📈 Resultado", formato_brl(saldo))
+        col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
+        col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
+        col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
+        col4.metric("📈 Resultado", f"R$ {saldo:,.2f}")
         col5.metric(
             "🛡️ Reserva Caixa PJ",
-            formato_brl(caixa_30_total),
-            help=f"30% a 35% sobre o lucro total acumulado: {formato_brl(caixa_30_total)} a {formato_brl(caixa_35_total)}",
+            f"R$ {caixa_30_total:,.2f}",
+            help=f"30% a 35% sobre o lucro total acumulado: R$ {caixa_30_total:,.2f} a R$ {caixa_35_total:,.2f}",
         )
 
         st.divider()
@@ -3842,9 +3842,9 @@ elif menu == "Financeiro":
 
             st.subheader("📋 Contas a receber")
             c1, c2, c3 = st.columns(3)
-            c1.metric("🎉 Contratado", formato_brl(total_contratado))
-            c2.metric("💰 Recebido", formato_brl(total_recebido))
-            c3.metric("🟡 A receber", formato_brl(total_a_receber))
+            c1.metric("🎉 Contratado", f"R$ {total_contratado:,.2f}")
+            c2.metric("💰 Recebido", f"R$ {total_recebido:,.2f}")
+            c3.metric("🟡 A receber", f"R$ {total_a_receber:,.2f}")
 
         except Exception:
             st.info("Controle de recebimentos ainda não disponível.")
@@ -4076,26 +4076,26 @@ elif menu == "Financeiro":
 
                 m1, m2, m3, m4 = st.columns(4)
                 delta_venda = (
-                    f"+ {formato_brl(total_aditivos_cliente)} aditivos"
+                    f"+ R$ {total_aditivos_cliente:,.2f} aditivos"
                     if total_aditivos_cliente > 0
                     else None
                 )
 
                 m1.metric(
                     "Valor Venda Total",
-                    formato_brl(valor_contratado_total),
+                    f"R$ {valor_contratado_total:,.2f}",
                     delta=delta_venda,
                 )
-                m2.metric("Custo Estimado", formato_brl(custo_evento_total))
-                m3.metric("Lucro Estimado", formato_brl(lucro_evento))
+                m2.metric("Custo Estimado", f"R$ {custo_evento_total:,.2f}")
+                m3.metric("Lucro Estimado", f"R$ {lucro_evento:,.2f}")
                 m4.metric(
                     "Reserva Caixa PJ (30%-35%)",
-                    f"{formato_brl(reserva_caixa_30)} a {formato_brl(reserva_caixa_35)}",
+                    f"R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}",
                 )
 
                 c1, c2 = st.columns(2)
-                c1.metric("💵 Recebido", formato_brl(recebido))
-                c2.metric("🟡 A Receber", formato_brl(a_receber))
+                c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
+                c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
 
                 st.markdown("---")
 
@@ -4283,7 +4283,7 @@ elif menu == "Financeiro":
                         col_info, col_btn = st.columns([5, 1])
                         with col_info:
                             st.write(
-                                f"• **{tipo}**: {formato_brl(valor_adt)} | **Status:** {status_adt} | *{obs}*"
+                                f"• **{tipo}**: R$ {valor_adt:,.2f} | **Status:** {status_adt} | *{obs}*"
                             )
 
                         with col_btn:
@@ -4505,8 +4505,8 @@ elif menu == "Financeiro":
                 saldo_periodo = total_entradas - total_saidas
 
                 st.caption(
-                    f"**Total do período:** Entradas: {formato_brl(total_entradas)} | "
-                    f"Saídas: {formato_brl(total_saidas)} | **Saldo:** {formato_brl(saldo_periodo)}"
+                    f"**Total do período:** Entradas: R$ {total_entradas:,.2f} | "
+                    f"Saídas: R$ {total_saidas:,.2f} | **Saldo:** R$ {saldo_periodo:,.2f}"
                 )
 
 elif menu == "Pacotes":
