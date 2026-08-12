@@ -3849,11 +3849,11 @@ elif menu == "Financeiro":
             eventos_aprovados = pd.DataFrame(
                 supabase.table("eventos")
                 .select("*")
-                .eq("status", "aprovado")
+                .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
                 .execute()
                 .data or []
             )
-
+            
             recebimentos = pd.DataFrame(
                 supabase.table("recebimentos_eventos")
                 .select("*")
@@ -4018,7 +4018,7 @@ elif menu == "Financeiro":
         eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
-            .eq("status", "aprovado")
+            .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
             .order("data")
             .execute()
             .data or []
