@@ -4012,13 +4012,9 @@ elif menu == "Financeiro":
     # 🎉 EVENTOS
     # =========================================================
     with tab2:
-
-        st.subheader("🎉 Controle financeiro dos eventos")
-
-        st.caption(
-            "Somente eventos aprovados aparecem aqui."
-        )
-
+        st.subheader("🎉 Controle Financeiro dos Eventos")
+        st.caption("Somente eventos aprovados aparecem aqui.")
+    
         eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
@@ -4027,174 +4023,122 @@ elif menu == "Financeiro":
             .execute()
             .data or []
         )
-
+    
         recebimentos = pd.DataFrame(
             supabase.table("recebimentos_eventos")
             .select("*")
             .execute()
             .data or []
         )
-
+    
         if eventos.empty:
-
-            st.info(
-                "Nenhum evento aprovado para controlar."
-            )
-
+            st.info("Nenhum evento aprovado para controlar.")
         else:
-
             for _, evento in eventos.iterrows():
-
                 evento_id = evento["id"]
-
-                cliente = evento.get(
-                    "cliente",
-                    "Cliente"
-                )
-
-                data_evento = evento.get(
-                    "data",
-                    ""
-                )
-
+                cliente = evento.get("cliente", "Cliente")
+                data_evento = evento.get("data", "")
+    
                 # =============================================
                 # CÁLCULOS FINANCEIROS E DE CAIXA DO EVENTO
                 # =============================================
                 valor_contratado = float(evento.get("venda", 0) or 0)
                 custo_evento = float(evento.get("custo", 0) or 0)
-
-                lucro_evento = max(0, valor_contratado - custo_evento)
+    
+                lucro_evento = max(0.0, valor_contratado - custo_evento)
                 reserva_caixa_30 = lucro_evento * 0.30
                 reserva_caixa_35 = lucro_evento * 0.35
-
+    
                 if not recebimentos.empty:
-
                     receb_evento = recebimentos[
                         recebimentos["evento_id"] == evento_id
                     ].copy()
-
                 else:
-
                     receb_evento = pd.DataFrame()
-
+    
                 if not receb_evento.empty:
-
                     recebido = pd.to_numeric(
-                        receb_evento["valor"],
-                        errors="coerce"
+                        receb_evento["valor"], errors="coerce"
                     ).fillna(0).sum()
-
                 else:
-
-                    recebido = 0
-
-                a_receber = max(
-                    0,
-                    valor_contratado - recebido
-                )
-
+                    recebido = 0.0
+    
+                a_receber = max(0.0, valor_contratado - recebido)
+    
                 if a_receber <= 0:
                     status_fin = "🟢 PAGO"
-
                 elif recebido > 0:
                     status_fin = "🟡 PARCIAL"
-
                 else:
                     status_fin = "🔴 NÃO RECEBIDO"
-
+    
                 # =============================================
-                # CARD DETALHADO DO EVENTO
+                # CARD DETALHADO DO EVENTO (DESIGN MELLHORADO)
                 # =============================================
-                st.markdown(
-                    f"""
-                    ### 🎉 {cliente}
-
-                    📅 **Data do Evento:** {data_evento}
-
-                    💰 **Valor Venda:** R$ {valor_contratado:,.2f}  
-                    💸 **Custo Estimado:** R$ {custo_evento:,.2f}  
-                    📈 **Lucro Estimado:** R$ {lucro_evento:,.2f}  
-                    🛡️ **Caixa PJ Recomendado (30% a 35%):** R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}
-
-                    ---
-
-                    💵 **Recebido:** R$ {recebido:,.2f} | 🟡 **A receber:** R$ {a_receber:,.2f}
-
-                    **Situação:** {status_fin}
-                    """
-                )
-
-                with st.expander(
-                    f"➕ Registrar recebimento — {cliente}"
-                ):
-
+                st.markdown(f"### 🎉 {cliente}")
+                st.caption(f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}")
+    
+                # Linha 1: Visão Geral de Custos e Lucro
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Valor Venda", f"R$ {valor_contratado:,.2f}")
+                m2.metric("Custo Estimado", f"R$ {custo_evento:,.2f}")
+                m3.metric("Lucro Estimado", f"R$ {lucro_evento:,.2f}")
+                m4.metric("Reserva Caixa PJ (30%-35%)", f"R$ {reserva_caixa_30:,.2f} a {reserva_caixa_35:,.2f}")
+    
+                # Linha 2: Balanço de Recebimentos
+                c1, c2 = st.columns(2)
+                c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
+                c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
+    
+                st.markdown("---")
+    
+                # =============================================
+                # EXPANDER 1: REGISTRAR RECEBIMENTO DO CONTRATO
+                # =============================================
+                with st.expander(f"💰 Registrar Recebimento — {cliente}"):
                     col1, col2 = st.columns(2)
-
+    
                     valor_recebimento = col1.number_input(
                         "Valor recebido",
                         min_value=0.0,
-                        max_value=float(a_receber)
-                        if a_receber > 0
-                        else 0.0,
-                        value=float(a_receber)
-                        if a_receber > 0
-                        else 0.0,
+                        max_value=float(a_receber) if a_receber > 0 else 0.0,
+                        value=float(a_receber) if a_receber > 0 else 0.0,
                         step=50.0,
                         key=f"valor_rec_{evento_id}"
                     )
-
+    
                     data_recebimento = col2.date_input(
                         "Data do recebimento",
                         value=date.today(),
                         key=f"data_rec_{evento_id}"
                     )
-
+    
                     forma = st.selectbox(
                         "Forma de pagamento",
-                        [
-                            "Pix",
-                            "Dinheiro",
-                            "Cartão",
-                            "Transferência"
-                        ],
+                        ["Pix", "Dinheiro", "Cartão", "Transferência"],
                         key=f"forma_rec_{evento_id}"
                     )
-
+    
                     data_prevista = st.date_input(
                         "📅 Data prevista para cobrança do restante",
                         value=date.today(),
                         key=f"data_prev_{evento_id}"
                     )
-
+    
                     descricao = st.text_input(
                         "Descrição",
                         value=f"Recebimento evento {cliente}",
                         key=f"desc_rec_{evento_id}"
                     )
-
-                    if st.button(
-                        "💰 Registrar recebimento",
-                        key=f"registrar_rec_{evento_id}"
-                    ):
-
+    
+                    if st.button("💾 Confirmar Recebimento", key=f"registrar_rec_{evento_id}", use_container_width=True):
                         if valor_recebimento <= 0:
-
-                            st.warning(
-                                "Informe um valor maior que zero."
-                            )
-
+                            st.warning("Informe um valor maior que zero.")
                         elif valor_recebimento > a_receber:
-
-                            st.warning(
-                                "O valor não pode ser maior que o saldo a receber."
-                            )
-
+                            st.warning("O valor não pode ser maior que o saldo a receber.")
                         else:
-
                             try:
-                                supabase.table(
-                                    "recebimentos_eventos"
-                                ).insert({
+                                supabase.table("recebimentos_eventos").insert({
                                     "evento_id": evento_id,
                                     "data_recebimento": str(data_recebimento),
                                     "data_prevista": str(data_prevista),
@@ -4203,10 +4147,8 @@ elif menu == "Financeiro":
                                     "descricao": descricao,
                                     "status": "recebido"
                                 }).execute()
-
-                                supabase.table(
-                                    "Financeiro"
-                                ).insert({
+    
+                                supabase.table("Financeiro").insert({
                                     "data": str(data_recebimento),
                                     "tipo": "Entrada",
                                     "categoria": "Evento",
@@ -4214,29 +4156,89 @@ elif menu == "Financeiro":
                                     "descricao": descricao,
                                     "valor": valor_recebimento
                                 }).execute()
-
+    
                                 st.toast("✅ Recebimento registrado no Financeiro!", icon="🎉")
                                 st.rerun()
-
+    
                             except Exception as e:
                                 st.error("❌ Erro ao registrar recebimento no Supabase:")
                                 st.exception(e)
-
+    
+                # =============================================
+                # EXPANDER 2: REGISTRAR ADITIVOS / HORAS EXTRAS
+                # =============================================
+                with st.expander(f"➕ Aditivos / Horas Extras — {cliente}"):
+                    st.markdown("##### Lançar Adicional (Horas Extras, Quebra de Copos, etc.)")
+                    
+                    col_a, col_b, col_c = st.columns(3)
+                    tipo_aditivo = col_a.selectbox("Tipo de Aditivo", ["Hora Extra", "Quebra de Copos", "Consumo Extra", "Outros"], key=f"tipo_adt_{evento_id}")
+                    valor_cobrado_cliente = col_b.number_input("💰 Cobrado do Cliente (R$)", min_value=0.0, value=600.0, step=50.0, key=f"v_cli_{evento_id}")
+                    valor_repassado_equipe = col_c.number_input("👥 Repasse Equipe (R$)", min_value=0.0, value=200.0, step=50.0, key=f"v_eqp_{evento_id}")
+                    
+                    st.caption(f"💡 Margem da Empresa neste aditivo: **R$ {valor_cobrado_cliente - valor_repassado_equipe:,.2f}**")
+                    
+                    col_st, col_fpg = st.columns(2)
+                    status_aditivo = col_st.selectbox("Status", ["Pago", "Pendente"], key=f"st_adt_{evento_id}")
+                    forma_pagto_aditivo = col_fpg.selectbox("Forma de Pagamento", ["Pix", "Dinheiro", "Cartão", "Transferência"], disabled=(status_aditivo == "Pendente"), key=f"fpg_adt_{evento_id}")
+                    
+                    obs_aditivo = st.text_input("Observação / Detalhes", placeholder="Ex.: 1h extra contratada no local", key=f"obs_adt_{evento_id}")
+                    
+                    if st.button("💾 Salvar Aditivo", key=f"btn_adt_{evento_id}", use_container_width=True):
+                        agora_iso = datetime.now().isoformat()
+                        data_hoje = str(datetime.now().date())
+                        
+                        try:
+                            # 1. Tabela aditivos_evento
+                            payload_aditivo = {
+                                "evento_id": int(evento_id),
+                                "evento": cliente,
+                                "tipo": tipo_aditivo,
+                                "descricao": obs_aditivo,
+                                "valor_cliente": float(valor_cobrado_cliente),
+                                "valor_equipe": float(valor_repassado_equipe),
+                                "status": status_aditivo,
+                                "forma_pagamento": forma_pagto_aditivo if status_aditivo == "Pago" else None,
+                                "data_pagamento": agora_iso if status_aditivo == "Pago" else None
+                            }
+                            supabase.table("aditivos_evento").insert(payload_aditivo).execute()
+    
+                            # 2. Se 'Pago', lança Entrada no Financeiro
+                            if status_aditivo == "Pago" and valor_cobrado_cliente > 0:
+                                supabase.table("Financeiro").insert({
+                                    "data": data_hoje,
+                                    "tipo": "Entrada",
+                                    "categoria": f"Aditivo - {tipo_aditivo}",
+                                    "forma_pagamento": forma_pagto_aditivo,
+                                    "descricao": f"Aditivo ({tipo_aditivo}) - {cliente}",
+                                    "valor": float(valor_cobrado_cliente)
+                                }).execute()
+    
+                            # 3. Se houver valor pra equipe e 'Pago', lança Saída no Financeiro
+                            if status_aditivo == "Pago" and valor_repassado_equipe > 0:
+                                supabase.table("Financeiro").insert({
+                                    "data": data_hoje,
+                                    "tipo": "Saída",
+                                    "categoria": "Equipe / Hora Extra",
+                                    "forma_pagamento": forma_pagto_aditivo,
+                                    "descricao": f"Repasse Hora Extra Equipe - {cliente}",
+                                    "valor": float(valor_repassado_equipe)
+                                }).execute()
+    
+                            st.success("✅ Aditivo e lançamentos financeiros registrados com sucesso!")
+                            st.rerun()
+    
+                        except Exception as e:
+                            st.error(f"Erro ao registrar aditivo: {e}")
+    
+                # =============================================
+                # HISTÓRICO DE RECEBIMENTOS
+                # =============================================
                 if not receb_evento.empty:
-
-                    st.markdown(
-                        "#### 💳 Histórico de recebimentos"
-                    )
-
+                    st.markdown("#### 💳 Histórico de recebimentos do contrato")
                     historico = receb_evento[
-                        [
-                            "data_recebimento",
-                            "valor",
-                            "forma_pagamento",
-                            "descricao"
-                        ]
+                        ["data_recebimento", "valor", "forma_pagamento", "descricao"]
                     ].copy()
-
+    
                     historico = historico.rename(
                         columns={
                             "data_recebimento": "Data",
@@ -4245,18 +4247,15 @@ elif menu == "Financeiro":
                             "descricao": "Descrição"
                         }
                     )
-
-                    historico["Valor"] = pd.to_numeric(
-                        historico["Valor"],
-                        errors="coerce"
-                    )
-
+    
+                    historico["Valor"] = pd.to_numeric(historico["Valor"], errors="coerce")
+    
                     st.dataframe(
                         historico,
                         use_container_width=True,
                         hide_index=True
                     )
-
+    
                 st.divider()
 
 
