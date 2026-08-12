@@ -4009,7 +4009,7 @@ elif menu == "Financeiro":
                 )
 
     # =========================================================
-    # 🎉 EVENTOS (COM ADITIVOS INTEGRADOS NOS CÁLCULOS)
+    # 🎉 EVENTOS (ADITIVOS SOMAM APENAS NO FATURAMENTO E LUCRO)
     # =========================================================
     with tab2:
         st.subheader("🎉 Controle Financeiro dos Eventos")
@@ -4031,7 +4031,6 @@ elif menu == "Financeiro":
             .data or []
         )
     
-        # Busca a tabela de aditivos salvos
         aditivos_df = pd.DataFrame(
             supabase.table("aditivos_evento")
             .select("*")
@@ -4048,32 +4047,29 @@ elif menu == "Financeiro":
                 data_evento = evento.get("data", "")
     
                 # ---------------------------------------------
-                # CÁLCULO DE ADITIVOS DO EVENTO
+                # SOMA DOS ADITIVOS DO EVENTO (SOMA NO FATURAMENTO)
                 # ---------------------------------------------
                 total_aditivos_cliente = 0.0
-                total_aditivos_equipe = 0.0
                 aditivos_evento = pd.DataFrame()
     
                 if not aditivos_df.empty:
-                    # Filtra aditivos pelo evento_id (convertendo para int para evitar divergências)
                     aditivos_evento = aditivos_df[
                         aditivos_df["evento_id"].astype(str) == str(evento_id)
                     ].copy()
                     
                     if not aditivos_evento.empty:
                         total_aditivos_cliente = pd.to_numeric(aditivos_evento["valor_cliente"], errors="coerce").fillna(0).sum()
-                        total_aditivos_equipe = pd.to_numeric(aditivos_evento["valor_equipe"], errors="coerce").fillna(0).sum()
     
                 # ---------------------------------------------
-                # CÁLCULOS FINANCEIROS TOTAIS (CONTRATO + ADITIVOS)
+                # CÁLCULOS FINANCEIROS TOTAIS
                 # ---------------------------------------------
                 valor_contrato_base = float(evento.get("venda", 0) or 0)
-                custo_base = float(evento.get("custo", 0) or 0)
+                custo_evento_total = float(evento.get("custo", 0) or 0)  # CUSTO PERMANECE O INICIAL
     
-                # Somando os aditivos nos totais do evento
+                # O faturamento total é a venda base + aditivos
                 valor_contratado_total = valor_contrato_base + total_aditivos_cliente
-                custo_evento_total = custo_base + total_aditivos_equipe
     
+                # O lucro aumenta diretamente com os aditivos
                 lucro_evento = max(0.0, valor_contratado_total - custo_evento_total)
                 reserva_caixa_30 = lucro_evento * 0.30
                 reserva_caixa_35 = lucro_evento * 0.35
@@ -4090,7 +4086,6 @@ elif menu == "Financeiro":
                 else:
                     recebido = 0.0
     
-                # Saldo a receber considerando o valor total ajustado com aditivos
                 a_receber = max(0.0, valor_contratado_total - recebido)
     
                 if a_receber <= 0:
@@ -4101,24 +4096,20 @@ elif menu == "Financeiro":
                     status_fin = "🔴 NÃO RECEBIDO"
     
                 # =============================================
-                # CARD DETALHADO DO EVENTO (MÉTRICAS ATUALIZADAS)
+                # CARD DO EVENTO
                 # =============================================
                 st.markdown(f"### 🎉 {cliente}")
                 st.caption(f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}")
     
-                # Linha 1: Visão Geral (Totais com aditivos)
                 m1, m2, m3, m4 = st.columns(4)
                 
-                # Exibe o valor total e destaca se houver aditivos
                 delta_venda = f"+ R$ {total_aditivos_cliente:,.2f} aditivos" if total_aditivos_cliente > 0 else None
-                delta_custo = f"+ R$ {total_aditivos_equipe:,.2f} aditivos" if total_aditivos_equipe > 0 else None
                 
                 m1.metric("Valor Venda Total", f"R$ {valor_contratado_total:,.2f}", delta=delta_venda)
-                m2.metric("Custo Estimado Total", f"R$ {custo_evento_total:,.2f}", delta=delta_custo, delta_color="inverse")
+                m2.metric("Custo Estimado", f"R$ {custo_evento_total:,.2f}")
                 m3.metric("Lucro Estimado", f"R$ {lucro_evento:,.2f}")
                 m4.metric("Reserva Caixa PJ (30%-35%)", f"R$ {reserva_caixa_30:,.2f} a {reserva_caixa_35:,.2f}")
     
-                # Linha 2: Balanço de Recebimentos
                 c1, c2 = st.columns(2)
                 c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
                 c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
@@ -4126,7 +4117,7 @@ elif menu == "Financeiro":
                 st.markdown("---")
     
                 # =============================================
-                # EXPANDER 1: REGISTRAR RECEBIMENTO DO CONTRATO
+                # EXPANDER 1: REGISTRAR RECEBIMENTO
                 # =============================================
                 with st.expander(f"💰 Registrar Recebimento — {cliente}"):
                     col1, col2 = st.columns(2)
@@ -4203,18 +4194,15 @@ elif menu == "Financeiro":
                     st.markdown("##### Lançar Adicional (Horas Extras, Quebra de Copos, etc.)")
                     
                     with st.form(key=f"form_aditivo_{evento_id}"):
-                        col_a, col_b, col_c = st.columns(3)
+                        col_a, col_b = st.columns(2)
                         tipo_aditivo = col_a.selectbox("Tipo de Aditivo", ["Hora Extra", "Quebra de Copos", "Consumo Extra", "Outros"], key=f"tipo_adt_{evento_id}")
-                        valor_cobrado_cliente = col_b.number_input("💰 Cobrado do Cliente (R$)", min_value=0.0, value=600.0, step=50.0, key=f"v_cli_{evento_id}")
-                        valor_repassado_equipe = col_c.number_input("👥 Repasse Equipe (R$)", min_value=0.0, value=200.0, step=50.0, key=f"v_eqp_{evento_id}")
-                        
-                        st.caption(f"💡 Margem da Empresa neste aditivo: **R$ {valor_cobrado_cliente - valor_repassado_equipe:,.2f}**")
+                        valor_cobrado_cliente = col_b.number_input("💰 Cobrado do Cliente (R$)", min_value=0.0, value=400.0, step=50.0, key=f"v_cli_{evento_id}")
                         
                         col_st, col_fpg = st.columns(2)
                         status_aditivo = col_st.selectbox("Status", ["Pago", "Pendente"], key=f"st_adt_{evento_id}")
                         forma_pagto_aditivo = col_fpg.selectbox("Forma de Pagamento", ["Pix", "Dinheiro", "Cartão", "Transferência"], key=f"fpg_adt_{evento_id}")
                         
-                        obs_aditivo = st.text_input("Observação / Detalhes", placeholder="Ex.: 1h extra contratada no local", key=f"obs_adt_{evento_id}")
+                        obs_aditivo = st.text_input("Observação / Detalhes", placeholder="Ex.: 2h extras contratadas no local", key=f"obs_adt_{evento_id}")
                         
                         btn_salvar_aditivo = st.form_submit_button("💾 Salvar Aditivo", use_container_width=True)
     
@@ -4225,21 +4213,19 @@ elif menu == "Financeiro":
                         try:
                             evt_id_convertido = int(evento_id)
     
-                            # 1. Tabela aditivos_evento
                             payload_aditivo = {
                                 "evento_id": evt_id_convertido,
                                 "evento": str(cliente),
                                 "tipo": str(tipo_aditivo),
                                 "descricao": str(obs_aditivo),
                                 "valor_cliente": float(valor_cobrado_cliente),
-                                "valor_equipe": float(valor_repassado_equipe),
+                                "valor_equipe": 0.0,  # Sem alteração no custo
                                 "status": str(status_aditivo),
                                 "forma_pagamento": str(forma_pagto_aditivo) if status_aditivo == "Pago" else None,
                                 "data_pagamento": agora_iso if status_aditivo == "Pago" else None
                             }
                             supabase.table("aditivos_evento").insert(payload_aditivo).execute()
     
-                            # 2. Se 'Pago', lança Entrada no Financeiro
                             if status_aditivo == "Pago" and valor_cobrado_cliente > 0:
                                 supabase.table("Financeiro").insert({
                                     "data": data_hoje,
@@ -4250,18 +4236,7 @@ elif menu == "Financeiro":
                                     "valor": float(valor_cobrado_cliente)
                                 }).execute()
     
-                            # 3. Se houver valor pra equipe e 'Pago', lança Saída no Financeiro
-                            if status_aditivo == "Pago" and valor_repassado_equipe > 0:
-                                supabase.table("Financeiro").insert({
-                                    "data": data_hoje,
-                                    "tipo": "Saída",
-                                    "categoria": "Equipe / Hora Extra",
-                                    "forma_pagamento": str(forma_pagto_aditivo),
-                                    "descricao": f"Repasse Hora Extra Equipe - {cliente}",
-                                    "valor": float(valor_repassado_equipe)
-                                }).execute()
-    
-                            st.toast("✅ Aditivo e lançamentos salvos com sucesso!", icon="➕")
+                            st.toast("✅ Aditivo e faturamento atualizados com sucesso!", icon="➕")
                             st.rerun()
     
                         except Exception as e:
@@ -4271,15 +4246,14 @@ elif menu == "Financeiro":
                 # EXIBIÇÃO DOS ADITIVOS LANÇADOS
                 # =============================================
                 if not aditivos_evento.empty:
-                    st.markdown("#### ➕ Aditivos e Extras Lançados")
+                    st.markdown("#### ➕ Aditivos Lançados")
                     tabela_adt = aditivos_evento[
-                        ["tipo", "valor_cliente", "valor_equipe", "status", "descricao"]
+                        ["tipo", "valor_cliente", "status", "descricao"]
                     ].copy()
                     tabela_adt = tabela_adt.rename(
                         columns={
                             "tipo": "Tipo",
-                            "valor_cliente": "Valor Cliente (R$)",
-                            "valor_equipe": "Repasse Equipe (R$)",
+                            "valor_cliente": "Valor Adicional (R$)",
                             "status": "Status",
                             "descricao": "Observação"
                         }
@@ -4308,7 +4282,6 @@ elif menu == "Financeiro":
                     st.dataframe(historico, use_container_width=True, hide_index=True)
     
                 st.divider()
-
 
     # =========================================================
     # ➕ LANÇAMENTOS MANUAIS
