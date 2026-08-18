@@ -3212,7 +3212,7 @@ elif menu == "Cachês":
         )
 
     # =====================================
-    # SUBABA 2: POR PESSOA (Lançamento Automático)
+    # SUBABA 2: POR PESSOA (Lançamento de Pagamentos)
     # =====================================
     elif subaba == "Por Pessoa":
         st.subheader("👤 Lançamento de Pagamentos por Profissional")
@@ -3263,7 +3263,7 @@ elif menu == "Cachês":
         st.subheader("💳 Status do Pagamento")
         c_st1, c_st2 = st.columns(2)
         ja_pago = c_st1.checkbox(
-            "Marcar como JÁ PAGO (lança saída no Financeiro na hora)", value=True
+            "Marcar como JÁ PAGO", value=True
         )
         forma_pagto_padrao = c_st2.selectbox(
             "Forma de Pagamento",
@@ -3383,16 +3383,15 @@ elif menu == "Cachês":
 
             try:
                 agora_iso = datetime.now().isoformat()
-                data_hoje = str(datetime.now().date())
 
                 for pessoa in dados_pagamento:
                     status_final = "Pago" if ja_pago else "Pendente"
                     forma_final = forma_pagto_padrao if ja_pago else None
                     data_pagto_final = agora_iso if ja_pago else None
 
-                    # 1. Insere na tabela pagamentos_equipe enviando int8
+                    # Insere apenas na tabela pagamentos_equipe (sem duplicar no Financeiro)
                     payload_equipe = {
-                        "evento_id": evento_id_num,  # ✅ Envia o inteiro compatível com int8
+                        "evento_id": evento_id_num,
                         "evento": evento_nome_ref,
                         "nome": pessoa["nome"],
                         "funcao": pessoa["funcao"],
@@ -3410,25 +3409,6 @@ elif menu == "Cachês":
                     supabase.table("pagamentos_equipe").insert(
                         payload_equipe
                     ).execute()
-
-                    # 2. Se for 'Pago', lança AUTOMATICAMENTE na tabela Financeiro
-                    if ja_pago:
-                        try:
-                            payload_financeiro = {
-                                "data": data_hoje,
-                                "tipo": "Saída",
-                                "categoria": "Equipe / Cachê",
-                                "forma_pagamento": forma_final,
-                                "descricao": f"Cachê - {pessoa['nome']} ({evento_nome_ref})",
-                                "valor": float(pessoa["valor"]),
-                            }
-                            supabase.table("Financeiro").insert(
-                                payload_financeiro
-                            ).execute()
-                        except Exception as e_fin:
-                            st.warning(
-                                f"Salvo na equipe, mas erro ao criar saída no Financeiro para {pessoa['nome']}: {e_fin}"
-                            )
 
                 st.success(
                     f"✅ {len(dados_pagamento)} registro(s) salvo(s) com sucesso!"
@@ -3570,7 +3550,7 @@ elif menu == "Cachês":
                 if st.button("✅ Confirmar Pagamento", use_container_width=True):
                     agora_iso = datetime.now().isoformat()
 
-                    # 1. Atualiza status no banco pagamentos_equipe
+                    # Atualiza status apenas na tabela pagamentos_equipe
                     supabase.table("pagamentos_equipe").update({
                         "status": "Pago",
                         "forma_pagamento": forma,
@@ -3578,22 +3558,7 @@ elif menu == "Cachês":
                         "data_pagamento": agora_iso,
                     }).eq("id", linha["id"]).execute()
 
-                    # 2. Insere a saída na tabela Financeiro
-                    try:
-                        supabase.table("Financeiro").insert({
-                            "data": str(datetime.now().date()),
-                            "tipo": "Saída",
-                            "categoria": "Equipe / Cachê",
-                            "forma_pagamento": forma,
-                            "descricao": f"Cachê - {linha['nome']} ({linha['evento']})",
-                            "valor": float(linha["valor"]),
-                        }).execute()
-                    except Exception as e_fin:
-                        st.warning(
-                            f"Pagamento baixado na equipe, mas não inserido no Financeiro: {e_fin}"
-                        )
-
-                    st.success("Pagamento confirmed!")
+                    st.success("Pagamento confirmado com sucesso!")
                     st.rerun()
 
     # =====================================
@@ -3943,12 +3908,12 @@ elif menu == "Financeiro":
 
     st.title("💰 Financeiro")
 
-    tab1, tab_pendentes, tab2, tab3, tab4 = st.tabs([
+    tab1, tab_pendentes, tab2, tab4, tab5 = st.tabs([
         "📊 Resumo",
         "🔔 Pendências / A Receber",
         "🎉 Eventos",
-        "➕ Lançamentos",
-        "📄 Extrato",
+        "➕ Lançamentos Manuais",
+        "📄 Extrato Complete",
     ])
 
     # =========================================================
@@ -3970,7 +3935,9 @@ elif menu == "Financeiro":
 
         caixa_35_total = 0.0
         try:
-            vendas_data = supabase.table("vendas").select("lucro").execute().data or []
+            vendas_data = (
+                supabase.table("vendas").select("lucro").execute().data or []
+            )
             if vendas_data:
                 df_vendas_temp = pd.DataFrame(vendas_data)
                 lucro_acumulado = (
@@ -3981,11 +3948,11 @@ elif menu == "Financeiro":
                 caixa_35_total = max(0, lucro_acumulado) * 0.35
         except Exception:
             pass
-        
+
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("💰 Entradas", f"R$ {entrada:,.2f}")
-        col2.metric("💸 Saídas", f"R$ {saida:,.2f}")
-        col3.metric("🏦 Saldo", f"R$ {saldo:,.2f}")
+        col1.metric("💰 Entradas Totais", f"R$ {entrada:,.2f}")
+        col2.metric("💸 Saídas Totais", f"R$ {saida:,.2f}")
+        col3.metric("🏦 Saldo de Caixa", f"R$ {saldo:,.2f}")
         col4.metric("📈 Resultado", f"R$ {saldo:,.2f}")
         col5.metric(
             "🛡️ Reserva Caixa PJ (35%)",
@@ -4033,7 +4000,7 @@ elif menu == "Financeiro":
 
                 total_a_receber = max(0, total_contratado - total_recebido)
 
-            st.subheader("📋 Contas a receber")
+            st.subheader("📋 Contas a receber (Eventos)")
             c1, c2, c3 = st.columns(3)
             c1.metric("🎉 Contratado", f"R$ {total_contratado:,.2f}")
             c2.metric("💰 Recebido", f"R$ {total_recebido:,.2f}")
@@ -4071,11 +4038,11 @@ elif menu == "Financeiro":
                     if not gastos.empty:
                         st.dataframe(gastos, use_container_width=True)
 
-                st.subheader("💳 Entradas por forma")
-                if "forma_pagamento" in df.columns:
+                st.subheader("💳 Entradas por categoria")
+                if "categoria" in df.columns:
                     formas = (
                         df[df["tipo"] == "Entrada"]
-                        .groupby("forma_pagamento")["valor"]
+                        .groupby("categoria")["valor"]
                         .sum()
                         .sort_values(ascending=False)
                     )
@@ -4097,15 +4064,15 @@ elif menu == "Financeiro":
                 )
 
             if saida > entrada:
-                st.error("⚠️ Você está gastando mais do que ganha!")
+                st.error("⚠️ Atenção: Suas saídas superaram as entradas no período acumulado!")
 
     # =========================================================
-    # 🔔 TAB 2: PENDÊNCIAS / A RECEBER (ABA DE AÇÃO)
+    # 🔔 TAB 2: PENDÊNCIAS / A RECEBER (EVENTOS)
     # =========================================================
     with tab_pendentes:
         st.subheader("🔔 Eventos com Saldo Pendente")
         st.caption("Central de ações para lançar pagamentos e aditivos de eventos em aberto.")
-        
+
         eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
@@ -4115,34 +4082,34 @@ elif menu == "Financeiro":
             .data
             or []
         )
-        
+
         recebimentos = pd.DataFrame(
             supabase.table("recebimentos_eventos").select("*").execute().data or []
         )
-        
+
         aditivos_df = pd.DataFrame(
             supabase.table("aditivos_evento").select("*").execute().data or []
         )
-        
+
         if eventos.empty:
             st.info("Nenhum evento encontrado.")
         else:
             eventos_com_pendencia = 0
-        
+
             for _, evento in eventos.iterrows():
                 evento_id = evento["id"]
                 cliente = evento.get("cliente", "Cliente")
                 data_evento = evento.get("data", "")
-        
+
                 total_aditivos_cliente = 0.0
                 total_aditivos_pagos = 0.0
                 aditivos_evento = pd.DataFrame()
-        
+
                 if not aditivos_df.empty:
                     aditivos_evento = aditivos_df[
                         aditivos_df["evento_id"].astype(str) == str(evento_id)
                     ].copy()
-        
+
                     if not aditivos_evento.empty:
                         total_aditivos_cliente = (
                             pd.to_numeric(
@@ -4164,21 +4131,21 @@ elif menu == "Financeiro":
                                 .fillna(0)
                                 .sum()
                             )
-        
+
                 valor_contrato_base = float(evento.get("venda", 0) or 0)
                 custo_evento_total = float(evento.get("custo", 0) or 0)
                 valor_contratado_total = valor_contrato_base + total_aditivos_cliente
-        
+
                 lucro_evento = max(0.0, valor_contratado_total - custo_evento_total)
                 reserva_caixa_35 = lucro_evento * 0.35
-        
+
                 if not recebimentos.empty:
                     receb_evento = recebimentos[
                         recebimentos["evento_id"].astype(str) == str(evento_id)
                     ].copy()
                 else:
                     receb_evento = pd.DataFrame()
-        
+
                 receb_contrato = (
                     pd.to_numeric(receb_evento["valor"], errors="coerce")
                     .fillna(0)
@@ -4188,8 +4155,7 @@ elif menu == "Financeiro":
                 )
                 recebido = receb_contrato + total_aditivos_pagos
                 a_receber = max(0.0, valor_contratado_total - recebido)
-        
-                # FILTRO COM ARREDONDAMENTO: impede erros de precisão decimal
+
                 if round(a_receber, 2) > 0:
                     eventos_com_pendencia += 1
                     status_fin = "🟡 PARCIAL" if recebido > 0 else "🔴 NÃO RECEBIDO"
@@ -4198,14 +4164,14 @@ elif menu == "Financeiro":
                     st.caption(
                         f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}"
                     )
-        
+
                     m1, m2, m3, m4 = st.columns(4)
                     delta_venda = (
                         f"+ R$ {total_aditivos_cliente:,.2f} aditivos"
                         if total_aditivos_cliente > 0
                         else None
                     )
-        
+
                     m1.metric(
                         "Valor Venda Total",
                         f"R$ {valor_contratado_total:,.2f}",
@@ -4217,7 +4183,7 @@ elif menu == "Financeiro":
                         "🛡️ Reserva Caixa PJ (35%)",
                         f"R$ {reserva_caixa_35:,.2f}",
                     )
-        
+
                     c1, c2 = st.columns(2)
                     c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
                     c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
@@ -4380,7 +4346,7 @@ elif menu == "Financeiro":
                                     }).execute()
 
                                 st.toast(
-                                    "✅ Aditivo e faturamento atualizados!",
+                                    "✅ Aditivo registrado com sucesso!",
                                     icon="➕",
                                 )
                                 st.rerun()
@@ -4390,17 +4356,17 @@ elif menu == "Financeiro":
                                 )
 
                     st.markdown("---")
-        
+
             if eventos_com_pendencia == 0:
                 st.success("🎉 Nenhum evento com saldo pendente no momento!")
 
     # =========================================================
-    # 🎉 TAB 3: EVENTOS (ABA DE HISTÓRICO / CONSULTA APENAS)
+    # 🎉 TAB 3: CONSULTA / HISTÓRICO EVENTOS
     # =========================================================
     with tab2:
-        st.subheader("🎉 Historico Financeiro dos Eventos")
-        st.caption("Visão geral de todos os eventos aprovados e seus históricos de recebimentos.")
-        
+        st.subheader("🎉 Histórico Financeiro dos Eventos")
+        st.caption("Visão histórica dos recebimentos e fechamento de cada contrato.")
+
         eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
@@ -4410,15 +4376,15 @@ elif menu == "Financeiro":
             .data
             or []
         )
-        
+
         recebimentos = pd.DataFrame(
             supabase.table("recebimentos_eventos").select("*").execute().data or []
         )
-        
+
         aditivos_df = pd.DataFrame(
             supabase.table("aditivos_evento").select("*").execute().data or []
         )
-        
+
         if eventos.empty:
             st.info("Nenhum evento cadastrado.")
         else:
@@ -4426,16 +4392,16 @@ elif menu == "Financeiro":
                 evento_id = evento["id"]
                 cliente = evento.get("cliente", "Cliente")
                 data_evento = evento.get("data", "")
-        
+
                 total_aditivos_cliente = 0.0
                 total_aditivos_pagos = 0.0
                 aditivos_evento = pd.DataFrame()
-        
+
                 if not aditivos_df.empty:
                     aditivos_evento = aditivos_df[
                         aditivos_df["evento_id"].astype(str) == str(evento_id)
                     ].copy()
-        
+
                     if not aditivos_evento.empty:
                         total_aditivos_cliente = (
                             pd.to_numeric(
@@ -4457,21 +4423,21 @@ elif menu == "Financeiro":
                                 .fillna(0)
                                 .sum()
                             )
-        
+
                 valor_contrato_base = float(evento.get("venda", 0) or 0)
                 custo_evento_total = float(evento.get("custo", 0) or 0)
                 valor_contratado_total = valor_contrato_base + total_aditivos_cliente
-        
+
                 lucro_evento = max(0.0, valor_contratado_total - custo_evento_total)
                 reserva_caixa_35 = lucro_evento * 0.35
-        
+
                 if not recebimentos.empty:
                     receb_evento = recebimentos[
                         recebimentos["evento_id"].astype(str) == str(evento_id)
                     ].copy()
                 else:
                     receb_evento = pd.DataFrame()
-        
+
                 receb_contrato = (
                     pd.to_numeric(receb_evento["valor"], errors="coerce")
                     .fillna(0)
@@ -4481,26 +4447,26 @@ elif menu == "Financeiro":
                 )
                 recebido = receb_contrato + total_aditivos_pagos
                 a_receber = max(0.0, valor_contratado_total - recebido)
-        
+
                 if round(a_receber, 2) <= 0:
                     status_fin = "🟢 PAGO"
                 elif recebido > 0:
                     status_fin = "🟡 PARCIAL"
                 else:
                     status_fin = "🔴 NÃO RECEBIDO"
-        
+
                 st.markdown(f"### 🎉 {cliente}")
                 st.caption(
                     f"📅 **Data do Evento:** {data_evento} | **Situação:** {status_fin}"
                 )
-        
+
                 m1, m2, m3, m4 = st.columns(4)
                 delta_venda = (
                     f"+ R$ {total_aditivos_cliente:,.2f} aditivos"
                     if total_aditivos_cliente > 0
                     else None
                 )
-        
+
                 m1.metric(
                     "Valor Venda Total",
                     f"R$ {valor_contratado_total:,.2f}",
@@ -4512,12 +4478,11 @@ elif menu == "Financeiro":
                     "🛡️ Reserva Caixa PJ (35%)",
                     f"R$ {reserva_caixa_35:,.2f}",
                 )
-        
+
                 c1, c2 = st.columns(2)
                 c1.metric("💵 Recebido", f"R$ {recebido:,.2f}")
                 c2.metric("🟡 A Receber", f"R$ {a_receber:,.2f}")
 
-                # EXIBIÇÃO DE ADITIVOS (CONSULTA)
                 if not aditivos_evento.empty:
                     st.markdown("#### ➕ Aditivos Registrados")
                     for idx, aditivo in aditivos_evento.iterrows():
@@ -4529,7 +4494,6 @@ elif menu == "Financeiro":
                             f"• **{tipo}**: R$ {valor_adt:,.2f} | **Status:** {status_adt} | *{obs}*"
                         )
 
-                # HISTÓRICO DE RECEBIMENTOS (CONSULTA)
                 if not receb_evento.empty:
                     st.markdown("#### 💳 Histórico de recebimentos")
                     historico = receb_evento[
@@ -4558,175 +4522,139 @@ elif menu == "Financeiro":
                 st.divider()
 
     # =========================================================
-    # ➕ TAB 4: LANÇAMENTOS MANUAIS
+    # ➕ TAB 4: LANÇAMENTOS MANUAIS (AVULSOS, GAUSTOS E MELHORIAS)
     # =========================================================
-    with tab3:
-        st.subheader("➕ Lançamento manual")
+    with tab4:
+        st.subheader("➕ Lançamento Manual (Entradas Avulsas & Gastos/Melhorias)")
         st.caption(
-            "Use esta área para compras, bebidas, materiais, transporte, marketing etc."
+            "Use este formulário para lançar saídas (gastos com estrutura, bebidas, investimentos, manutenção) "
+            "e entradas manuais que NÃO vêm de contratos de eventos (aportes, rendimentos, etc.)."
         )
 
-        with st.form("novo_lancamento", clear_on_submit=True):
-            data_lancamento = st.date_input(
-                "Data do lançamento", value=date.today()
+        with st.form("form_lancamento_manual", clear_on_submit=True):
+            col_t1, col_t2 = st.columns(2)
+            tipo_mov = col_t1.selectbox(
+                "Tipo de Movimentação",
+                ["Saída", "Entrada"],
+                help="Selecione Saída para gastos/melhorias ou Entrada para receitas avulsas.",
             )
-            tipo = st.selectbox("Tipo", ["Entrada", "Saída"])
-            valor = st.number_input("Valor", min_value=0.0, step=10.0)
-            categoria = st.selectbox(
-                "Categoria",
-                [
-                    "Evento",
-                    "Bebidas",
-                    "Equipe",
-                    "Transporte",
-                    "Marketing",
-                    "Outros",
-                ],
-            )
-            forma = st.selectbox(
-                "Forma de pagamento",
-                ["Dinheiro", "Pix", "Cartão", "Transferência"],
-            )
-            descricao = st.text_input("Descrição")
+            data_mov = col_t2.date_input("Data da Transação", value=date.today())
 
-            salvar = st.form_submit_button("💾 Salvar lançamento")
+            col_v1, col_v2 = st.columns(2)
+            valor_mov = col_v1.number_input(
+                "Valor (R$)", min_value=0.0, step=10.0, format="%.2f"
+            )
 
-            if salvar:
-                if valor <= 0:
-                    st.warning("Informe um valor maior que zero.")
+            # Categorias adequadas ao tipo
+            if tipo_mov == "Saída":
+                categorias_opcoes = [
+                    "Investimentos / Melhorias",
+                    "Compra de Bebidas / Insumos",
+                    "Equipe / Mão de Obra Avulsa",
+                    "Transporte / Logística",
+                    "Marketing / Anúncios",
+                    "Manutenção de Equipamentos",
+                    "Custos Operacionais / Fixos",
+                    "Outras Saídas",
+                ]
+            else:
+                categorias_opcoes = [
+                    "Aporte de Capital / Sócios",
+                    "Rendimentos / Aplicações",
+                    "Venda de Equipamentos / Ativos",
+                    "Outras Entradas Avulsas",
+                ]
+
+            categoria_mov = col_v2.selectbox("Categoria", categorias_opcoes)
+
+            col_f1, col_f2 = st.columns(2)
+            forma_mov = col_f1.selectbox(
+                "Forma de Pagamento / Recebimento",
+                ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro", "Transferência / TED"],
+            )
+            descricao_mov = col_f2.text_input(
+                "Descrição / Observação",
+                placeholder="Ex.: Compra de novo balcão para bar, Anúncio Meta Ads, etc.",
+            )
+
+            btn_salvar_manual = st.form_submit_button(
+                "💾 Salvar Lançamento", use_container_width=True
+            )
+
+            if btn_salvar_manual:
+                if valor_mov <= 0:
+                    st.warning("⚠️ Informe um valor maior que zero.")
+                elif not descricao_mov.strip():
+                    st.warning("⚠️ Forneça uma breve descrição do lançamento.")
                 else:
                     try:
                         supabase.table("Financeiro").insert({
-                            "data": str(data_lancamento),
-                            "tipo": tipo,
-                            "categoria": categoria,
-                            "forma_pagamento": forma,
-                            "descricao": descricao,
-                            "valor": float(valor),
+                            "data": str(data_mov),
+                            "tipo": tipo_mov,
+                            "categoria": categoria_mov,
+                            "forma_pagamento": forma_mov,
+                            "descricao": descricao_mov.strip(),
+                            "valor": valor_mov,
                         }).execute()
 
-                        st.toast("✅ Lançamento criado!", icon="💰")
+                        st.toast("✅ Lançamento manual gravado no caixa!", icon="💾")
                         st.rerun()
                     except Exception as e:
-                        st.error("❌ Erro ao lançar no Financeiro:")
-                        st.exception(e)
+                        st.error(f"❌ Erro ao salvar lançamento: {e}")
 
     # =========================================================
-    # 📄 TAB 5: EXTRATO
+    # 📄 TAB 5: EXTRATO E GESTÃO DE TRANSAÇÕES
     # =========================================================
-    with tab4:
-        st.subheader("📄 Extrato financeiro")
+    with tab5:
+        st.subheader("📄 Extrato Completo do Caixa")
+        st.caption("Consulte, filtre e remova qualquer movimentação financeira salva no banco.")
 
-        col_title, col_sync = st.columns([3, 1])
-        with col_sync:
-            if st.button("🔄 Sincronizar Histórico"):
-                rec_data = (
-                    supabase.table("recebimentos_eventos")
-                    .select("*")
-                    .execute()
-                    .data
-                    or []
-                )
-                fin_data = (
-                    supabase.table("Financeiro").select("*").execute().data
-                    or []
-                )
-
-                descricoes_existentes = {
-                    f.get("descricao") for f in fin_data if f.get("descricao")
-                }
-
-                novos = []
-                for rec in rec_data:
-                    desc = rec.get("descricao")
-                    if desc and desc not in descricoes_existentes:
-                        novos.append({
-                            "data": str(rec.get("data_recebimento")),
-                            "tipo": "Entrada",
-                            "categoria": "Evento",
-                            "forma_pagamento": rec.get("forma_pagamento"),
-                            "descricao": desc,
-                            "valor": float(rec.get("valor", 0)),
-                        })
-
-                if novos:
-                    supabase.table("Financeiro").insert(novos).execute()
-                    st.toast(
-                        f"✅ {len(novos)} recebimentos sincronizados!", icon="🔄"
-                    )
-                    st.rerun()
-                else:
-                    st.toast("Tudo atualizado!", icon="ℹ️")
-
-        response = (
+        res_extrato = (
             supabase.table("Financeiro")
             .select("*")
             .order("data", desc=True)
             .execute()
         )
-        df = pd.DataFrame(response.data or [])
+        df_extrato = pd.DataFrame(res_extrato.data or [])
 
-        if df.empty:
-            st.info("Nenhum lançamento ainda.")
+        if df_extrato.empty:
+            st.info("Nenhuma transação cadastrada até o momento.")
         else:
-            df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
-            df["data_dt"] = pd.to_datetime(df["data"], errors="coerce").dt.date
-
-            col_f1, col_f2, col_f3 = st.columns(3)
-            filtro = col_f1.selectbox(
-                "Filtrar tipo", ["Todos", "Entrada", "Saída"]
+            col_f1, col_f2 = st.columns(2)
+            tipos_presentes = list(df_extrato["tipo"].unique())
+            filtro_tipo = col_f1.multiselect(
+                "Filtrar por Tipo", tipos_presentes, default=tipos_presentes
             )
 
-            data_min_padrao = date.today().replace(day=1)
-            data_max_padrao = date.today()
-
-            data_inicio = col_f2.date_input(
-                "Data inicial", value=data_min_padrao
-            )
-            data_fim = col_f3.date_input(
-                "Data final", value=data_max_padrao
-            )
-
-            df_filtrado = df.copy()
-
-            if filtro != "Todos":
-                df_filtrado = df_filtrado[df_filtrado["tipo"] == filtro]
-
-            if data_inicio and data_fim:
-                df_filtrado = df_filtrado[
-                    (df_filtrado["data_dt"] >= data_inicio)
-                    & (df_filtrado["data_dt"] <= data_fim)
+            if "categoria" in df_extrato.columns:
+                cats_presentes = [
+                    c for c in df_extrato["categoria"].dropna().unique() if c
                 ]
-
-            st.dataframe(
-                df_filtrado[
-                    [
-                        "data",
-                        "tipo",
-                        "categoria",
-                        "descricao",
-                        "forma_pagamento",
-                        "valor",
-                    ]
-                ],
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            with st.expander("🗑️ Excluir um lançamento"):
-                lancamento_id = st.selectbox(
-                    "Selecione o lançamento pelo ID para excluir",
-                    options=df_filtrado["id"].tolist() if "id" in df_filtrado.columns else [],
-                    format_func=lambda x: f"ID {x} - {df_filtrado[df_filtrado['id'] == x]['descricao'].values[0]} (R$ {df_filtrado[df_filtrado['id'] == x]['valor'].values[0]:,.2f})" if "id" in df_filtrado.columns and not df_filtrado[df_filtrado['id'] == x].empty else str(x)
+                filtro_cat = col_f2.multiselect(
+                    "Filtrar por Categoria", cats_presentes, default=cats_presentes
                 )
-                if st.button("Confirmar Exclusão", type="primary"):
-                    if lancamento_id:
-                        try:
-                            supabase.table("Financeiro").delete().eq("id", lancamento_id).execute()
-                            st.toast("Lançamento excluído com sucesso!", icon="✅")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao excluir lançamento: {e}")
+            else:
+                filtro_cat = []
+
+            # Aplicar filtros
+            df_exibicao = df_extrato[df_extrato["tipo"].isin(filtro_tipo)]
+            if filtro_cat and "categoria" in df_exibicao.columns:
+                df_exibicao = df_exibicao[df_exibicao["categoria"].isin(filtro_cat)]
+
+            st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
+
+            # Exclusão rápida por ID
+            with st.expander("🗑️ Excluir lançamento incorreto"):
+                id_excluir = st.number_input(
+                    "Insira o ID do lançamento", min_value=1, step=1
+                )
+                if st.button("❌ Excluir do Banco de Dados", type="primary"):
+                    try:
+                        supabase.table("Financeiro").delete().eq("id", id_excluir).execute()
+                        st.toast(f"✅ Lançamento #{id_excluir} removido!", icon="🗑️")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao excluir registro: {e}")
 
 elif menu == "Pacotes":
 
