@@ -3928,6 +3928,10 @@ elif menu == "Financeiro":
     # 📊 TAB 1: RESUMO (FINANCEIRO CORRIGIDO)
     # =========================================================
     with tab1:
+        # Garantia de datas padrão para evitar NameError
+        data_inicial = date(date.today().year, 1, 1)
+        data_final = date.today()
+
         # 1. Buscar transações manuais da tabela Financeiro
         response_fin = supabase.table("Financeiro").select("*").execute()
         df_fin = pd.DataFrame(response_fin.data or [])
@@ -3951,7 +3955,7 @@ elif menu == "Financeiro":
             # Entradas registradas no fluxo financeiro
             entrada_manual = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum()
             
-            # Saídas manuais gerais (Filtrando para ignorar registros duplicados de cachê)
+            # Saídas manuais gerais (Ignora lançamentos de cachê para evitar duplicidade)
             if "categoria" in df_fin.columns:
                 df_saidas_validas = df_fin[
                     (df_fin["tipo"] == "Saída") & 
