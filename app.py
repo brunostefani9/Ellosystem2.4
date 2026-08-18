@@ -3608,10 +3608,8 @@ elif menu == "Cachês":
 
             st.divider()
 
-            # 🗑️ SEÇÃO DE EXCLUSÃO DE REGISTRO (LAYOUT MELHORADO)
+            # 🗑️ SEÇÃO DE EXCLUSÃO SIMPLIFICADA
             with st.expander("🗑️ Área de Gerenciamento: Excluir Registro de Cachê", expanded=False):
-                st.warning("⚠️ **Cuidado:** Esta ação removerá o lançamento permanentemente do sistema.")
-
                 opcoes_exclusao = df_pagamentos.apply(
                     lambda x: f"ID #{x['id']} | {x['nome']} | Evento: {x['evento']} | R$ {x['valor']:.2f} ({x['status']})",
                     axis=1,
@@ -3626,28 +3624,16 @@ elif menu == "Cachês":
 
                     linha_del = df_pagamentos[opcoes_exclusao == item_para_excluir].iloc[0]
 
-                    st.markdown(
-                        f"""
-                        **Registro selecionado:**
-                        * **Profissional:** {linha_del['nome']}
-                        * **Evento:** {linha_del['evento']}
-                        * **Valor:** R$ {linha_del['valor']:,.2f}
-                        """
-                    )
+                    st.info(f"📌 **Selecionado:** ID #{linha_del['id']} — {linha_del['nome']} ({linha_del['evento']}) — **R$ {linha_del['valor']:,.2f}**")
 
-                    confirmar = st.checkbox(
-                        "Tenho certeza de que desejo apagar este lançamento do sistema",
-                        key="chk_confirm_del"
-                    )
-
-                    if st.button("❌ Excluir Lançamento", type="primary", disabled=not confirmar, use_container_width=True):
+                    if st.button("❌ Excluir Lançamento Agora", type="primary", use_container_width=True):
                         try:
                             supabase.table("pagamentos_equipe").delete().eq("id", linha_del["id"]).execute()
                             st.toast(f"🗑️ O registro de {linha_del['nome']} foi excluído com sucesso!", icon="✅")
-                            st.success(f" O registro **ID #{linha_del['id']} ({linha_del['nome']})** foi removido do banco de dados.")
+                            st.success(f"✅ Registro ID #{linha_del['id']} ({linha_del['nome']}) removido!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao tentar excluir o registro: {e}")
+                            st.error(f"Erro ao excluir registro: {e}")
     # =====================================
     # SUBABA 4: CONSOLIDADO & RELATÓRIOS
     # =====================================
