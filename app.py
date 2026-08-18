@@ -793,8 +793,13 @@ elif menu == "Relatórios":
     # PRÓXIMOS EVENTOS
     # =========================================================
     st.subheader("📅 Próximos Eventos")
-    res_eventos = supabase.table("orcamentos").select("*").execute()
-    df_eventos = pd.DataFrame(res_eventos.data or [])
+    
+    try:
+        res_eventos = supabase.table("orcamentos").select("*").execute()
+        df_eventos = pd.DataFrame(res_eventos.data or [])
+    except Exception as e:
+        st.error(f"⚠️ Erro na tabela 'orcamentos': {e}")
+        df_eventos = pd.DataFrame()
     
     if not df_eventos.empty and "data_evento" in df_eventos.columns:
         df_eventos["data_evento"] = pd.to_datetime(df_eventos["data_evento"], errors="coerce")
@@ -811,8 +816,12 @@ elif menu == "Relatórios":
     # =========================================================
     # CARREGAMENTO E CÁLCULOS FINANCEIROS
     # =========================================================
-    res_fin = supabase.table("financeiro").select("*").execute()
-    df_fin = pd.DataFrame(res_fin.data or [])
+    try:
+        res_fin = supabase.table("financeiro").select("*").execute()
+        df_fin = pd.DataFrame(res_fin.data or [])
+    except Exception as e:
+        st.error(f"⚠️ Erro na tabela 'financeiro': {e}")
+        df_fin = pd.DataFrame()
     
     faturamento = 7153.81
     custos = 5455.23
@@ -827,7 +836,7 @@ elif menu == "Relatórios":
     
     lucro = faturamento - custos
     margem = (lucro / faturamento * 100) if faturamento > 0 else 0
-    reserva_caixa = lucro * 0.35  # 35% Exatos do Lucro (R$ 594,50)
+    reserva_caixa = lucro * 0.35  # 35% Exatos do Lucro
     
     # =========================================================
     # ABA NAVEGAÇÃO INTERNA
@@ -928,8 +937,12 @@ elif menu == "Relatórios":
         st.markdown("### 🎯 Metas de Faturamento Mensal")
     
         # 1. Buscar metas cadastradas no Supabase
-        res_metas = supabase.table("metas_mensais").select("*").execute()
-        df_metas = pd.DataFrame(res_metas.data or [])
+        try:
+            res_metas = supabase.table("metas_mensais").select("*").execute()
+            df_metas = pd.DataFrame(res_metas.data or [])
+        except Exception as e:
+            st.warning(f"⚠️ Não foi possível carregar a tabela 'metas_mensais': {e}")
+            df_metas = pd.DataFrame()
     
         mes_atual_str = hoje.strftime("%Y-%m")
         mes_atual_nome = hoje.strftime("%B/%Y").capitalize()
@@ -1034,6 +1047,7 @@ elif menu == "Relatórios":
     with tab_prod:
         st.markdown("**📦 Desempenho por Produto / Serviço**")
         st.info("Cadastre e vincule serviços aos orçamentos para visualizar a distribuição por produto.")
+        
 elif menu == "Receitas":
 
     st.title("Receitas")
