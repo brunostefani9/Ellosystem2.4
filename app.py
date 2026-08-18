@@ -762,9 +762,8 @@ elif menu == "Estoque":
         
 elif menu == "Relatórios":
 
-def render_dashboard(supabase):
     st.title("📊 Dashboard Geral")
-
+    
     # =========================================================
     # FILTROS DE DATA / PERÍODO
     # =========================================================
@@ -786,17 +785,22 @@ def render_dashboard(supabase):
     else:
         dt_inicio = datetime(2020, 1, 1).date()
         dt_fim = hoje.date()
-
+    
     data_i = col_i.date_input("🗓️ Data inicial", value=dt_inicio, key="dash_dt_i")
     data_f = col_f.date_input("🗓️ Data final", value=dt_fim, key="dash_dt_f")
-
+    
     # =========================================================
     # PRÓXIMOS EVENTOS
     # =========================================================
     st.subheader("📅 Próximos Eventos")
-    res_eventos = supabase.table("orcamentos").select("*").execute()
-    df_eventos = pd.DataFrame(res_eventos.data or [])
-
+    
+    try:
+        res_eventos = supabase.table("orcamentos").select("*").execute()
+        df_eventos = pd.DataFrame(res_eventos.data or [])
+    except Exception as e:
+        st.error(f"⚠️ Erro na tabela 'orcamentos': {e}")
+        df_eventos = pd.DataFrame()
+    
     if not df_eventos.empty and "data_evento" in df_eventos.columns:
         df_eventos["data_evento"] = pd.to_datetime(df_eventos["data_evento"], errors="coerce")
         proximos = df_eventos[df_eventos["data_evento"].dt.date >= hoje.date()].sort_values("data_evento")
@@ -806,18 +810,22 @@ def render_dashboard(supabase):
             st.info("Nenhum próximo evento confirmado.")
     else:
         st.info("Nenhum próximo evento confirmado.")
-
+    
     st.divider()
-
+    
     # =========================================================
     # CARREGAMENTO E CÁLCULOS FINANCEIROS
     # =========================================================
-    res_fin = supabase.table("financeiro").select("*").execute()
-    df_fin = pd.DataFrame(res_fin.data or [])
-
+    try:
+        res_fin = supabase.table("financeiro").select("*").execute()
+        df_fin = pd.DataFrame(res_fin.data or [])
+    except Exception as e:
+        st.error(f"⚠️ Erro na tabela 'financeiro': {e}")
+        df_fin = pd.DataFrame()
+    
     faturamento = 7153.81
     custos = 5455.23
-
+    
     if not df_fin.empty:
         if "tipo" in df_fin.columns and "valor" in df_fin.columns:
             df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
@@ -825,11 +833,11 @@ def render_dashboard(supabase):
             cust_calc = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum()
             if fat_calc > 0: faturamento = fat_calc
             if cust_calc > 0: custos = cust_calc
-
+    
     lucro = faturamento - custos
     margem = (lucro / faturamento * 100) if faturamento > 0 else 0
-    reserva_caixa = lucro * 0.35  # 35% Exatos do Lucro (R$ 594,50)
-
+    reserva_caixa = lucro * 0.35  # 35% Exatos do Lucro
+    
     # =========================================================
     # ABA NAVEGAÇÃO INTERNA
     # =========================================================
@@ -840,7 +848,7 @@ def render_dashboard(supabase):
         "🎯 Metas", 
         "📦 Produtos"
     ])
-
+    
     # ---------------------------------------------------------
     # TAB 1: VISÃO GERAL
     # ---------------------------------------------------------
@@ -851,17 +859,17 @@ def render_dashboard(supabase):
         c3.metric("📈 Lucro", f"R$ {lucro:,.2f}")
         c4.metric("📊 Margem", f"{margem:.1f}%")
         c5.metric("🛡️ Reserva Caixa PJ", f"R$ {reserva_caixa:,.2f}")
-
+    
         st.divider()
-
+    
         # Gráficos da Visão Geral
         col_g1, col_g2 = st.columns(2)
-
+    
         df_grafico_fin = pd.DataFrame({
             "Categoria": ["Faturamento", "Custos", "Lucro"],
             "Valor (R$)": [faturamento, custos, lucro]
         })
-
+    
         with col_g1:
             st.markdown("**📊 Resumo de Desempenho Financeiro**")
             fig_bar = px.bar(
@@ -874,7 +882,7 @@ def render_dashboard(supabase):
             )
             fig_bar.update_layout(showlegend=False, height=350)
             st.plotly_chart(fig_bar, use_container_width=True)
-
+    
         with col_g2:
             st.markdown("**🍕 Composição da Receita**")
             df_pie = pd.DataFrame({
@@ -890,7 +898,7 @@ def render_dashboard(supabase):
             )
             fig_pie.update_layout(height=350)
             st.plotly_chart(fig_pie, use_container_width=True)
-
+    
     # ---------------------------------------------------------
     # TAB 2: FINANCEIRO
     # ---------------------------------------------------------
@@ -904,15 +912,15 @@ def render_dashboard(supabase):
             f"R$ {reserva_caixa:,.2f}", 
             help="Calculado rigorosamente como 35% do Saldo/Lucro do período"
         )
-
+    
         st.divider()
-
+    
         st.markdown("**📈 Fluxo Financeiro e Detalhamento**")
         if not df_fin.empty:
             st.dataframe(df_fin, use_container_width=True, hide_index=True)
         else:
             st.info("Nenhuma movimentação detalhada encontrada no período selecionado.")
-
+    
     # ---------------------------------------------------------
     # TAB 3: VENDAS
     # ---------------------------------------------------------
@@ -921,26 +929,30 @@ def render_dashboard(supabase):
         cv1, cv2 = st.columns(2)
         cv1.metric("📦 Contratos Fechados", f"{len(df_eventos)}")
         cv2.metric("🎯 Ticket Médio", f"R$ {(faturamento / len(df_eventos) if len(df_eventos) > 0 else 0):,.2f}")
-
+    
     # ---------------------------------------------------------
     # TAB 4: METAS (FLEXÍVEIS & HISTÓRICO MÊS A MÊS)
     # ---------------------------------------------------------
     with tab_metas:
         st.markdown("### 🎯 Metas de Faturamento Mensal")
-
+    
         # 1. Buscar metas cadastradas no Supabase
-        res_metas = supabase.table("metas_mensais").select("*").execute()
-        df_metas = pd.DataFrame(res_metas.data or [])
-
+        try:
+            res_metas = supabase.table("metas_mensais").select("*").execute()
+            df_metas = pd.DataFrame(res_metas.data or [])
+        except Exception as e:
+            st.warning(f"⚠️ Não foi possível carregar a tabela 'metas_mensais': {e}")
+            df_metas = pd.DataFrame()
+    
         mes_atual_str = hoje.strftime("%Y-%m")
         mes_atual_nome = hoje.strftime("%B/%Y").capitalize()
-
+    
         meta_atual_valor = 10000.0
         if not df_metas.empty and "mes_ano" in df_metas.columns:
             meta_encontrada = df_metas[df_metas["mes_ano"] == mes_atual_str]
             if not meta_encontrada.empty:
                 meta_atual_valor = float(meta_encontrada.iloc[0]["meta_valor"])
-
+    
         # Form para definir/ajustar a meta do mês atual
         with st.expander(f"⚙️ Definir/Ajustar Meta de {mes_atual_nome}", expanded=False):
             col_m1, col_m2 = st.columns([3, 1])
@@ -961,9 +973,9 @@ def render_dashboard(supabase):
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao salvar meta: {e}")
-
+    
         st.divider()
-
+    
         # 2. Processar faturamento do mês atual
         fat_mes_atual = 0.0
         if not df_fin.empty and "data" in df_fin.columns:
@@ -975,39 +987,39 @@ def render_dashboard(supabase):
             fat_mes_atual = float(entradas_mes["valor"].sum()) if not entradas_mes.empty else faturamento
         else:
             fat_mes_atual = faturamento
-
+    
         pct_mes = min(1.0, fat_mes_atual / meta_atual_valor) if meta_atual_valor > 0 else 0.0
         cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_atual_valor else "🟡 Em andamento"
-
+    
         cm1, cm2, cm3 = st.columns(3)
         cm1.metric("📌 Meta do Mês Atual", f"R$ {meta_atual_valor:,.2f}")
         cm2.metric("💰 Faturado no Mês", f"R$ {fat_mes_atual:,.2f}")
         cm3.metric("📊 Progresso", f"{pct_mes * 100:.1f}%", delta=cor_status)
-
+    
         st.progress(pct_mes)
-
+    
         st.divider()
-
+    
         # 3. Visão e Comparativo Mês a Mês
         st.markdown("### 📊 Histórico de Metas Mês a Mês")
-
+    
         if not df_fin.empty and "data" in df_fin.columns:
             df_fin["mes_ano"] = pd.to_datetime(df_fin["data"], errors="coerce").dt.strftime("%Y-%m")
             fat_por_mes = df_fin[df_fin["tipo"] == "Entrada"].groupby("mes_ano")["valor"].sum().reset_index()
             fat_por_mes.rename(columns={"valor": "Faturado"}, inplace=True)
         else:
             fat_por_mes = pd.DataFrame([{"mes_ano": mes_atual_str, "Faturado": faturamento}])
-
+    
         if df_metas.empty:
             df_metas = pd.DataFrame([{"mes_ano": mes_atual_str, "meta_valor": meta_atual_valor}])
-
+    
         df_historico_metas = pd.merge(fat_por_mes, df_metas, on="mes_ano", how="outer").fillna(0)
         df_historico_metas.sort_values("mes_ano", ascending=True, inplace=True)
         df_historico_metas["Atingida"] = df_historico_metas.apply(
             lambda x: "✅ Atingida" if x["Faturado"] >= x["meta_valor"] and x["meta_valor"] > 0 else "❌ Não Atingida", 
             axis=1
         )
-
+    
         fig_metas = px.bar(
             df_historico_metas,
             x="mes_ano",
@@ -1018,7 +1030,7 @@ def render_dashboard(supabase):
             color_discrete_map={"Faturado": "#2ecc71", "meta_valor": "#f1c40f"}
         )
         st.plotly_chart(fig_metas, use_container_width=True)
-
+    
         st.dataframe(
             df_historico_metas.rename(columns={
                 "mes_ano": "Mês/Ano",
@@ -1028,7 +1040,7 @@ def render_dashboard(supabase):
             use_container_width=True,
             hide_index=True
         )
-
+    
     # ---------------------------------------------------------
     # TAB 5: PRODUTOS
     # ---------------------------------------------------------
