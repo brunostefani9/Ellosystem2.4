@@ -6,7 +6,6 @@ from supabase import create_client
 import pandas as pd
 from datetime import datetime, timedelta, date
 from servicos import SERVICOS
-import plotly.express as px
 
 SUPABASE_URL = "https://tkidpoirwnolgzknsohj.supabase.co"
 SUPABASE_KEY = "sb_publishable_m4uQvOAi0D10f8Wj8GyqMQ_vZKa5GeM"
