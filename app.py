@@ -762,7 +762,6 @@ elif menu == "Estoque":
         
 elif menu == "Relatórios":
 
-    import plotly.express as px
     st.title("📊 Dashboard Geral")
     
     # =========================================================
