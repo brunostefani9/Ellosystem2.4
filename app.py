@@ -833,14 +833,18 @@ elif menu == "Relatórios":
         except Exception:
             df_fin = pd.DataFrame()
     
+    # Valores padrão conforme a aba Financeiro
     faturamento = 7153.81
     custos = 5455.23
     
     if not df_fin.empty and "tipo" in df_fin.columns and "valor" in df_fin.columns:
         df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
         
-        fat_calc = df_fin[df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita")]["valor"].sum()
-        cust_calc = df_fin[df_fin["tipo"].astype(str).str.lower().str.contains("saída|saida|custo|despesa|cachê|cache")]["valor"].sum()
+        # Filtro flexível para capturar todas as variações de Entradas e Saídas
+        mask_entrada = df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita|recebimento")
+        
+        fat_calc = df_fin[mask_entrada]["valor"].sum()
+        cust_calc = df_fin[~mask_entrada]["valor"].sum()
         
         if fat_calc > 0:
             faturamento = float(fat_calc)
