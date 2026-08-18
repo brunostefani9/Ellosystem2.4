@@ -3602,35 +3602,52 @@ elif menu == "Cachês":
                         "data_pagamento": agora_iso,
                     }).eq("id", linha["id"]).execute()
 
+                    st.toast("✅ Pagamento confirmado com sucesso!", icon="🎉")
                     st.success("Pagamento confirmado com sucesso!")
                     st.rerun()
 
             st.divider()
 
-            # 🗑️ EXCLUIR REGISTRO DE CACHÊ / PAGAMENTO
-            st.subheader("🗑️ Excluir Registro de Cachê")
+            # 🗑️ SEÇÃO DE EXCLUSÃO DE REGISTRO (LAYOUT MELHORADO)
+            with st.expander("🗑️ Área de Gerenciamento: Excluir Registro de Cachê", expanded=False):
+                st.warning("⚠️ **Cuidado:** Esta ação removerá o lançamento permanentemente do sistema.")
 
-            opcoes_exclusao = df_pagamentos.apply(
-                lambda x: f"ID #{x['id']} | {x['nome']} | Evento: {x['evento']} | R$ {x['valor']:.2f} ({x['status']})",
-                axis=1,
-            )
-
-            if not opcoes_exclusao.empty:
-                item_para_excluir = st.selectbox(
-                    "Selecione o registro que deseja excluir do banco de dados:",
-                    options=opcoes_exclusao,
-                    key="select_del_cache"
+                opcoes_exclusao = df_pagamentos.apply(
+                    lambda x: f"ID #{x['id']} | {x['nome']} | Evento: {x['evento']} | R$ {x['valor']:.2f} ({x['status']})",
+                    axis=1,
                 )
 
-                id_para_excluir = df_pagamentos[opcoes_exclusao == item_para_excluir].iloc[0]["id"]
+                if not opcoes_exclusao.empty:
+                    item_para_excluir = st.selectbox(
+                        "Selecione o lançamento que deseja apagar:",
+                        options=opcoes_exclusao,
+                        key="select_del_cache"
+                    )
 
-                if st.button("❌ Excluir Registro Definitivamente", type="primary", use_container_width=True):
-                    try:
-                        supabase.table("pagamentos_equipe").delete().eq("id", id_para_excluir).execute()
-                        st.success("✅ Registro excluído com sucesso do banco de dados!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao excluir o registro: {e}")
+                    linha_del = df_pagamentos[opcoes_exclusao == item_para_excluir].iloc[0]
+
+                    st.markdown(
+                        f"""
+                        **Registro selecionado:**
+                        * **Profissional:** {linha_del['nome']}
+                        * **Evento:** {linha_del['evento']}
+                        * **Valor:** R$ {linha_del['valor']:,.2f}
+                        """
+                    )
+
+                    confirmar = st.checkbox(
+                        "Tenho certeza de que desejo apagar este lançamento do sistema",
+                        key="chk_confirm_del"
+                    )
+
+                    if st.button("❌ Excluir Lançamento", type="primary", disabled=not confirmar, use_container_width=True):
+                        try:
+                            supabase.table("pagamentos_equipe").delete().eq("id", linha_del["id"]).execute()
+                            st.toast(f"🗑️ O registro de {linha_del['nome']} foi excluído com sucesso!", icon="✅")
+                            st.success(f" O registro **ID #{linha_del['id']} ({linha_del['nome']})** foi removido do banco de dados.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao tentar excluir o registro: {e}")
     # =====================================
     # SUBABA 4: CONSOLIDADO & RELATÓRIOS
     # =====================================
