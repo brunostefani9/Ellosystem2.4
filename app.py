@@ -3458,9 +3458,9 @@ elif menu == "Cachês":
             except Exception as erro:
                 st.error(f"Erro ao salvar registros: {erro}")
 
-    # =====================================
+    # =========================================================
     # SUBABA 3: HISTÓRICO & BAIXA DE PAGAMENTOS
-    # =====================================
+    # =========================================================
     elif subaba == "Histórico":
         st.subheader("📋 Histórico e Baixa de Pagamentos")
 
@@ -3503,6 +3503,10 @@ elif menu == "Cachês":
                 df_pagamentos = df_pagamentos.sort_values(
                     by="created_at", ascending=False
                 )
+
+            # Converter valores numéricos para garantir os somatórios corretos
+            if not df_pagamentos.empty:
+                df_pagamentos["valor"] = pd.to_numeric(df_pagamentos["valor"], errors="coerce").fillna(0)
 
             total_pago = (
                 df_pagamentos[df_pagamentos["status"] == "Pago"]["valor"].sum()
@@ -3601,6 +3605,32 @@ elif menu == "Cachês":
                     st.success("Pagamento confirmado com sucesso!")
                     st.rerun()
 
+            st.divider()
+
+            # 🗑️ EXCLUIR REGISTRO DE CACHÊ / PAGAMENTO
+            st.subheader("🗑️ Excluir Registro de Cachê")
+
+            opcoes_exclusao = df_pagamentos.apply(
+                lambda x: f"ID #{x['id']} | {x['nome']} | Evento: {x['evento']} | R$ {x['valor']:.2f} ({x['status']})",
+                axis=1,
+            )
+
+            if not opcoes_exclusao.empty:
+                item_para_excluir = st.selectbox(
+                    "Selecione o registro que deseja excluir do banco de dados:",
+                    options=opcoes_exclusao,
+                    key="select_del_cache"
+                )
+
+                id_para_excluir = df_pagamentos[opcoes_exclusao == item_para_excluir].iloc[0]["id"]
+
+                if st.button("❌ Excluir Registro Definitivamente", type="primary", use_container_width=True):
+                    try:
+                        supabase.table("pagamentos_equipe").delete().eq("id", id_para_excluir).execute()
+                        st.success("✅ Registro excluído com sucesso do banco de dados!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao excluir o registro: {e}")
     # =====================================
     # SUBABA 4: CONSOLIDADO & RELATÓRIOS
     # =====================================
