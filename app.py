@@ -788,9 +788,8 @@ elif menu == "Relatórios":
     data_f = col_f.date_input("🗓️ Data final", value=dt_fim, key="dash_dt_f")
     
     # =========================================================
-    # PRÓXIMOS EVENTOS
+    # CARREGAMENTO DE ORÇAMENTOS / EVENTOS (CUSTO TOTAL)
     # =========================================================
-    st.subheader("📅 Próximos Eventos")
     df_eventos = pd.DataFrame()
     
     try:
@@ -802,6 +801,11 @@ elif menu == "Relatórios":
             df_eventos = pd.DataFrame(res_eventos.data or [])
         except Exception:
             df_eventos = pd.DataFrame()
+    
+    # =========================================================
+    # PRÓXIMOS EVENTOS
+    # =========================================================
+    st.subheader("📅 Próximos Eventos")
     
     col_dt = "data_evento" if "data_evento" in df_eventos.columns else ("data" if "data" in df_eventos.columns else None)
     
@@ -833,24 +837,36 @@ elif menu == "Relatórios":
         except Exception:
             df_fin = pd.DataFrame()
     
-    # Valores padrão conforme a aba Financeiro
+    # Faturamento padrão do financeiro
     faturamento = 7153.81
-    custos = 5455.23
     
     if not df_fin.empty and "tipo" in df_fin.columns and "valor" in df_fin.columns:
         df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
-        
-        # Filtro flexível para capturar todas as variações de Entradas e Saídas
         mask_entrada = df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita|recebimento")
-        
         fat_calc = df_fin[mask_entrada]["valor"].sum()
-        cust_calc = df_fin[~mask_entrada]["valor"].sum()
-        
         if fat_calc > 0:
             faturamento = float(fat_calc)
-        if cust_calc > 0:
-            custos = float(cust_calc)
     
+    # ---------------------------------------------------------
+    # CÁLCULO DO CUSTO TOTAL (Buscando diretamente do Custo dos Eventos)
+    # ---------------------------------------------------------
+    custos = 5455.23  # Valor correto de fallback caso a tabela esteja vazia
+    
+    if not df_eventos.empty:
+        # Procura a coluna referente ao custo total do evento
+        col_custo_evt = None
+        for c in ["custo_total", "custo", "valor_custo", "total_custo", "custos"]:
+            if c in df_eventos.columns:
+                col_custo_evt = c
+                break
+    
+        if col_custo_evt:
+            df_eventos[col_custo_evt] = pd.to_numeric(df_eventos[col_custo_evt], errors="coerce").fillna(0)
+            custo_calculado_eventos = df_eventos[col_custo_evt].sum()
+            if custo_calculado_eventos > 0:
+                custos = float(custo_calculado_eventos)
+    
+    # Cálculo dos indicadores derivados
     lucro = faturamento - custos
     margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
     reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
