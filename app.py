@@ -768,13 +768,11 @@ elif menu == "Relatórios":
     # FILTROS DE DATA / PERÍODO
     # =========================================================
     col_p, col_i, col_f = st.columns([2, 1, 1])
-    
     periodo = col_p.selectbox(
-        "📅 Período", 
-        ["Este ano", "Este mês", "Últimos 30 dias", "Todos"], 
+        "📅 Período",
+        ["Este ano", "Este mês", "Últimos 30 dias", "Todos"],
         key="dash_periodo"
     )
-    
     hoje = datetime.now()
     if periodo == "Este ano":
         dt_inicio = datetime(hoje.year, 1, 1).date()
@@ -790,74 +788,51 @@ elif menu == "Relatórios":
     data_f = col_f.date_input("🗓️ Data final", value=dt_fim, key="dash_dt_f")
     
     # =========================================================
-    # PRÓXIMOS EVENTOS / ORÇAMENTOS
+    # PRÓXIMOS EVENTOS
     # =========================================================
-    st.subheader("📅 Próximos Eventos & Orçamentos")
+    st.subheader("📅 Próximos Eventos")
+    res_eventos = supabase.table("eventos").select("*").execute()
+    df_eventos = pd.DataFrame(res_eventos.data or [])
     
-    try:
-        # Tenta buscar primeiro na tabela de orçamentos
-        res_eventos = supabase.table("orcamentos").select("*").execute()
-        df_eventos = pd.DataFrame(res_eventos.data or [])
-    except Exception as e:
-        # Se falhar ou a tabela não existir, busca na tabela de eventos
-        try:
-            res_eventos = supabase.table("eventos").select("*").execute()
-            df_eventos = pd.DataFrame(res_eventos.data or [])
-        except Exception as e_inner:
-            st.warning(f"⚠️ Não foi possível carregar as tabelas de orçamentos/eventos: {e_inner}")
-            df_eventos = pd.DataFrame()
-    
-    # Identifica qual coluna de data usar
-    col_data = "data_evento" if "data_evento" in df_eventos.columns else ("data" if "data" in df_eventos.columns else None)
-    
-    if not df_eventos.empty and col_data:
-        df_eventos[col_data] = pd.to_datetime(df_eventos[col_data], errors="coerce")
-        proximos = df_eventos[df_eventos[col_data].dt.date >= hoje.date()].sort_values(col_data)
+    if not df_eventos.empty and "data_evento" in df_eventos.columns:
+        df_eventos["data_evento"] = pd.to_datetime(df_eventos["data_evento"], errors="coerce")
+        proximos = df_eventos[df_eventos["data_evento"].dt.date >= hoje.date()].sort_values("data_evento")
         if not proximos.empty:
-            cols_desejadas = ["cliente", "evento", "nome", col_data, "valor_total", "valor", "status"]
-            cols_existentes = [c for c in cols_desejadas if c in proximos.columns]
-            st.dataframe(proximos[cols_existentes], use_container_width=True, hide_index=True)
+            st.dataframe(proximos[["evento", "data_evento", "valor_total", "status"]], use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhum próximo evento/orçamento encontrado a partir de hoje.")
+            st.info("Nenhum próximo evento confirmado.")
     else:
-        st.info("Nenhum dado de evento/orçamento disponível para exibição.")
+        st.info("Nenhum próximo evento confirmado.")
     
     st.divider()
     
     # =========================================================
     # CARREGAMENTO E CÁLCULOS FINANCEIROS
     # =========================================================
-    try:
-        res_fin = supabase.table("Financeiro").select("*").execute()
-        df_fin = pd.DataFrame(res_fin.data or [])
-    except Exception:
-        try:
-            res_fin = supabase.table("financeiro").select("*").execute()
-            df_fin = pd.DataFrame(res_fin.data or [])
-        except Exception as e:
-            st.warning(f"⚠️ Tabela financeira indisponível: {e}")
-            df_fin = pd.DataFrame()
+    res_fin = supabase.table("Financeiro").select("*").execute()
+    df_fin = pd.DataFrame(res_fin.data or [])
     
     faturamento = 0.0
     custos = 0.0
     
-    if not df_fin.empty and "tipo" in df_fin.columns and "valor" in df_fin.columns:
-        df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
-        faturamento = float(df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum())
-        custos = float(df_fin[df_fin["tipo"] == "Saída"]["valor"].sum())
+    if not df_fin.empty:
+        if "tipo" in df_fin.columns and "valor" in df_fin.columns:
+            df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+            faturamento = float(df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum())
+            custos = float(df_fin[df_fin["tipo"] == "Saída"]["valor"].sum())
     
     lucro = faturamento - custos
-    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
-    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
+    margem = (lucro / faturamento * 100) if faturamento > 0 else 0
+    reserva_caixa = lucro * 0.35 if lucro > 0 else 0
     
     # =========================================================
     # ABA NAVEGAÇÃO INTERNA
     # =========================================================
     tab_visao, tab_fin, tab_vendas, tab_metas, tab_prod = st.tabs([
-        "📊 Visão Geral", 
-        "💰 Financeiro", 
-        "📈 Vendas", 
-        "🎯 Metas", 
+        "📊 Visão Geral",
+        "💰 Financeiro",
+        "📈 Vendas",
+        "🎯 Metas",
         "📦 Produtos"
     ])
     
@@ -874,6 +849,7 @@ elif menu == "Relatórios":
     
         st.divider()
     
+        # Gráficos da Visão Geral
         col_g1, col_g2 = st.columns(2)
     
         df_grafico_fin = pd.DataFrame({
@@ -884,9 +860,9 @@ elif menu == "Relatórios":
         with col_g1:
             st.markdown("**📊 Resumo de Desempenho Financeiro**")
             fig_bar = px.bar(
-                df_grafico_fin, 
-                x="Categoria", 
-                y="Valor (R$)", 
+                df_grafico_fin,
+                x="Categoria",
+                y="Valor (R$)",
                 text_auto=".2f",
                 color="Categoria",
                 color_discrete_sequence=["#2ecc71", "#e74c3c", "#3498db"]
@@ -901,9 +877,9 @@ elif menu == "Relatórios":
                 "Valor": [custos, max(0, lucro)]
             })
             fig_pie = px.pie(
-                df_pie, 
-                names="Tipo", 
-                values="Valor", 
+                df_pie,
+                names="Tipo",
+                values="Valor",
                 hole=0.4,
                 color_discrete_sequence=["#e74c3c", "#2ecc71"]
             )
@@ -919,8 +895,8 @@ elif menu == "Relatórios":
         c2.metric("💸 Saídas", f"R$ {custos:,.2f}")
         c3.metric("🏛️ Saldo", f"R$ {lucro:,.2f}")
         c4.metric(
-            "🛡️ Reserva Caixa PJ", 
-            f"R$ {reserva_caixa:,.2f}", 
+            "🛡️ Reserva Caixa PJ",
+            f"R$ {reserva_caixa:,.2f}",
             help="Calculado rigorosamente como 35% do Saldo/Lucro do período"
         )
     
@@ -938,21 +914,18 @@ elif menu == "Relatórios":
     with tab_vendas:
         st.markdown("**📈 Desempenho de Vendas & Contratos**")
         cv1, cv2 = st.columns(2)
-        total_contratos = len(df_eventos)
-        cv1.metric("📦 Total Registros", f"{total_contratos}")
-        cv2.metric("🎯 Ticket Médio", f"R$ {(faturamento / total_contratos if total_contratos > 0 else 0):,.2f}")
+        cv1.metric("📦 Contratos Fechados", f"{len(df_eventos)}")
+        cv2.metric("🎯 Ticket Médio", f"R$ {(faturamento / len(df_eventos) if len(df_eventos) > 0 else 0):,.2f}")
     
     # ---------------------------------------------------------
-    # TAB 4: METAS
+    # TAB 4: METAS (FLEXÍVEIS & HISTÓRICO MÊS A MÊS)
     # ---------------------------------------------------------
     with tab_metas:
         st.markdown("### 🎯 Metas de Faturamento Mensal")
     
-        try:
-            res_metas = supabase.table("metas_mensais").select("*").execute()
-            df_metas = pd.DataFrame(res_metas.data or [])
-        except Exception:
-            df_metas = pd.DataFrame()
+        # 1. Buscar metas cadastradas no Supabase
+        res_metas = supabase.table("metas_mensais").select("*").execute()
+        df_metas = pd.DataFrame(res_metas.data or [])
     
         mes_atual_str = hoje.strftime("%Y-%m")
         mes_atual_nome = hoje.strftime("%B/%Y").capitalize()
@@ -963,6 +936,7 @@ elif menu == "Relatórios":
             if not meta_encontrada.empty:
                 meta_atual_valor = float(meta_encontrada.iloc[0]["meta_valor"])
     
+        # Form para definir/ajustar a meta do mês atual
         with st.expander(f"⚙️ Definir/Ajustar Meta de {mes_atual_nome}", expanded=False):
             col_m1, col_m2 = st.columns([3, 1])
             nova_meta = col_m1.number_input(
@@ -985,7 +959,18 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        fat_mes_atual = faturamento
+        # 2. Processar faturamento do mês atual
+        fat_mes_atual = 0.0
+        if not df_fin.empty and "data" in df_fin.columns:
+            df_fin["dt_temp"] = pd.to_datetime(df_fin["data"], errors="coerce")
+            entradas_mes = df_fin[
+                (df_fin["tipo"] == "Entrada") &
+                (df_fin["dt_temp"].dt.strftime("%Y-%m") == mes_atual_str)
+            ]
+            fat_mes_atual = float(entradas_mes["valor"].sum()) if not entradas_mes.empty else faturamento
+        else:
+            fat_mes_atual = faturamento
+    
         pct_mes = min(1.0, fat_mes_atual / meta_atual_valor) if meta_atual_valor > 0 else 0.0
         cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_atual_valor else "🟡 Em andamento"
     
@@ -995,6 +980,49 @@ elif menu == "Relatórios":
         cm3.metric("📊 Progresso", f"{pct_mes * 100:.1f}%", delta=cor_status)
     
         st.progress(pct_mes)
+    
+        st.divider()
+    
+        # 3. Visão e Comparativo Mês a Mês
+        st.markdown("### 📊 Histórico de Metas Mês a Mês")
+    
+        if not df_fin.empty and "data" in df_fin.columns:
+            df_fin["mes_ano"] = pd.to_datetime(df_fin["data"], errors="coerce").dt.strftime("%Y-%m")
+            fat_por_mes = df_fin[df_fin["tipo"] == "Entrada"].groupby("mes_ano")["valor"].sum().reset_index()
+            fat_por_mes.rename(columns={"valor": "Faturado"}, inplace=True)
+        else:
+            fat_por_mes = pd.DataFrame([{"mes_ano": mes_atual_str, "Faturado": faturamento}])
+    
+        if df_metas.empty:
+            df_metas = pd.DataFrame([{"mes_ano": mes_atual_str, "meta_valor": meta_atual_valor}])
+    
+        df_historico_metas = pd.merge(fat_por_mes, df_metas, on="mes_ano", how="outer").fillna(0)
+        df_historico_metas.sort_values("mes_ano", ascending=True, inplace=True)
+        df_historico_metas["Atingida"] = df_historico_metas.apply(
+            lambda x: "✅ Atingida" if x["Faturado"] >= x["meta_valor"] and x["meta_valor"] > 0 else "❌ Não Atingida",
+            axis=1
+        )
+    
+        fig_metas = px.bar(
+            df_historico_metas,
+            x="mes_ano",
+            y=["Faturado", "meta_valor"],
+            barmode="group",
+            labels={"value": "Valor (R$)", "mes_ano": "Mês", "variable": "Tipo"},
+            title="Comparativo Faturamento Real vs Meta Mensal",
+            color_discrete_map={"Faturado": "#2ecc71", "meta_valor": "#f1c40f"}
+        )
+        st.plotly_chart(fig_metas, use_container_width=True)
+    
+        st.dataframe(
+            df_historico_metas.rename(columns={
+                "mes_ano": "Mês/Ano",
+                "Faturado": "Faturamento Real (R$)",
+                "meta_valor": "Meta Definida (R$)"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
     
     # ---------------------------------------------------------
     # TAB 5: PRODUTOS
