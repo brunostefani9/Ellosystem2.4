@@ -791,6 +791,8 @@ elif menu == "Relatórios":
     # PRÓXIMOS EVENTOS
     # =========================================================
     st.subheader("📅 Próximos Eventos")
+    df_eventos = pd.DataFrame()
+    
     try:
         res_eventos = supabase.table("orcamentos").select("*").execute()
         df_eventos = pd.DataFrame(res_eventos.data or [])
@@ -819,23 +821,35 @@ elif menu == "Relatórios":
     # =========================================================
     # CARREGAMENTO E CÁLCULOS FINANCEIROS
     # =========================================================
-    res_fin = supabase.table("financeiro").select("*").execute()
-    df_fin = pd.DataFrame(res_fin.data or [])
+    df_fin = pd.DataFrame()
+    
+    try:
+        res_fin = supabase.table("Financeiro").select("*").execute()
+        df_fin = pd.DataFrame(res_fin.data or [])
+    except Exception:
+        try:
+            res_fin = supabase.table("financeiro").select("*").execute()
+            df_fin = pd.DataFrame(res_fin.data or [])
+        except Exception:
+            df_fin = pd.DataFrame()
     
     faturamento = 7153.81
     custos = 5455.23
     
-    if not df_fin.empty:
-        if "tipo" in df_fin.columns and "valor" in df_fin.columns:
-            df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
-            fat_calc = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum()
-            cust_calc = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum()
-            if fat_calc > 0: faturamento = float(fat_calc)
-            if cust_calc > 0: custos = float(cust_calc)
+    if not df_fin.empty and "tipo" in df_fin.columns and "valor" in df_fin.columns:
+        df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+        
+        fat_calc = df_fin[df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita")]["valor"].sum()
+        cust_calc = df_fin[df_fin["tipo"].astype(str).str.lower().str.contains("saída|saida|custo|despesa|cachê|cache")]["valor"].sum()
+        
+        if fat_calc > 0:
+            faturamento = float(fat_calc)
+        if cust_calc > 0:
+            custos = float(cust_calc)
     
     lucro = faturamento - custos
-    margem = (lucro / faturamento * 100) if faturamento > 0 else 0
-    reserva_caixa = lucro * 0.35 if lucro > 0 else 0
+    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
+    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
     
     # =========================================================
     # ABA NAVEGAÇÃO INTERNA
@@ -861,10 +875,9 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        # Gráfico simples usando componentes nativos do Streamlit (sem dependências externas)
         st.markdown("**📊 Resumo de Desempenho Financeiro**")
         df_chart = pd.DataFrame({
-            "Valores (R$)": [faturamento, custos, lucro]
+            "Valores (R$)": [faturamento, custos, max(0, lucro)]
         }, index=["Faturamento", "Custos", "Lucro"])
         
         st.bar_chart(df_chart)
