@@ -878,49 +878,57 @@ elif menu == "Relatórios":
         "📦 Produtos"
     ])
 
-    # =========================
-    # 📊 VISÃO GERAL
-    # =========================
-    with tab1:
-        # Cálculo de Vendas Base + Aditivos
-        vendas_base = pd.to_numeric(df_eventos_raw["venda"], errors="coerce").fillna(0).sum() if not df_eventos_raw.empty else 0.0
-        
-        # Aditivos vinculados aos eventos filtrados
-        if not df_eventos_raw.empty and not df_aditivos_raw.empty and "evento_id" in df_aditivos_raw.columns:
-            aditivos_filtrados = df_aditivos_raw[df_aditivos_raw["evento_id"].isin(df_eventos_raw["id"])]
-            tot_aditivos = pd.to_numeric(aditivos_filtrados["valor_cliente"], errors="coerce").fillna(0).sum()
-        else:
-            tot_aditivos = pd.to_numeric(df_aditivos_raw["valor_cliente"], errors="coerce").fillna(0).sum() if not df_aditivos_raw.empty else 0.0
-
-        total_faturamento = vendas_base + tot_aditivos
-
-        # Custo real (Soma das saídas do caixa)
-        total_custo = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum() if not df_fin.empty else 0.0
-        
-        total_lucro = total_faturamento - total_custo
-        margem = (total_lucro / total_faturamento * 100) if total_faturamento > 0 else 0.0
-
-        # Reserva de Caixa PJ (30% a 35% do lucro)
-        reserva_caixa_30 = max(0, total_lucro) * 0.30
-        reserva_caixa_35 = max(0, total_lucro) * 0.35
-
-        col1, col2, col3, col4, col5 = st.columns(5)
-
-        col1.metric("💰 Faturamento", f"R$ {total_faturamento:,.2f}")
-        col2.metric("💸 Custos", f"R$ {total_custo:,.2f}")
-        col3.metric("📈 Lucro", f"R$ {total_lucro:,.2f}")
-        col4.metric("📊 Margem", f"{margem:.1f}%")
-        col5.metric(
-            "🛡️ Reserva Caixa PJ",
-            f"R$ {reserva_caixa_30:,.2f}",
-            help=f"Reserva sobre o lucro (30% a 35%): R$ {reserva_caixa_30:,.2f} a R$ {reserva_caixa_35:,.2f}"
-        )
-
-        st.divider()
-
-        if not df_eventos_raw.empty:
-            vendas_dia = df_eventos_raw.groupby(df_eventos_raw["data"].dt.date)["venda"].sum()
-            st.line_chart(vendas_dia)
+    # =========================================================
+    # 📊 DASHBOARD GERAL / VISÃO GERAL
+    # =========================================================
+    
+    # 1. Recuperar o intervalo de datas do filtro do Streamlit
+    # (Certifique-se de usar as variáveis dt_inicio e dt_fim que vêm do st.date_input)
+    dt_inicio_str = str(data_inicial)
+    dt_fim_str = str(data_final)
+    
+    # 2. Consultar o banco de dados Financeiro filtrado por data
+    res_fin = (
+        supabase.table("Financeiro")
+        .select("*")
+        .gte("data", dt_inicio_str)
+        .lte("data", dt_fim_str)
+        .execute()
+    )
+    df_dashboard = pd.DataFrame(res_fin.data or [])
+    
+    if df_dashboard.empty:
+        faturamento = 0.0
+        custos = 0.0
+    else:
+        df_dashboard["valor"] = pd.to_numeric(
+            df_dashboard["valor"], errors="coerce"
+        ).fillna(0)
+    
+        # Entradas reais no período
+        faturamento = df_dashboard[df_dashboard["tipo"] == "Entrada"][
+            "valor"
+        ].sum()
+    
+        # Saídas/Custos reais no período
+        custos = df_dashboard[df_dashboard["tipo"] == "Saída"]["valor"].sum()
+    
+    # 3. Recalcular Lucro, Margem e Reserva
+    lucro = faturamento - custos
+    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
+    reserva_pj = max(0.0, lucro) * 0.35
+    
+    # 4. Exibir as métricas na tela
+    c_fat, c_cust, c_lucro, c_marg, c_res = st.columns(5)
+    c_fat.metric("💰 Faturamento", f"R$ {faturamento:,.2f}")
+    c_cust.metric("💸 Custos", f"R$ {custos:,.2f}")
+    c_lucro.metric("📈 Lucro", f"R$ {lucro:,.2f}")
+    c_marg.metric("📊 Margem", f"{margem:.1f}%")
+    c_res.metric(
+        "🛡️ Reserva Caixa PJ",
+        f"R$ {reserva_pj:,.2f}",
+        help="35% sobre o lucro do período selecionado",
+    )
 
     # =========================
     # 💰 FINANCEIRO (Relatórios)
@@ -3917,88 +3925,90 @@ elif menu == "Financeiro":
     ])
 
     # =========================================================
-    # 📊 TAB 1: RESUMO (FINANCEIRO)
+    # 📊 TAB 1: RESUMO (FINANCEIRO CORRIGIDO)
     # =========================================================
     with tab1:
-        response = supabase.table("Financeiro").select("*").execute()
-        df = pd.DataFrame(response.data or [])
+        # 1. Buscar transações manuais da tabela Financeiro
+        response_fin = supabase.table("Financeiro").select("*").execute()
+        df_fin = pd.DataFrame(response_fin.data or [])
 
-        if df.empty:
-            entrada = 0.0
-            saida = 0.0
-        else:
-            df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
-            entrada = df[df["tipo"] == "Entrada"]["valor"].sum()
-            saida = df[df["tipo"] == "Saída"]["valor"].sum()
+        # 2. Buscar eventos para consolidar os custos diretos dos contratos
+        response_eventos = (
+            supabase.table("eventos")
+            .select("custo, venda, status")
+            .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
+            .execute()
+        )
+        df_eventos = pd.DataFrame(response_eventos.data or [])
 
+        # --- CÁLCULO DE ENTRADAS ---
+        entrada_manual = 0.0
+        saida_manual = 0.0
+
+        if not df_fin.empty:
+            df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+            
+            # Entradas registradas no fluxo financeiro
+            entrada_manual = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum()
+            
+            # Saídas manuais gerais (Filtrando para ignorar registros duplicados de cachê)
+            if "categoria" in df_fin.columns:
+                df_saidas_validas = df_fin[
+                    (df_fin["tipo"] == "Saída") & 
+                    (~df_fin["categoria"].str.lower().str.contains("cachê|cache|equipe", na=False))
+                ]
+                saida_manual = df_saidas_validas["valor"].sum()
+            else:
+                saida_manual = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum()
+
+        # --- CÁLCULO DE CUSTOS DOS EVENTOS ---
+        custo_eventos_total = 0.0
+        if not df_eventos.empty:
+            df_eventos["custo"] = pd.to_numeric(df_eventos["custo"], errors="coerce").fillna(0)
+            custo_eventos_total = df_eventos["custo"].sum()
+
+        # Consolidado Final
+        entrada = entrada_manual
+        saida = custo_eventos_total + saida_manual
         saldo = entrada - saida
+        lucro_real = max(0.0, saldo)
+        
+        # Reserva PJ de 35% calculada sobre o Lucro Real Consolidado
+        caixa_35_total = lucro_real * 0.35
 
-        caixa_35_total = 0.0
-        try:
-            vendas_data = (
-                supabase.table("vendas").select("lucro").execute().data or []
-            )
-            if vendas_data:
-                df_vendas_temp = pd.DataFrame(vendas_data)
-                lucro_acumulado = (
-                    pd.to_numeric(df_vendas_temp["lucro"], errors="coerce")
-                    .fillna(0)
-                    .sum()
-                )
-                caixa_35_total = max(0, lucro_acumulado) * 0.35
-        except Exception:
-            pass
-
+        # --- CARDS DE MÉTRICAS ---
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("💰 Entradas Totais", f"R$ {entrada:,.2f}")
-        col2.metric("💸 Saídas Totais", f"R$ {saida:,.2f}")
+        col2.metric("💸 Saídas / Custos Totais", f"R$ {saida:,.2f}")
         col3.metric("🏦 Saldo de Caixa", f"R$ {saldo:,.2f}")
-        col4.metric("📈 Resultado", f"R$ {saldo:,.2f}")
+        col4.metric("📈 Resultado / Lucro", f"R$ {lucro_real:,.2f}")
         col5.metric(
             "🛡️ Reserva Caixa PJ (35%)",
             f"R$ {caixa_35_total:,.2f}",
-            help="35% fixos sobre o lucro total acumulado",
+            help="35% calculados sobre o Lucro Real (Entradas - Custos Totais dos Eventos e Despesas Gerais).",
         )
 
         st.divider()
 
+        # --- CONTAS A RECEBER (EVENTOS) ---
         try:
-            eventos_aprovados = pd.DataFrame(
-                supabase.table("eventos")
-                .select("*")
-                .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
-                .execute()
-                .data
-                or []
-            )
-
             recebimentos = pd.DataFrame(
-                supabase.table("recebimentos_eventos")
-                .select("*")
-                .execute()
-                .data
-                or []
+                supabase.table("recebimentos_eventos").select("*").execute().data or []
             )
 
             total_contratado = 0.0
             total_recebido = 0.0
             total_a_receber = 0.0
 
-            if not eventos_aprovados.empty:
-                eventos_aprovados["venda"] = pd.to_numeric(
-                    eventos_aprovados["venda"], errors="coerce"
-                ).fillna(0)
-                total_contratado = eventos_aprovados["venda"].sum()
+            if not df_eventos.empty:
+                df_eventos["venda"] = pd.to_numeric(df_eventos["venda"], errors="coerce").fillna(0)
+                total_contratado = df_eventos["venda"].sum()
 
                 if not recebimentos.empty:
-                    recebimentos["valor"] = pd.to_numeric(
-                        recebimentos["valor"], errors="coerce"
-                    ).fillna(0)
-                    total_recebido = recebimentos[
-                        recebimentos["evento_id"].isin(eventos_aprovados["id"])
-                    ]["valor"].sum()
+                    recebimentos["valor"] = pd.to_numeric(recebimentos["valor"], errors="coerce").fillna(0)
+                    total_recebido = recebimentos["valor"].sum()
 
-                total_a_receber = max(0, total_contratado - total_recebido)
+                total_a_receber = max(0.0, total_contratado - total_recebido)
 
             st.subheader("📋 Contas a receber (Eventos)")
             c1, c2, c3 = st.columns(3)
@@ -4011,14 +4021,15 @@ elif menu == "Financeiro":
 
         st.divider()
 
-        if not df.empty:
-            df["data"] = pd.to_datetime(df["data"], errors="coerce")
-            df = df.dropna(subset=["data"])
+        # --- GRÁFICOS DE ACOMPANHAMENTO ---
+        if not df_fin.empty:
+            df_fin["data"] = pd.to_datetime(df_fin["data"], errors="coerce")
+            df_fin = df_fin.dropna(subset=["data"])
 
-            if not df.empty:
-                df["mes"] = df["data"].dt.to_period("M")
+            if not df_fin.empty:
+                df_fin["mes"] = df_fin["data"].dt.to_period("M")
                 mensal = (
-                    df.groupby(["mes", "tipo"])["valor"]
+                    df_fin.groupby(["mes", "tipo"])["valor"]
                     .sum()
                     .unstack()
                     .fillna(0)
@@ -4028,9 +4039,9 @@ elif menu == "Financeiro":
                 st.bar_chart(mensal)
 
                 st.subheader("💸 Gastos por categoria")
-                if "categoria" in df.columns:
+                if "categoria" in df_fin.columns:
                     gastos = (
-                        df[df["tipo"] == "Saída"]
+                        df_fin[df_fin["tipo"] == "Saída"]
                         .groupby("categoria")["valor"]
                         .sum()
                         .sort_values(ascending=False)
@@ -4039,33 +4050,28 @@ elif menu == "Financeiro":
                         st.dataframe(gastos, use_container_width=True)
 
                 st.subheader("💳 Entradas por categoria")
-                if "categoria" in df.columns:
-                    formas = (
-                        df[df["tipo"] == "Entrada"]
+                if "categoria" in df_fin.columns:
+                    entradas_cat = (
+                        df_fin[df_fin["tipo"] == "Entrada"]
                         .groupby("categoria")["valor"]
                         .sum()
                         .sort_values(ascending=False)
                     )
-                    if not formas.empty:
-                        st.dataframe(formas, use_container_width=True)
+                    if not entradas_cat.empty:
+                        st.dataframe(entradas_cat, use_container_width=True)
 
-                df_ordenado = df.sort_values("data").copy()
+                df_ordenado = df_fin.sort_values("data").copy()
                 df_ordenado["fluxo"] = df_ordenado.apply(
-                    lambda x: (
-                        x["valor"] if x["tipo"] == "Entrada" else -x["valor"]
-                    ),
+                    lambda x: (x["valor"] if x["tipo"] == "Entrada" else -x["valor"]),
                     axis=1,
                 )
                 df_ordenado["saldo_acumulado"] = df_ordenado["fluxo"].cumsum()
 
                 st.subheader("🏦 Evolução do caixa")
-                st.line_chart(
-                    df_ordenado.set_index("data")["saldo_acumulado"]
-                )
+                st.line_chart(df_ordenado.set_index("data")["saldo_acumulado"])
 
             if saida > entrada:
-                st.error("⚠️ Atenção: Suas saídas superaram as entradas no período acumulado!")
-
+                st.error("⚠️ Atenção: As saídas e custos totais superaram as entradas no período!")
     # =========================================================
     # 🔔 TAB 2: PENDÊNCIAS / A RECEBER (EVENTOS)
     # =========================================================
