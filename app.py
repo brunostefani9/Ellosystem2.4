@@ -951,12 +951,28 @@ elif menu == "Relatórios":
     # 💰 FINANCEIRO (Relatórios)
     # =========================
     with tab2:
-        entradas = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum() if not df_fin.empty else 0
-        saidas = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum() if not df_fin.empty else 0
-        saldo = entradas - saidas
+        # Entradas do fluxo financeiro
+        entradas = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum() if not df_fin.empty else 0.0
 
-        reserva_caixa_30_fin = max(0, total_lucro) * 0.30
-        reserva_caixa_35_fin = max(0, total_lucro) * 0.35
+        # Saídas manuais (filtrando para não duplicar registros de cachê/equipe)
+        if not df_fin.empty and "categoria" in df_fin.columns:
+            df_saidas_validas = df_fin[
+                (df_fin["tipo"] == "Saída") & 
+                (~df_fin["categoria"].str.lower().str.contains("cachê|cache|equipe", na=False))
+            ]
+            saidas_manuais = df_saidas_validas["valor"].sum()
+        else:
+            saidas_manuais = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum() if not df_fin.empty else 0.0
+
+        # Saídas totais = saídas manuais + custo total dos eventos
+        custo_ev = custo_eventos if "custo_eventos" in locals() else 0.0
+        saidas = saidas_manuais + custo_ev
+
+        saldo = entradas - saidas
+        total_lucro = saldo  # Define o lucro real para o cálculo da reserva
+
+        reserva_caixa_30_fin = max(0.0, total_lucro) * 0.30
+        reserva_caixa_35_fin = max(0.0, total_lucro) * 0.35
 
         col1, col2, col3, col4 = st.columns(4)
 
@@ -974,7 +990,6 @@ elif menu == "Relatórios":
         if not df_fin.empty:
             fluxo = df_fin.groupby(["data", "tipo"])["valor"].sum().unstack().fillna(0)
             st.line_chart(fluxo)
-
     # =========================
     # 📈 VENDAS
     # =========================
