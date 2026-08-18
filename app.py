@@ -882,53 +882,70 @@ elif menu == "Relatórios":
     # 📊 DASHBOARD GERAL / VISÃO GERAL
     # =========================================================
     
-    # 1. Recuperar o intervalo de datas do filtro do Streamlit
-    # (Certifique-se de usar as variáveis dt_inicio e dt_fim que vêm do st.date_input)
+    # 1. Garantir que as variáveis de data estejam declaradas
+    if "data_inicial" not in locals() and "data_inicial" not in globals():
+        data_inicial = date(date.today().year, 1, 1)
+    
+    if "data_final" not in locals() and "data_final" not in globals():
+        data_final = date.today()
+    
     dt_inicio_str = str(data_inicial)
     dt_fim_str = str(data_final)
     
-    # 2. Consultar o banco de dados Financeiro filtrado por data
-    res_fin = (
-        supabase.table("Financeiro")
-        .select("*")
-        .gte("data", dt_inicio_str)
-        .lte("data", dt_fim_str)
+    # 2. Buscar Entradas e Despesas Manuais no Financeiro
+    res_fin = supabase.table("Financeiro").select("*").execute()
+    df_fin = pd.DataFrame(res_fin.data or [])
+    
+    # 3. Buscar Custos dos Eventos
+    res_eventos = (
+        supabase.table("eventos")
+        .select("custo, venda, status")
+        .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
         .execute()
     )
-    df_dashboard = pd.DataFrame(res_fin.data or [])
+    df_eventos = pd.DataFrame(res_eventos.data or [])
     
-    if df_dashboard.empty:
-        faturamento = 0.0
-        custos = 0.0
-    else:
-        df_dashboard["valor"] = pd.to_numeric(
-            df_dashboard["valor"], errors="coerce"
+    faturamento = 0.0
+    saida_manual = 0.0
+    custo_eventos = 0.0
+    
+    if not df_fin.empty:
+        df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+        faturamento = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum()
+    
+        # Ignora lançamentos de cachê cadastrados na Financeiro para evitar duplicidade
+        if "categoria" in df_fin.columns:
+            df_saidas = df_fin[
+                (df_fin["tipo"] == "Saída")
+                & (
+                    ~df_fin["categoria"]
+                    .str.lower()
+                    .str.contains("cachê|cache|equipe", na=False)
+                )
+            ]
+            saida_manual = df_saidas["valor"].sum()
+        else:
+            saida_manual = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum()
+    
+    if not df_eventos.empty:
+        df_eventos["custo"] = pd.to_numeric(
+            df_eventos["custo"], errors="coerce"
         ).fillna(0)
+        custo_eventos = df_eventos["custo"].sum()
     
-        # Entradas reais no período
-        faturamento = df_dashboard[df_dashboard["tipo"] == "Entrada"][
-            "valor"
-        ].sum()
-    
-        # Saídas/Custos reais no período
-        custos = df_dashboard[df_dashboard["tipo"] == "Saída"]["valor"].sum()
-    
-    # 3. Recalcular Lucro, Margem e Reserva
-    lucro = faturamento - custos
+    # Consolidado de Custos e Resultados
+    custos_totais = custo_eventos + saida_manual
+    lucro = faturamento - custos_totais
     margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
     reserva_pj = max(0.0, lucro) * 0.35
     
-    # 4. Exibir as métricas na tela
+    # Exibição dos Cards
     c_fat, c_cust, c_lucro, c_marg, c_res = st.columns(5)
     c_fat.metric("💰 Faturamento", f"R$ {faturamento:,.2f}")
-    c_cust.metric("💸 Custos", f"R$ {custos:,.2f}")
+    c_cust.metric("💸 Custos", f"R$ {custos_totais:,.2f}")
     c_lucro.metric("📈 Lucro", f"R$ {lucro:,.2f}")
     c_marg.metric("📊 Margem", f"{margem:.1f}%")
-    c_res.metric(
-        "🛡️ Reserva Caixa PJ",
-        f"R$ {reserva_pj:,.2f}",
-        help="35% sobre o lucro do período selecionado",
-    )
+    c_res.metric("🛡️ Reserva Caixa PJ", f"R$ {reserva_pj:,.2f}")
 
     # =========================
     # 💰 FINANCEIRO (Relatórios)
