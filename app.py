@@ -819,28 +819,19 @@ elif menu == "Relatórios":
     # =========================================================
     # CARREGAMENTO E CÁLCULOS FINANCEIROS
     # =========================================================
+    res_fin = supabase.table("financeiro").select("*").execute()
+    df_fin = pd.DataFrame(res_fin.data or [])
+    
     faturamento = 7153.81
     custos = 5455.23
     
-    try:
-        res_fin = supabase.table("Financeiro").select("*").execute()
-        df_fin = pd.DataFrame(res_fin.data or [])
-    except Exception:
-        try:
-            res_fin = supabase.table("financeiro").select("*").execute()
-            df_fin = pd.DataFrame(res_fin.data or [])
-        except Exception:
-            df_fin = pd.DataFrame()
-    
-    if not df_fin.empty and "valor" in df_fin.columns:
-        df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
-        if "tipo" in df_fin.columns:
-            fat_calc = df_fin[df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita")]["valor"].sum()
-            cust_calc = df_fin[df_fin["tipo"].astype(str).str.lower().str.contains("saída|saida|custo|despesa|cachê|cache")]["valor"].sum()
-            if fat_calc > 0:
-                faturamento = float(fat_calc)
-            if cust_calc > 0:
-                custos = float(cust_calc)
+    if not df_fin.empty:
+        if "tipo" in df_fin.columns and "valor" in df_fin.columns:
+            df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+            fat_calc = df_fin[df_fin["tipo"] == "Entrada"]["valor"].sum()
+            cust_calc = df_fin[df_fin["tipo"] == "Saída"]["valor"].sum()
+            if fat_calc > 0: faturamento = float(fat_calc)
+            if cust_calc > 0: custos = float(cust_calc)
     
     lucro = faturamento - custos
     margem = (lucro / faturamento * 100) if faturamento > 0 else 0
@@ -870,44 +861,13 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        # Garantia de carregamento da biblioteca de gráficos
-        import plotly.express as px
-    
-        col_g1, col_g2 = st.columns(2)
-    
-        df_grafico_fin = pd.DataFrame({
-            "Categoria": ["Faturamento", "Custos", "Lucro"],
-            "Valor (R$)": [faturamento, custos, lucro]
-        })
-    
-        with col_g1:
-            st.markdown("**📊 Resumo de Desempenho Financeiro**")
-            fig_bar = px.bar(
-                df_grafico_fin,
-                x="Categoria",
-                y="Valor (R$)",
-                text_auto=".2f",
-                color="Categoria",
-                color_discrete_sequence=["#2ecc71", "#e74c3c", "#3498db"]
-            )
-            fig_bar.update_layout(showlegend=False, height=350)
-            st.plotly_chart(fig_bar, use_container_width=True)
-    
-        with col_g2:
-            st.markdown("**🍕 Composição da Receita**")
-            df_pie = pd.DataFrame({
-                "Tipo": ["Custos Operacionais", "Lucro Líquido"],
-                "Valor": [custos, max(0, lucro)]
-            })
-            fig_pie = px.pie(
-                df_pie,
-                names="Tipo",
-                values="Valor",
-                hole=0.4,
-                color_discrete_sequence=["#e74c3c", "#2ecc71"]
-            )
-            fig_pie.update_layout(height=350)
-            st.plotly_chart(fig_pie, use_container_width=True)
+        # Gráfico simples usando componentes nativos do Streamlit (sem dependências externas)
+        st.markdown("**📊 Resumo de Desempenho Financeiro**")
+        df_chart = pd.DataFrame({
+            "Valores (R$)": [faturamento, custos, lucro]
+        }, index=["Faturamento", "Custos", "Lucro"])
+        
+        st.bar_chart(df_chart)
     
     # ---------------------------------------------------------
     # TAB 2: FINANCEIRO
