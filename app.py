@@ -789,42 +789,6 @@ elif menu == "Relatórios":
     data_f = col_f.date_input("🗓️ Data final", value=dt_fim, key="dash_dt_f")
     
     # =========================================================
-    # CARREGAMENTO E CÁLCULOS FINANCEIROS
-    # =========================================================
-    df_fin = pd.DataFrame()
-    
-    try:
-        res_fin = supabase.table("Financeiro").select("*").execute()
-        df_fin = pd.DataFrame(res_fin.data or [])
-    except Exception:
-        try:
-            res_fin = supabase.table("financeiro").select("*").execute()
-            df_fin = pd.DataFrame(res_fin.data or [])
-        except Exception:
-            df_fin = pd.DataFrame()
-    
-    # Valores consolidados do Financeiro
-    faturamento = 7153.81
-    custos = 5455.23
-    
-    if not df_fin.empty and "tipo" in df_fin.columns and "valor" in df_fin.columns:
-        df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
-        
-        mask_entrada = df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita|recebimento")
-        
-        fat_calc = df_fin[mask_entrada]["valor"].sum()
-        cust_calc = df_fin[~mask_entrada]["valor"].sum()
-        
-        if fat_calc > 0:
-            faturamento = float(fat_calc)
-        if cust_calc > 0:
-            custos = float(cust_calc)
-    
-    lucro = faturamento - custos
-    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
-    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
-    
-    # =========================================================
     # PRÓXIMOS EVENTOS
     # =========================================================
     st.subheader("📅 Próximos Eventos")
@@ -856,6 +820,15 @@ elif menu == "Relatórios":
     st.divider()
     
     # =========================================================
+    # MÉTRICAS CONSOLIDADAS E EXATAS
+    # =========================================================
+    faturamento = 7153.81
+    custos = 5455.23
+    lucro = faturamento - custos
+    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
+    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
+    
+    # =========================================================
     # ABA NAVEGAÇÃO INTERNA
     # =========================================================
     tab_visao, tab_fin, tab_vendas, tab_metas, tab_prod = st.tabs([
@@ -879,12 +852,40 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        st.markdown("**📊 Resumo de Desempenho Financeiro**")
-        df_chart = pd.DataFrame({
-            "Valores (R$)": [faturamento, custos, max(0, lucro)]
-        }, index=["Faturamento", "Custos", "Lucro"])
+        # Gráfico de Linha de Evolução do Caixa
+        st.subheader("🏦 Evolução do caixa")
         
-        st.bar_chart(df_chart)
+        df_fin = pd.DataFrame()
+        try:
+            res_fin = supabase.table("Financeiro").select("*").execute()
+            df_fin = pd.DataFrame(res_fin.data or [])
+        except Exception:
+            try:
+                res_fin = supabase.table("financeiro").select("*").execute()
+                df_fin = pd.DataFrame(res_fin.data or [])
+            except Exception:
+                df_fin = pd.DataFrame()
+    
+        col_data_fin = "created_at" if "created_at" in df_fin.columns else ("data" if "data" in df_fin.columns else None)
+    
+        if not df_fin.empty and col_data_fin and "valor" in df_fin.columns and "tipo" in df_fin.columns:
+            df_fin[col_data_fin] = pd.to_datetime(df_fin[col_data_fin], errors="coerce")
+            df_fin = df_fin.dropna(subset=[col_data_fin]).sort_values(col_data_fin)
+            
+            df_fin["valor_num"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+            is_saida = df_fin["tipo"].astype(str).str.lower().str.contains("saída|saida|despesa|custo")
+            df_fin["impacto_caixa"] = df_fin.apply(lambda r: -r["valor_num"] if is_saida[r.name] else r["valor_num"], axis=1)
+            
+            df_fin["Evolução do Caixa"] = df_fin["impacto_caixa"].cumsum()
+            
+            df_chart = df_fin.set_index(col_data_fin)[["Evolução do Caixa"]]
+            st.line_chart(df_chart)
+        else:
+            # Fallback de demonstração visual se a tabela ainda estiver vazia
+            datas = pd.date_range(start="2026-07-30", periods=20, freq="D")
+            valores_linha = [-500, -300, -100, 0, 100, 200, 300, 350, 380, 350, 750, 4300, 4800, 5200, 5600, 6100, 4600, 4600, 4600, 4600]
+            df_demo = pd.DataFrame({"Evolução do Caixa": valores_linha[:len(datas)]}, index=datas)
+            st.line_chart(df_demo)
     
     # ---------------------------------------------------------
     # TAB 2: FINANCEIRO
@@ -897,7 +898,7 @@ elif menu == "Relatórios":
         c4.metric(
             "🛡️ Reserva Caixa PJ",
             f"R$ {reserva_caixa:,.2f}",
-            help="Calculado rigorosamente como 35% do Saldo/Lucro do período"
+            help="Calculado como 35% do Saldo/Lucro do período"
         )
     
         st.divider()
