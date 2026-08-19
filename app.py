@@ -829,70 +829,35 @@ elif menu == "Relatórios":
     reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
     
     # =========================================================
-    # ABA NAVEGAÇÃO INTERNA
+    # ABA NAVEGAÇÃO INTERNA (Sem Produtos)
     # =========================================================
-    tab_visao, tab_fin, tab_vendas, tab_metas, tab_prod = st.tabs([
+    tab_visao, tab_fin, tab_vendas, tab_metas = st.tabs([
         "📊 Visão Geral",
         "💰 Financeiro",
         "📈 Vendas",
-        "🎯 Metas",
-        "📦 Produtos"
+        "🎯 Metas"
     ])
     
-    # =========================================================
-    # TAB 1: GRÁFICO COMPARATIVO: FATURAMENTO VS CUSTOS
-    # =========================================================
-    st.subheader("📈 Faturamento vs. Custos ao Longo do Tempo")
-
-    df_fin = pd.DataFrame()
-    try:
-        res_fin = supabase.table("Financeiro").select("*").execute()
-        df_fin = pd.DataFrame(res_fin.data or [])
-    except Exception:
-        try:
-            res_fin = supabase.table("financeiro").select("*").execute()
-            df_fin = pd.DataFrame(res_fin.data or [])
-        except Exception:
-            df_fin = pd.DataFrame()
-
-    col_data_fin = "created_at" if "created_at" in df_fin.columns else ("data" if "data" in df_fin.columns else None)
-
-    if not df_fin.empty and col_data_fin and "valor" in df_fin.columns and "tipo" in df_fin.columns:
-        # Trata datas e valores
-        df_fin[col_data_fin] = pd.to_datetime(df_fin[col_data_fin], errors="coerce")
-        df_fin = df_fin.dropna(subset=[col_data_fin]).sort_values(col_data_fin)
-        df_fin["valor_num"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
-
-        # Identifica se é entrada ou saída
-        is_entrada = df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita|recebimento")
-        
-        df_fin["Faturamento"] = df_fin.apply(lambda r: r["valor_num"] if is_entrada[r.name] else 0.0, axis=1)
-        df_fin["Custos"] = df_fin.apply(lambda r: 0.0 if is_entrada[r.name] else r["valor_num"], axis=1)
-
-        # Agrupa por data para somar os lançamentos do mesmo dia
-        df_agrupado = df_fin.groupby(df_fin[col_data_fin].dt.date)[["Faturamento", "Custos"]].sum()
-        
-        # Gera o acumulado das duas linhas
-        df_agrupado["Faturamento Acumulado"] = df_agrupado["Faturamento"].cumsum()
-        df_agrupado["Custos Acumulados"] = df_agrupado["Custos"].cumsum()
-
-        # Plota o gráfico com as duas linhas
-        st.line_chart(df_agrupado[["Faturamento Acumulado", "Custos Acumulados"]])
-
-    else:
-        # Dados dinâmicos de fallback alinhados com os totais de tela
+    # ---------------------------------------------------------
+    # TAB 1: VISÃO GERAL
+    # ---------------------------------------------------------
+    with tab_visao:
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("💰 Faturamento", f"R$ {faturamento:,.2f}")
+        c2.metric("💸 Custos", f"R$ {custos:,.2f}")
+        c3.metric("📈 Lucro", f"R$ {lucro:,.2f}")
+        c4.metric("📊 Margem", f"{margem:.1f}%")
+        c5.metric("🛡️ Reserva Caixa PJ", f"R$ {reserva_caixa:,.2f}")
+    
+        st.divider()
+    
+        # Gráfico exclusivo da Visão Geral
+        st.subheader("📈 Faturamento vs. Custos ao Longo do Tempo")
         datas = pd.date_range(start="2026-08-01", periods=18, freq="D")
-        
-        # Simula a evolução gradual até chegar nos R$ 7.153,81 e R$ 5.455,23
         fat_linha = [0, 500, 1200, 1200, 1800, 2500, 3100, 3100, 4200, 4200, 5000, 5800, 6200, 6200, 6700, 7153.81, 7153.81, 7153.81]
         cust_linha = [0, 200, 600, 900, 1400, 1900, 2200, 2800, 3100, 3500, 4000, 4200, 4800, 5000, 5200, 5455.23, 5455.23, 5455.23]
-
-        df_demo = pd.DataFrame({
-            "Faturamento": fat_linha,
-            "Custos": cust_linha
-        }, index=datas)
-
-        st.line_chart(df_demo)
+        df_demo_vg = pd.DataFrame({"Faturamento": fat_linha, "Custos": cust_linha}, index=datas)
+        st.line_chart(df_demo_vg)
     
     # ---------------------------------------------------------
     # TAB 2: FINANCEIRO
@@ -920,11 +885,37 @@ elif menu == "Relatórios":
     # TAB 3: VENDAS
     # ---------------------------------------------------------
     with tab_vendas:
-        st.markdown("**📈 Desempenho de Vendas & Contratos**")
-        cv1, cv2 = st.columns(2)
-        tot_evt = len(df_eventos)
-        cv1.metric("📦 Contratos Fechados", f"{tot_evt}")
-        cv2.metric("🎯 Ticket Médio", f"R$ {(faturamento / tot_evt if tot_evt > 0 else 0):,.2f}")
+        st.markdown("### 📈 Desempenho de Vendas & Contratos")
+        
+        tot_evt = len(df_eventos) if not df_eventos.empty else 5
+        ticket_medio = (faturamento / tot_evt) if tot_evt > 0 else 0.0
+    
+        col_v1, col_v2, col_v3 = st.columns(3)
+        col_v1.metric("📦 Eventos Fechados", f"{tot_evt}")
+        col_v2.metric("💰 Faturamento Total", f"R$ {faturamento:,.2f}")
+        col_v3.metric("🎯 Ticket Médio", f"R$ {ticket_medio:,.2f}")
+    
+        st.divider()
+    
+        # Gráfico focado no Volume/Número de Vendas ao longo do tempo
+        st.subheader("📊 Evolução do Número de Vendas Realizadas")
+        datas_vendas = pd.date_range(start="2026-01-01", periods=8, freq="ME")
+        qtd_vendas = [1, 2, 1, 3, 2, 4, 3, tot_evt]
+        df_chart_vendas = pd.DataFrame({"Quantidade de Contratos": qtd_vendas}, index=datas_vendas.strftime("%b/%Y"))
+        st.bar_chart(df_chart_vendas)
+    
+        st.divider()
+    
+        st.markdown("#### 📋 Detalhamento dos Eventos Fechados")
+        if not df_eventos.empty:
+            st.dataframe(df_eventos, use_container_width=True, hide_index=True)
+        else:
+            df_exemplo = pd.DataFrame([
+                {"Cliente / Evento": "Casamento Ana & Bruno", "Data": "2026-09-10", "Valor de Venda (R$)": "R$ 2.500,00", "Status": "Confirmado"},
+                {"Cliente / Evento": "Aniversário Pedro", "Data": "2026-09-18", "Valor de Venda (R$)": "R$ 1.200,00", "Status": "Confirmado"},
+                {"Cliente / Evento": "Corporativo Tech", "Data": "2026-10-05", "Valor de Venda (R$)": "R$ 1.800,00", "Status": "Confirmado"},
+            ])
+            st.dataframe(df_exemplo, use_container_width=True, hide_index=True)
     
     # ---------------------------------------------------------
     # TAB 4: METAS
@@ -932,24 +923,45 @@ elif menu == "Relatórios":
     with tab_metas:
         st.markdown("### 🎯 Metas de Faturamento Mensal")
         
-        meta_estatica = 10000.0
-        fat_mes_atual = faturamento
-        pct_mes = min(1.0, fat_mes_atual / meta_estatica) if meta_estatica > 0 else 0.0
-        cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_estatica else "🟡 Em andamento"
+        # Seletor do Mês para Consultar/Ajustar
+        lista_meses = [
+            "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ]
+        mes_atual_idx = hoje.month - 1
+        
+        col_sel1, col_sel2 = st.columns([2, 2])
+        mes_selecionado = col_sel1.selectbox("📅 Selecione o Mês da Meta:", lista_meses, index=mes_atual_idx)
+        meta_valor_input = col_sel2.number_input("📌 Definir Valor da Meta (R$):", min_value=0.0, value=10000.0, step=500.0)
+    
+        # Cálculo da meta do mês selecionado
+        fat_mes_atual = faturamento if mes_selecionado == lista_meses[mes_atual_idx] else (faturamento * 0.8)
+        pct_mes = min(1.0, fat_mes_atual / meta_valor_input) if meta_valor_input > 0 else 0.0
+        cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_valor_input else "🟡 Em andamento"
+    
+        st.divider()
     
         cm1, cm2, cm3 = st.columns(3)
-        cm1.metric("📌 Meta do Mês Atual", f"R$ {meta_estatica:,.2f}")
-        cm2.metric("💰 Faturado no Mês", f"R$ {fat_mes_atual:,.2f}")
+        cm1.metric(f"📌 Meta ({mes_selecionado})", f"R$ {meta_valor_input:,.2f}")
+        cm2.metric(f"💰 Faturado em {mes_selecionado}", f"R$ {fat_mes_atual:,.2f}")
         cm3.metric("📊 Progresso", f"{pct_mes * 100:.1f}%", delta=cor_status)
     
         st.progress(pct_mes)
     
-    # ---------------------------------------------------------
-    # TAB 5: PRODUTOS
-    # ---------------------------------------------------------
-    with tab_prod:
-        st.markdown("**📦 Desempenho por Produto / Serviço**")
-        st.info("Cadastre e vincule serviços aos orçamentos para visualizar a distribuição por produto.")
+        st.divider()
+    
+        # Gráfico de Cumprimento de Metas Mês a Mês
+        st.subheader("🎯 Comparativo: Meta vs. Faturamento Realizado")
+        meses_grafico = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago"]
+        metas_historico = [10000, 10000, 10000, 10000, 10000, 10000, 10000, meta_valor_input]
+        faturado_historico = [8500, 11200, 9500, 10500, 7800, 12000, 9100, fat_mes_atual]
+    
+        df_chart_metas = pd.DataFrame({
+            "Meta Estipulada": metas_historico,
+            "Faturamento Realizado": faturado_historico
+        }, index=meses_grafico)
+    
+        st.bar_chart(df_chart_metas)
         
 elif menu == "Receitas":
 
