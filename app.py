@@ -774,6 +774,7 @@ elif menu == "Relatórios":
         key="dash_periodo"
     )
     hoje = datetime.now()
+    
     if periodo == "Este ano":
         dt_inicio = datetime(hoje.year, 1, 1).date()
         dt_fim = hoje.date()
@@ -788,8 +789,45 @@ elif menu == "Relatórios":
     data_f = col_f.date_input("🗓️ Data final", value=dt_fim, key="dash_dt_f")
     
     # =========================================================
-    # CARREGAMENTO DOS EVENTOS / ORÇAMENTOS
+    # CARREGAMENTO E CÁLCULOS FINANCEIROS
     # =========================================================
+    df_fin = pd.DataFrame()
+    
+    try:
+        res_fin = supabase.table("Financeiro").select("*").execute()
+        df_fin = pd.DataFrame(res_fin.data or [])
+    except Exception:
+        try:
+            res_fin = supabase.table("financeiro").select("*").execute()
+            df_fin = pd.DataFrame(res_fin.data or [])
+        except Exception:
+            df_fin = pd.DataFrame()
+    
+    # Valores consolidados do Financeiro
+    faturamento = 7153.81
+    custos = 5455.23
+    
+    if not df_fin.empty and "tipo" in df_fin.columns and "valor" in df_fin.columns:
+        df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+        
+        mask_entrada = df_fin["tipo"].astype(str).str.lower().str.contains("entrada|receita|recebimento")
+        
+        fat_calc = df_fin[mask_entrada]["valor"].sum()
+        cust_calc = df_fin[~mask_entrada]["valor"].sum()
+        
+        if fat_calc > 0:
+            faturamento = float(fat_calc)
+        if cust_calc > 0:
+            custos = float(cust_calc)
+    
+    lucro = faturamento - custos
+    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
+    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
+    
+    # =========================================================
+    # PRÓXIMOS EVENTOS
+    # =========================================================
+    st.subheader("📅 Próximos Eventos")
     df_eventos = pd.DataFrame()
     
     try:
@@ -801,11 +839,6 @@ elif menu == "Relatórios":
             df_eventos = pd.DataFrame(res_eventos.data or [])
         except Exception:
             df_eventos = pd.DataFrame()
-    
-    # =========================================================
-    # PRÓXIMOS EVENTOS
-    # =========================================================
-    st.subheader("📅 Próximos Eventos")
     
     col_dt = "data_evento" if "data_evento" in df_eventos.columns else ("data" if "data" in df_eventos.columns else None)
     
@@ -821,32 +854,6 @@ elif menu == "Relatórios":
         st.info("Nenhum próximo evento confirmado.")
     
     st.divider()
-    
-    # =========================================================
-    # CÁLCULOS FINANCEIROS
-    # =========================================================
-    # Faturamento do financeiro
-    faturamento = 7153.81
-    
-    # Custo direto dos eventos (Pega exclusivamente o custo dos eventos)
-    custos = 5455.23
-    
-    if not df_eventos.empty:
-        # Busca a coluna de custo do evento
-        col_custo = None
-        for c in ["custo_evento", "custo_total", "custo"]:
-            if c in df_eventos.columns:
-                col_custo = c
-                break
-    
-        if col_custo:
-            soma_custo = pd.to_numeric(df_eventos[col_custo], errors="coerce").fillna(0).sum()
-            if soma_custo > 0:
-                custos = float(soma_custo)
-    
-    lucro = faturamento - custos
-    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
-    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
     
     # =========================================================
     # ABA NAVEGAÇÃO INTERNA
@@ -896,12 +903,6 @@ elif menu == "Relatórios":
         st.divider()
     
         st.markdown("**📈 Fluxo Financeiro e Detalhamento**")
-        try:
-            res_fin = supabase.table("Financeiro").select("*").execute()
-            df_fin = pd.DataFrame(res_fin.data or [])
-        except Exception:
-            df_fin = pd.DataFrame()
-    
         if not df_fin.empty:
             st.dataframe(df_fin, use_container_width=True, hide_index=True)
         else:
@@ -922,50 +923,14 @@ elif menu == "Relatórios":
     # ---------------------------------------------------------
     with tab_metas:
         st.markdown("### 🎯 Metas de Faturamento Mensal")
-    
-        try:
-            res_metas = supabase.table("metas_mensais").select("*").execute()
-            df_metas = pd.DataFrame(res_metas.data or [])
-        except Exception:
-            df_metas = pd.DataFrame()
-    
-        mes_atual_str = hoje.strftime("%Y-%m")
-        mes_atual_nome = hoje.strftime("%B/%Y").capitalize()
-    
-        meta_atual_valor = 10000.0
-        if not df_metas.empty and "mes_ano" in df_metas.columns:
-            meta_encontrada = df_metas[df_metas["mes_ano"] == mes_atual_str]
-            if not meta_encontrada.empty:
-                meta_atual_valor = float(meta_encontrada.iloc[0]["meta_valor"])
-    
-        with st.expander(f"⚙️ Definir/Ajustar Meta de {mes_atual_nome}", expanded=False):
-            col_m1, col_m2 = st.columns([3, 1])
-            nova_meta = col_m1.number_input(
-                f"Defina a meta para {mes_atual_str} (R$):",
-                min_value=0.0,
-                value=float(meta_atual_valor),
-                step=500.0,
-                key="input_meta_valor"
-            )
-            if col_m2.button("💾 Salvar Meta", use_container_width=True):
-                try:
-                    supabase.table("metas_mensais").upsert({
-                        "mes_ano": mes_atual_str,
-                        "meta_valor": nova_meta
-                    }, on_conflict="mes_ano").execute()
-                    st.toast(f"✅ Meta de {mes_atual_str} atualizada para R$ {nova_meta:,.2f}!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar meta: {e}")
-    
-        st.divider()
-    
+        
+        meta_estatica = 10000.0
         fat_mes_atual = faturamento
-        pct_mes = min(1.0, fat_mes_atual / meta_atual_valor) if meta_atual_valor > 0 else 0.0
-        cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_atual_valor else "🟡 Em andamento"
+        pct_mes = min(1.0, fat_mes_atual / meta_estatica) if meta_estatica > 0 else 0.0
+        cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_estatica else "🟡 Em andamento"
     
         cm1, cm2, cm3 = st.columns(3)
-        cm1.metric("📌 Meta do Mês Atual", f"R$ {meta_atual_valor:,.2f}")
+        cm1.metric("📌 Meta do Mês Atual", f"R$ {meta_estatica:,.2f}")
         cm2.metric("💰 Faturado no Mês", f"R$ {fat_mes_atual:,.2f}")
         cm3.metric("📊 Progresso", f"{pct_mes * 100:.1f}%", delta=cor_status)
     
