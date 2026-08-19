@@ -762,74 +762,33 @@ elif menu == "Estoque":
         
 elif menu == "Relatórios":
 
-    st.title("📊 Dashboard Geral")
-
+   # =========================================================
+    # CARREGAMENTO GLOBAL DE DADOS (SUPABASE)
     # =========================================================
-    # FILTROS DE DATA / PERÍODO
-    # =========================================================
-    col_p, col_i, col_f = st.columns([2, 1, 1])
-    periodo = col_p.selectbox(
-        "📅 Período",
-        ["Este ano", "Este mês", "Últimos 30 dias", "Todos"],
-        key="dash_periodo"
-    )
-    hoje = datetime.now()
-    
-    if periodo == "Este ano":
-        dt_inicio = datetime(hoje.year, 1, 1).date()
-        dt_fim = hoje.date()
-    elif periodo == "Este mês":
-        dt_inicio = datetime(hoje.year, hoje.month, 1).date()
-        dt_fim = hoje.date()
-    else:
-        dt_inicio = datetime(2020, 1, 1).date()
-        dt_fim = hoje.date()
-    
-    data_i = col_i.date_input("🗓️ Data inicial", value=dt_inicio, key="dash_dt_i")
-    data_f = col_f.date_input("🗓️ Data final", value=dt_fim, key="dash_dt_f")
-    
-    # =========================================================
-    # PRÓXIMOS EVENTOS
-    # =========================================================
-    st.subheader("📅 Próximos Eventos")
-    df_eventos = pd.DataFrame()
-    
+    df_fin = pd.DataFrame()
     try:
-        res_eventos = supabase.table("orcamentos").select("*").execute()
-        df_eventos = pd.DataFrame(res_eventos.data or [])
+        res_fin = supabase.table("Financeiro").select("*").execute()
+        df_fin = pd.DataFrame(res_fin.data or [])
     except Exception:
         try:
-            res_eventos = supabase.table("eventos").select("*").execute()
-            df_eventos = pd.DataFrame(res_eventos.data or [])
+            res_fin = supabase.table("financeiro").select("*").execute()
+            df_fin = pd.DataFrame(res_fin.data or [])
+        except Exception:
+            df_fin = pd.DataFrame()
+    
+    df_eventos = pd.DataFrame()
+    try:
+        res_evt = supabase.table("orcamentos").select("*").execute()
+        df_eventos = pd.DataFrame(res_evt.data or [])
+    except Exception:
+        try:
+            res_evt = supabase.table("eventos").select("*").execute()
+            df_eventos = pd.DataFrame(res_evt.data or [])
         except Exception:
             df_eventos = pd.DataFrame()
     
-    col_dt = "data_evento" if "data_evento" in df_eventos.columns else ("data" if "data" in df_eventos.columns else None)
-    
-    if not df_eventos.empty and col_dt:
-        df_eventos[col_dt] = pd.to_datetime(df_eventos[col_dt], errors="coerce")
-        proximos = df_eventos[df_eventos[col_dt].dt.date >= hoje.date()].sort_values(col_dt)
-        if not proximos.empty:
-            cols = [c for c in ["evento", "nome", col_dt, "valor_total", "status"] if c in proximos.columns]
-            st.dataframe(proximos[cols], use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhum próximo evento confirmado.")
-    else:
-        st.info("Nenhum próximo evento confirmado.")
-    
-    st.divider()
-    
     # =========================================================
-    # MÉTRICAS CONSOLIDADAS E EXATAS
-    # =========================================================
-    faturamento = 7153.81
-    custos = 5455.23
-    lucro = faturamento - custos
-    margem = (lucro / faturamento * 100) if faturamento > 0 else 0.0
-    reserva_caixa = lucro * 0.35 if lucro > 0 else 0.0
-    
-    # =========================================================
-    # ABA NAVEGAÇÃO INTERNA (Sem Produtos)
+    # ABA NAVEGAÇÃO INTERNA
     # =========================================================
     tab_visao, tab_fin, tab_vendas, tab_metas = st.tabs([
         "📊 Visão Geral",
@@ -851,7 +810,6 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        # Gráfico exclusivo da Visão Geral
         st.subheader("📈 Faturamento vs. Custos ao Longo do Tempo")
         datas = pd.date_range(start="2026-08-01", periods=18, freq="D")
         fat_linha = [0, 500, 1200, 1200, 1800, 2500, 3100, 3100, 4200, 4200, 5000, 5800, 6200, 6200, 6700, 7153.81, 7153.81, 7153.81]
@@ -897,7 +855,6 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        # Gráfico focado no Volume/Número de Vendas ao longo do tempo
         st.subheader("📊 Evolução do Número de Vendas Realizadas")
         datas_vendas = pd.date_range(start="2026-01-01", periods=8, freq="ME")
         qtd_vendas = [1, 2, 1, 3, 2, 4, 3, tot_evt]
@@ -923,7 +880,6 @@ elif menu == "Relatórios":
     with tab_metas:
         st.markdown("### 🎯 Metas de Faturamento Mensal")
         
-        # Seletor do Mês para Consultar/Ajustar
         lista_meses = [
             "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
@@ -934,7 +890,6 @@ elif menu == "Relatórios":
         mes_selecionado = col_sel1.selectbox("📅 Selecione o Mês da Meta:", lista_meses, index=mes_atual_idx)
         meta_valor_input = col_sel2.number_input("📌 Definir Valor da Meta (R$):", min_value=0.0, value=10000.0, step=500.0)
     
-        # Cálculo da meta do mês selecionado
         fat_mes_atual = faturamento if mes_selecionado == lista_meses[mes_atual_idx] else (faturamento * 0.8)
         pct_mes = min(1.0, fat_mes_atual / meta_valor_input) if meta_valor_input > 0 else 0.0
         cor_status = "🟢 Atingida!" if fat_mes_atual >= meta_valor_input else "🟡 Em andamento"
@@ -950,7 +905,6 @@ elif menu == "Relatórios":
     
         st.divider()
     
-        # Gráfico de Cumprimento de Metas Mês a Mês
         st.subheader("🎯 Comparativo: Meta vs. Faturamento Realizado")
         meses_grafico = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago"]
         metas_historico = [10000, 10000, 10000, 10000, 10000, 10000, 10000, meta_valor_input]
