@@ -4217,102 +4217,362 @@ elif menu == "Vendas":
 
     st.title("📊 Vendas")
 
-    # 1. Carrega Eventos Válidos
+    # =========================================================
+    # 1. CARREGA EVENTOS VÁLIDOS
+    # =========================================================
     response_eventos = (
         supabase.table("eventos")
         .select("*")
-        .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
+        .in_(
+            "status",
+            ["aprovado", "finalizado", "concluido", "pago"]
+        )
         .execute()
     )
+
     df_eventos = pd.DataFrame(response_eventos.data or [])
 
-    # 2. Carrega Aditivos (Horas Extras, Adicionais, etc.)
-    response_aditivos = supabase.table("aditivos_evento").select("*").execute()
+
+    # =========================================================
+    # 2. CARREGA ADITIVOS / HORAS EXTRAS
+    # =========================================================
+    response_aditivos = (
+        supabase.table("aditivos_evento")
+        .select("*")
+        .execute()
+    )
+
     df_aditivos = pd.DataFrame(response_aditivos.data or [])
 
-    # 3. Carrega Custos Reais da Tabela Financeiro (Saídas)
-    response_fin = supabase.table("Financeiro").select("valor, tipo").eq("tipo", "Saída").execute()
-    df_fin = pd.DataFrame(response_fin.data or [])
 
+    # =========================================================
+    # 3. PREPARAÇÃO DOS EVENTOS
+    # =========================================================
     if not df_eventos.empty:
-        # Garante tipos numéricos
-        df_eventos["venda_base"] = pd.to_numeric(df_eventos["venda"], errors="coerce").fillna(0)
 
-        # Processa os Aditivos/Horas Extras por Evento
-        if not df_aditivos.empty and "evento_id" in df_aditivos.columns:
-            df_aditivos["valor_cliente"] = pd.to_numeric(df_aditivos["valor_cliente"], errors="coerce").fillna(0)
-            
-            aditivos_agrupados = df_aditivos.groupby("evento_id")["valor_cliente"].sum().reset_index()
-            aditivos_agrupados.rename(columns={"valor_cliente": "horas_extras"}, inplace=True)
+        # -----------------------------------------------------
+        # VALOR BASE DO CONTRATO
+        # -----------------------------------------------------
+        if "venda" in df_eventos.columns:
 
-            # Une eventos com aditivos
-            df = df_eventos.merge(aditivos_agrupados, left_on="id", right_on="evento_id", how="left")
-            df["horas_extras"] = df["horas_extras"].fillna(0)
+            df_eventos["venda_base"] = pd.to_numeric(
+                df_eventos["venda"],
+                errors="coerce"
+            ).fillna(0)
+
         else:
+
+            df_eventos["venda_base"] = 0.0
+
+
+        # -----------------------------------------------------
+        # ADITIVOS / HORAS EXTRAS
+        # -----------------------------------------------------
+        if (
+            not df_aditivos.empty
+            and "evento_id" in df_aditivos.columns
+            and "valor_cliente" in df_aditivos.columns
+        ):
+
+            df_aditivos["valor_cliente"] = pd.to_numeric(
+                df_aditivos["valor_cliente"],
+                errors="coerce"
+            ).fillna(0)
+
+            aditivos_agrupados = (
+                df_aditivos
+                .groupby("evento_id")["valor_cliente"]
+                .sum()
+                .reset_index()
+            )
+
+            aditivos_agrupados.rename(
+                columns={
+                    "valor_cliente": "horas_extras"
+                },
+                inplace=True
+            )
+
+            df = df_eventos.merge(
+                aditivos_agrupados,
+                left_on="id",
+                right_on="evento_id",
+                how="left"
+            )
+
+            df["horas_extras"] = (
+                df["horas_extras"]
+                .fillna(0)
+            )
+
+        else:
+
             df = df_eventos.copy()
             df["horas_extras"] = 0.0
 
-        # VALOR TOTAL REAL = Valor do Contrato + Horas Extras
-        df["valor_venda"] = df["venda_base"] + df["horas_extras"]
+
+        # -----------------------------------------------------
+        # FATURAMENTO REAL
+        # CONTRATO + ADITIVOS
+        # -----------------------------------------------------
+        df["valor_venda"] = (
+            df["venda_base"] +
+            df["horas_extras"]
+        )
+
+
+        # =====================================================
+        # 4. CUSTO REAL DE CADA EVENTO
+        # =====================================================
+        #
+        # IMPORTANTE:
+        # NÃO usamos mais as saídas gerais do Financeiro.
+        #
+        # O custo deve vir do próprio evento.
+        # =====================================================
+
+        coluna_custo = None
+
+        possiveis_colunas_custo = [
+            "custo_total",
+            "custo",
+            "custo_evento",
+            "custo_real",
+            "custos"
+        ]
+
+        for coluna in possiveis_colunas_custo:
+
+            if coluna in df.columns:
+                coluna_custo = coluna
+                break
+
+
+        if coluna_custo:
+
+            df["custo_total_evento"] = pd.to_numeric(
+                df[coluna_custo],
+                errors="coerce"
+            ).fillna(0)
+
+        else:
+
+            # Caso não encontre uma coluna de custo,
+            # mantém zero para não inventar valores.
+            df["custo_total_evento"] = 0.0
+
+
     else:
-        df = pd.DataFrame(columns=[
-            "id", "cliente", "data", "venda_base", "horas_extras", "valor_venda", "status"
-        ])
 
-    # Custo Total Real do Caixa
-    total_custo = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0).sum() if not df_fin.empty else 0.0
+        df = pd.DataFrame(
+            columns=[
+                "id",
+                "cliente",
+                "data",
+                "venda_base",
+                "horas_extras",
+                "valor_venda",
+                "custo_total_evento",
+                "status"
+            ]
+        )
 
-    # KPIs
-    total_vendas = df["valor_venda"].sum() if not df.empty else 0.0
-    total_lucro = total_vendas - total_custo
-    margem = (total_lucro / total_vendas * 100) if total_vendas > 0 else 0.0
 
+    # =========================================================
+    # 5. KPIs
+    # =========================================================
+
+    # FATURAMENTO TOTAL
+    total_vendas = (
+        df["valor_venda"].sum()
+        if not df.empty
+        else 0.0
+    )
+
+
+    # CUSTO TOTAL DOS EVENTOS
+    total_custo = (
+        df["custo_total_evento"].sum()
+        if not df.empty
+        else 0.0
+    )
+
+
+    # LUCRO TOTAL
+    total_lucro = (
+        total_vendas -
+        total_custo
+    )
+
+
+    # MARGEM
+    margem = (
+        (total_lucro / total_vendas) * 100
+        if total_vendas > 0
+        else 0.0
+    )
+
+
+    # =========================================================
+    # 6. CARDS
+    # =========================================================
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("💰 Receita Total", f"R$ {total_vendas:,.2f}")
-    col2.metric("💸 Custo Total", f"R$ {total_custo:,.2f}")
-    col3.metric("📈 Lucro Total", f"R$ {total_lucro:,.2f}")
-    col4.metric("📊 Margem", f"{margem:.1f}%")
+    col1.metric(
+        "💰 Receita Total",
+        f"R$ {total_vendas:,.2f}"
+    )
+
+    col2.metric(
+        "💸 Custo Total",
+        f"R$ {total_custo:,.2f}"
+    )
+
+    col3.metric(
+        "📈 Lucro Total",
+        f"R$ {total_lucro:,.2f}"
+    )
+
+    col4.metric(
+        "📊 Margem",
+        f"{margem:.1f}%"
+    )
+
 
     st.markdown("---")
 
-    # Filtro de Busca por Cliente
-    cliente = st.text_input("Buscar cliente")
 
-    if cliente and not df.empty and "cliente" in df.columns:
-        df = df[df["cliente"].str.contains(cliente, case=False, na=False)]
+    # =========================================================
+    # 7. BUSCAR CLIENTE
+    # =========================================================
+    cliente = st.text_input(
+        "Buscar cliente"
+    )
 
-    # Preparação da Tabela para Exibição
-    if not df.empty:
-        df_exibir = df[[
-            "cliente", "data", "venda_base", "horas_extras", "valor_venda", "status"
-        ]].copy()
+
+    df_filtrado = df.copy()
+
+    if (
+        cliente
+        and not df_filtrado.empty
+        and "cliente" in df_filtrado.columns
+    ):
+
+        df_filtrado = df_filtrado[
+            df_filtrado["cliente"]
+            .astype(str)
+            .str.contains(
+                cliente,
+                case=False,
+                na=False
+            )
+        ]
+
+
+    # =========================================================
+    # 8. TABELA DE VENDAS
+    # =========================================================
+    if not df_filtrado.empty:
+
+        df_exibir = df_filtrado[
+            [
+                "cliente",
+                "data",
+                "venda_base",
+                "horas_extras",
+                "valor_venda",
+                "custo_total_evento",
+                "status"
+            ]
+        ].copy()
+
 
         st.dataframe(
             df_exibir,
             use_container_width=True,
+            hide_index=True,
             column_config={
-                "cliente": "🥂 Cliente",
-                "data": "📅 Data",
-                "venda_base": st.column_config.NumberColumn("📋 Contrato Base", format="R$ %.2f"),
-                "horas_extras": st.column_config.NumberColumn("⏰ Horas Extras / Aditivos", format="R$ %.2f"),
-                "valor_venda": st.column_config.NumberColumn("💰 Valor Total Real", format="R$ %.2f"),
-                "status": "📌 Status",
+
+                "cliente": st.column_config.TextColumn(
+                    "🥂 Cliente"
+                ),
+
+                "data": st.column_config.DateColumn(
+                    "📅 Data",
+                    format="YYYY-MM-DD"
+                ),
+
+                "venda_base": st.column_config.NumberColumn(
+                    "📋 Contrato Base",
+                    format="R$ %.2f"
+                ),
+
+                "horas_extras": st.column_config.NumberColumn(
+                    "⏰ Horas Extras / Aditivos",
+                    format="R$ %.2f"
+                ),
+
+                "valor_venda": st.column_config.NumberColumn(
+                    "💰 Valor Total Real",
+                    format="R$ %.2f"
+                ),
+
+                "custo_total_evento": st.column_config.NumberColumn(
+                    "💸 Custo Total",
+                    format="R$ %.2f"
+                ),
+
+                "status": st.column_config.TextColumn(
+                    "📌 Status"
+                )
             }
         )
-    else:
-        st.warning("Nenhuma venda registrada ainda — aparecerá ao aprovar/finalizar eventos.")
 
-    # Gráfico de Evolução das Vendas (Valor Total Real)
+
+    else:
+
+        st.warning(
+            "Nenhuma venda registrada ainda — "
+            "aparecerá ao aprovar/finalizar eventos."
+        )
+
+
+    # =========================================================
+    # 9. GRÁFICO DE EVOLUÇÃO DAS VENDAS
+    # =========================================================
     st.markdown("---")
-    st.subheader("📊 Evolução das vendas (Valor Total com Aditivos)")
 
-    if not df.empty:
-        df["data_dt"] = pd.to_datetime(df["data"], errors="coerce")
-        vendas_por_data = df.groupby(df["data_dt"].dt.date)["valor_venda"].sum()
-        st.line_chart(vendas_por_data)
+    st.subheader(
+        "📊 Evolução das vendas "
+        "(Valor Total com Aditivos)"
+    )
+
+
+    if not df_filtrado.empty and "data" in df_filtrado.columns:
+
+        df_filtrado["data_dt"] = pd.to_datetime(
+            df_filtrado["data"],
+            errors="coerce"
+        )
+
+        vendas_por_data = (
+            df_filtrado
+            .dropna(subset=["data_dt"])
+            .groupby(
+                df_filtrado["data_dt"].dt.date
+            )["valor_venda"]
+            .sum()
+        )
+
+        st.line_chart(
+            vendas_por_data
+        )
+
     else:
-        st.info("Sem dados ainda para o gráfico.")
+
+        st.info(
+            "Sem dados ainda para o gráfico."
+        )
 
 elif menu == "CMV":
 
