@@ -1388,8 +1388,8 @@ elif menu == "Relatórios":
         )
 
         c3.metric(
-            "🏦 Caixa Disponível",
-            f"R$ {saldo_caixa:,.2f}"
+            "📈 Lucro Total",
+            f"R$ {lucro_total:,.2f}"
         )
 
 
