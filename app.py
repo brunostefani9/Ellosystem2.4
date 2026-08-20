@@ -765,62 +765,34 @@ elif menu == "Relatórios":
     st.title("📊 Dashboard Geral")
 
     # =========================================================
-    # CONFIGURAÇÃO DOS PERÍODOS
+    # FILTROS DE DATA / PERÍODO
     # =========================================================
-    hoje = datetime.now()
-
     col_p, col_i, col_f = st.columns([2, 1, 1])
 
     periodo = col_p.selectbox(
         "📅 Período",
-        [
-            "Este ano",
-            "Este mês",
-            "Últimos 30 dias",
-            "Todos"
-        ],
+        ["Este ano", "Este mês", "Últimos 30 dias", "Todos"],
         key="dash_periodo"
     )
 
-    # ---------------------------------------------------------
-    # DEFINIÇÃO AUTOMÁTICA DO PERÍODO
-    # ---------------------------------------------------------
+    hoje = datetime.now()
+
     if periodo == "Este ano":
-
-        dt_inicio = datetime(
-            hoje.year,
-            1,
-            1
-        ).date()
-
+        dt_inicio = datetime(hoje.year, 1, 1).date()
         dt_fim = hoje.date()
 
     elif periodo == "Este mês":
-
-        dt_inicio = datetime(
-            hoje.year,
-            hoje.month,
-            1
-        ).date()
-
+        dt_inicio = datetime(hoje.year, hoje.month, 1).date()
         dt_fim = hoje.date()
 
     elif periodo == "Últimos 30 dias":
-
-        dt_inicio = (
-            hoje - timedelta(days=30)
-        ).date()
-
+        dt_inicio = (hoje - timedelta(days=30)).date()
         dt_fim = hoje.date()
 
     else:
-        # "Todos"
-        dt_inicio = date(2000, 1, 1)
+        dt_inicio = date(2020, 1, 1)
         dt_fim = hoje.date()
 
-    # ---------------------------------------------------------
-    # FILTROS MANUAIS
-    # ---------------------------------------------------------
     data_i = col_i.date_input(
         "🗓️ Data inicial",
         value=dt_inicio,
@@ -833,319 +805,113 @@ elif menu == "Relatórios":
         key="dash_dt_f"
     )
 
-    # Segurança
-    if data_i > data_f:
-        st.error("⚠️ A data inicial não pode ser maior que a data final.")
-        st.stop()
-
     # =========================================================
-    # 1. CARREGAR FINANCEIRO
-    # =========================================================
-    df_fin = pd.DataFrame()
-
-    try:
-        response_fin = (
-            supabase
-            .table("Financeiro")
-            .select("*")
-            .execute()
-        )
-
-        df_fin = pd.DataFrame(
-            response_fin.data or []
-        )
-
-    except Exception:
-        try:
-            response_fin = (
-                supabase
-                .table("financeiro")
-                .select("*")
-                .execute()
-            )
-
-            df_fin = pd.DataFrame(
-                response_fin.data or []
-            )
-
-        except Exception:
-            df_fin = pd.DataFrame()
-
-    # =========================================================
-    # TRATAMENTO DO FINANCEIRO
-    # =========================================================
-    if not df_fin.empty:
-
-        if "valor" in df_fin.columns:
-            df_fin["valor"] = pd.to_numeric(
-                df_fin["valor"],
-                errors="coerce"
-            ).fillna(0)
-
-        if "data" in df_fin.columns:
-
-            df_fin["data"] = pd.to_datetime(
-                df_fin["data"],
-                errors="coerce"
-            )
-
-            df_fin = df_fin.dropna(
-                subset=["data"]
-            )
-
-            # Período selecionado
-            df_fin_periodo = df_fin[
-                (df_fin["data"].dt.date >= data_i) &
-                (df_fin["data"].dt.date <= data_f)
-            ].copy()
-
-        else:
-            df_fin_periodo = df_fin.copy()
-
-    else:
-
-        df_fin_periodo = pd.DataFrame()
-
-    # =========================================================
-    # 2. CARREGAR EVENTOS
+    # CARREGAR EVENTOS
     # =========================================================
     df_eventos = pd.DataFrame()
 
     try:
-
-        response_eventos = (
-            supabase
-            .table("eventos")
+        resposta = (
+            supabase.table("eventos")
             .select("*")
-            .in_(
-                "status",
-                [
-                    "aprovado",
-                    "finalizado",
-                    "concluido",
-                    "pago"
-                ]
-            )
+            .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
             .execute()
         )
 
-        df_eventos = pd.DataFrame(
-            response_eventos.data or []
-        )
+        df_eventos = pd.DataFrame(resposta.data or [])
 
     except Exception as e:
-        df_eventos = pd.DataFrame()
+        st.error(f"Erro ao carregar eventos: {e}")
 
     # =========================================================
-    # TRATAMENTO DOS EVENTOS
+    # PREPARAÇÃO DOS EVENTOS
     # =========================================================
     if not df_eventos.empty:
 
+        # Data
         if "data" in df_eventos.columns:
-
             df_eventos["data"] = pd.to_datetime(
                 df_eventos["data"],
                 errors="coerce"
             )
 
-        if "venda" in df_eventos.columns:
-
-            df_eventos["venda"] = pd.to_numeric(
-                df_eventos["venda"],
-                errors="coerce"
-            ).fillna(0)
-
-        if "custo" in df_eventos.columns:
-
-            df_eventos["custo"] = pd.to_numeric(
-                df_eventos["custo"],
-                errors="coerce"
-            ).fillna(0)
-
-        # Eventos dentro do período
-        if "data" in df_eventos.columns:
-
-            df_eventos_periodo = df_eventos[
+            df_eventos = df_eventos[
                 (df_eventos["data"].dt.date >= data_i) &
                 (df_eventos["data"].dt.date <= data_f)
             ].copy()
 
+        # Venda
+        if "venda" in df_eventos.columns:
+            df_eventos["venda"] = pd.to_numeric(
+                df_eventos["venda"],
+                errors="coerce"
+            ).fillna(0)
         else:
+            df_eventos["venda"] = 0.0
 
-            df_eventos_periodo = df_eventos.copy()
+        # Custo
+        if "custo" in df_eventos.columns:
+            df_eventos["custo"] = pd.to_numeric(
+                df_eventos["custo"],
+                errors="coerce"
+            ).fillna(0)
+        else:
+            df_eventos["custo"] = 0.0
 
-    else:
+        # =====================================================
+        # CÁLCULO INDIVIDUAL DE CADA EVENTO
+        # =====================================================
 
-        df_eventos_periodo = pd.DataFrame()
+        df_eventos["lucro_evento"] = (
+            df_eventos["venda"] -
+            df_eventos["custo"]
+        )
 
-    # =========================================================
-    # 3. CÁLCULO FINANCEIRO
-    #
-    # MESMA LÓGICA DA ABA FINANCEIRO
-    # =========================================================
+        # 35% do lucro de cada evento
+        df_eventos["caixa_pj_evento"] = (
+            df_eventos["lucro_evento"] * 0.35
+        )
 
-    entrada_manual = 0.0
-    saida_manual = 0.0
-
-    # ---------------------------------------------------------
-    # ENTRADAS
-    # ---------------------------------------------------------
-    if not df_fin_periodo.empty:
-
-        if "tipo" in df_fin_periodo.columns:
-
-            entrada_manual = df_fin_periodo[
-                df_fin_periodo["tipo"]
-                .astype(str)
-                .str.lower()
-                .eq("entrada")
-            ]["valor"].sum()
-
-    # ---------------------------------------------------------
-    # SAÍDAS MANUAIS
-    #
-    # Custos dos eventos NÃO entram aqui porque já estão
-    # registrados na coluna "custo" da tabela eventos.
-    #
-    # Cachês/equipe também são ignorados para evitar duplicidade,
-    # seguindo a mesma regra da aba Financeiro.
-    # ---------------------------------------------------------
-    if not df_fin_periodo.empty:
-
-        if "tipo" in df_fin_periodo.columns:
-
-            df_saidas = df_fin_periodo[
-                df_fin_periodo["tipo"]
-                .astype(str)
-                .str.lower()
-                .eq("saída")
-            ].copy()
-
-            if "categoria" in df_saidas.columns:
-
-                categorias = (
-                    df_saidas["categoria"]
-                    .fillna("")
-                    .astype(str)
-                    .str.lower()
-                )
-
-                df_saidas_validas = df_saidas[
-                    ~categorias.str.contains(
-                        "cachê|cache|equipe",
-                        na=False
-                    )
-                ]
-
-                saida_manual = (
-                    df_saidas_validas["valor"].sum()
-                )
-
-            else:
-
-                saida_manual = (
-                    df_saidas["valor"].sum()
-                )
+        # 65% do lucro de cada evento
+        df_eventos["lucro_real_evento"] = (
+            df_eventos["lucro_evento"] * 0.65
+        )
 
     # =========================================================
-    # CUSTOS DIRETOS DOS EVENTOS
-    # =========================================================
-    custo_eventos = 0.0
-
-    if not df_eventos_periodo.empty:
-
-        if "custo" in df_eventos_periodo.columns:
-
-            custo_eventos = (
-                df_eventos_periodo["custo"].sum()
-            )
-
-    # =========================================================
-    # CONSOLIDADO
-    # =========================================================
-
-    faturamento = float(entrada_manual)
-
-    custos = float(
-        custo_eventos +
-        saida_manual
-    )
-
-    # Resultado antes da reserva
-    lucro_bruto = faturamento - custos
-
-    # Reserva de 35%
-    reserva_caixa = (
-        lucro_bruto * 0.35
-        if lucro_bruto > 0
-        else 0.0
-    )
-
-    # Lucro real depois da reserva
-    lucro_real = lucro_bruto - reserva_caixa
-
-    # Margem real antes da reserva
-    margem = (
-        lucro_bruto / faturamento * 100
-        if faturamento > 0
-        else 0.0
-    )
-
-    # =========================================================
-    # 📅 PRÓXIMOS EVENTOS
+    # PRÓXIMOS EVENTOS
     # =========================================================
     st.subheader("📅 Próximos Eventos")
 
     if not df_eventos.empty and "data" in df_eventos.columns:
 
         proximos = df_eventos[
-            (
-                df_eventos["data"].dt.date >= hoje.date()
-            ) &
-            (
-                df_eventos["status"]
-                .astype(str)
-                .str.lower()
-                .eq("aprovado")
-            )
+            df_eventos["data"].dt.date >= hoje.date()
         ].sort_values("data")
 
         if not proximos.empty:
 
-            dados_proximos = []
+            colunas_proximos = []
 
-            for _, evento in proximos.iterrows():
+            if "cliente" in proximos.columns:
+                colunas_proximos.append("cliente")
 
-                cliente = evento.get(
-                    "cliente",
-                    "Cliente"
-                )
+            colunas_proximos.append("data")
 
-                data_evento = evento.get(
-                    "data",
-                    ""
-                )
+            if "venda" in proximos.columns:
+                colunas_proximos.append("venda")
 
-                venda = float(
-                    evento.get(
-                        "venda",
-                        0
-                    ) or 0
-                )
+            if "status" in proximos.columns:
+                colunas_proximos.append("status")
 
-                dados_proximos.append({
-                    "Cliente": cliente,
-                    "Data": (
-                        data_evento.strftime("%d/%m/%Y")
-                        if pd.notna(data_evento)
-                        else ""
-                    ),
-                    "Valor da Venda": venda,
-                    "Status": "Aprovado"
-                })
+            df_proximos = proximos[colunas_proximos].copy()
 
-            df_proximos = pd.DataFrame(
-                dados_proximos
+            df_proximos = df_proximos.rename(
+                columns={
+                    "cliente": "🥂 Cliente",
+                    "data": "📅 Data",
+                    "venda": "💰 Valor",
+                    "status": "📌 Status"
+                }
             )
 
             st.dataframe(
@@ -1153,40 +919,57 @@ elif menu == "Relatórios":
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Cliente": "🥂 Cliente",
-                    "Data": "📅 Data",
-                    "Valor da Venda": st.column_config.NumberColumn(
-                        "💰 Valor da Venda",
+                    "💰 Valor": st.column_config.NumberColumn(
+                        "💰 Valor",
                         format="R$ %.2f"
-                    ),
-                    "Status": "📌 Status"
+                    )
                 }
             )
 
         else:
-
-            st.info(
-                "Nenhum próximo evento aprovado."
-            )
+            st.info("Nenhum próximo evento confirmado.")
 
     else:
-
-        st.info(
-            "Nenhum próximo evento aprovado."
-        )
+        st.info("Nenhum próximo evento confirmado.")
 
     st.divider()
 
     # =========================================================
-    # ABA DE NAVEGAÇÃO INTERNA
+    # CONSOLIDAÇÃO DOS EVENTOS
     # =========================================================
-    (
-        tab_visao,
-        tab_fin,
-        tab_vendas,
-        tab_metas,
-        tab_prod
-    ) = st.tabs([
+
+    if not df_eventos.empty:
+
+        faturamento = df_eventos["venda"].sum()
+
+        custos = df_eventos["custo"].sum()
+
+        lucro_total = df_eventos["lucro_evento"].sum()
+
+        caixa_pj_total = df_eventos["caixa_pj_evento"].sum()
+
+        lucro_real_total = df_eventos["lucro_real_evento"].sum()
+
+        margem = (
+            lucro_total / faturamento * 100
+            if faturamento > 0
+            else 0.0
+        )
+
+    else:
+
+        faturamento = 0.0
+        custos = 0.0
+        lucro_total = 0.0
+        caixa_pj_total = 0.0
+        lucro_real_total = 0.0
+        margem = 0.0
+
+    # =========================================================
+    # ABA NAVEGAÇÃO INTERNA
+    # =========================================================
+
+    tab_visao, tab_fin, tab_vendas, tab_metas, tab_prod = st.tabs([
         "📊 Visão Geral",
         "💰 Financeiro",
         "📈 Vendas",
@@ -1195,11 +978,12 @@ elif menu == "Relatórios":
     ])
 
     # =========================================================
-    # TAB 1 — VISÃO GERAL
+    # TAB 1 - VISÃO GERAL
     # =========================================================
+
     with tab_visao:
 
-        st.subheader("📊 Visão Geral do Negócio")
+        st.subheader("📊 Resultado Consolidado dos Eventos")
 
         c1, c2, c3, c4, c5 = st.columns(5)
 
@@ -1209,13 +993,13 @@ elif menu == "Relatórios":
         )
 
         c2.metric(
-            "💸 Custos",
+            "💸 Custos dos Eventos",
             f"R$ {custos:,.2f}"
         )
 
         c3.metric(
-            "📈 Lucro",
-            f"R$ {lucro_bruto:,.2f}"
+            "📈 Lucro Total",
+            f"R$ {lucro_total:,.2f}"
         )
 
         c4.metric(
@@ -1224,421 +1008,316 @@ elif menu == "Relatórios":
         )
 
         c5.metric(
-            "🛡️ Reserva Caixa PJ",
-            f"R$ {reserva_caixa:,.2f}",
-            help="35% do lucro antes da reserva."
+            "🛡️ Caixa PJ",
+            f"R$ {caixa_pj_total:,.2f}",
+            help="Soma de 35% do lucro individual de cada evento."
         )
 
         st.divider()
 
-        # -----------------------------------------------------
+        # =====================================================
         # RESULTADO REAL
-        # -----------------------------------------------------
-        st.subheader("💰 Resultado Real")
+        # =====================================================
+
+        st.subheader("💰 Resultado Real do Negócio")
 
         r1, r2, r3 = st.columns(3)
 
         r1.metric(
-            "📊 Resultado antes da Reserva",
-            f"R$ {lucro_bruto:,.2f}"
+            "📈 Lucro Total dos Eventos",
+            f"R$ {lucro_total:,.2f}"
         )
 
         r2.metric(
-            "🛡️ Reserva Caixa PJ (35%)",
-            f"R$ {reserva_caixa:,.2f}"
+            "🛡️ Caixa PJ Acumulado",
+            f"R$ {caixa_pj_total:,.2f}"
         )
 
         r3.metric(
-            "📈 Lucro Real",
-            f"R$ {lucro_real:,.2f}"
-        )
-
-        st.caption(
-            "O Lucro Real representa o resultado após a separação dos 35% destinados à Reserva Caixa PJ."
+            "💵 Lucro Real",
+            f"R$ {lucro_real_total:,.2f}",
+            help="Soma dos 65% restantes do lucro de cada evento após a separação do Caixa PJ."
         )
 
         st.divider()
 
-        # -----------------------------------------------------
-        # GRÁFICO MENSAL
-        # -----------------------------------------------------
-        st.subheader(
-            "📈 Faturamento vs. Custos — Mês a Mês"
+        # =====================================================
+        # EXPLICAÇÃO DO CÁLCULO
+        # =====================================================
+
+        st.caption(
+            "O lucro é calculado individualmente por evento. "
+            "De cada lucro, 35% são destinados ao Caixa PJ e 65% "
+            "representam o Lucro Real. Os valores acima são a soma "
+            "de todos os eventos do período selecionado."
         )
 
-        if not df_fin_periodo.empty:
+    # =========================================================
+    # GRÁFICO MÊS A MÊS
+    # =========================================================
 
-            df_graf = df_fin_periodo.copy()
+    st.subheader("📈 Faturamento, Custos e Lucro — Mês a Mês")
 
-            df_graf["mes_ano"] = (
-                df_graf["data"]
-                .dt.to_period("M")
-                .astype(str)
-            )
+    if not df_eventos.empty and "data" in df_eventos.columns:
 
-            entradas_mensais = (
-                df_graf[
-                    df_graf["tipo"]
-                    .astype(str)
-                    .str.lower()
-                    .eq("entrada")
+        df_mensal = df_eventos.copy()
+
+        df_mensal["mes_ano"] = (
+            df_mensal["data"]
+            .dt.to_period("M")
+            .astype(str)
+        )
+
+        mensal = (
+            df_mensal
+            .groupby("mes_ano")[
+                [
+                    "venda",
+                    "custo",
+                    "lucro_evento",
+                    "caixa_pj_evento",
+                    "lucro_real_evento"
                 ]
-                .groupby("mes_ano")["valor"]
-                .sum()
-            )
+            ]
+            .sum()
+        )
 
-            saidas_mensais = (
-                df_graf[
-                    df_graf["tipo"]
-                    .astype(str)
-                    .str.lower()
-                    .eq("saída")
-                ]
-                .groupby("mes_ano")["valor"]
-                .sum()
-            )
+        mensal = mensal.rename(
+            columns={
+                "venda": "Faturamento",
+                "custo": "Custos",
+                "lucro_evento": "Lucro",
+                "caixa_pj_evento": "Caixa PJ",
+                "lucro_real_evento": "Lucro Real"
+            }
+        )
 
-            df_mensal = pd.DataFrame({
-                "Faturamento": entradas_mensais,
-                "Saídas Financeiras": saidas_mensais
-            }).fillna(0)
+        st.line_chart(mensal)
 
-            st.line_chart(
-                df_mensal
-            )
-
-        else:
-
-            st.info(
-                "Não existem movimentações financeiras no período selecionado."
-            )
+    else:
+        st.info("Não existem dados suficientes para gerar o gráfico.")
 
     # =========================================================
-    # TAB 2 — FINANCEIRO
+    # TAB 2 - FINANCEIRO
     # =========================================================
+
     with tab_fin:
 
-        st.subheader(
-            "💰 Resumo Financeiro"
-        )
+        st.subheader("💰 Visão Financeira dos Eventos")
 
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
 
         c1.metric(
-            "💵 Entradas",
+            "💵 Faturamento",
             f"R$ {faturamento:,.2f}"
         )
 
         c2.metric(
-            "💸 Saídas / Custos",
+            "💸 Custos",
             f"R$ {custos:,.2f}"
         )
 
         c3.metric(
-            "🏦 Saldo",
-            f"R$ {lucro_bruto:,.2f}"
+            "📈 Lucro Total",
+            f"R$ {lucro_total:,.2f}"
         )
 
         c4.metric(
-            "🛡️ Reserva Caixa PJ",
-            f"R$ {reserva_caixa:,.2f}"
+            "🛡️ Caixa PJ (35%)",
+            f"R$ {caixa_pj_total:,.2f}"
+        )
+
+        c5.metric(
+            "💵 Lucro Real (65%)",
+            f"R$ {lucro_real_total:,.2f}"
         )
 
         st.divider()
 
-        # -----------------------------------------------------
-        # DETALHAMENTO
-        # -----------------------------------------------------
-        st.markdown(
-            "### 📄 Movimentações Financeiras"
-        )
+        st.markdown("### 📋 Resultado por Evento")
 
-        if not df_fin_periodo.empty:
+        if not df_eventos.empty:
 
-            df_fin_exibir = (
-                df_fin_periodo
-                .sort_values(
-                    "data",
-                    ascending=False
-                )
-                .copy()
+            colunas_fin = []
+
+            if "cliente" in df_eventos.columns:
+                colunas_fin.append("cliente")
+
+            if "data" in df_eventos.columns:
+                colunas_fin.append("data")
+
+            colunas_fin.extend([
+                "venda",
+                "custo",
+                "lucro_evento",
+                "caixa_pj_evento",
+                "lucro_real_evento"
+            ])
+
+            df_fin_eventos = df_eventos[colunas_fin].copy()
+
+            df_fin_eventos = df_fin_eventos.rename(
+                columns={
+                    "cliente": "🥂 Cliente",
+                    "data": "📅 Data",
+                    "venda": "💰 Venda",
+                    "custo": "💸 Custo",
+                    "lucro_evento": "📈 Lucro",
+                    "caixa_pj_evento": "🛡️ Caixa PJ",
+                    "lucro_real_evento": "💵 Lucro Real"
+                }
             )
-
-            df_fin_exibir["data"] = (
-                df_fin_exibir["data"]
-                .dt.strftime("%d/%m/%Y")
-            )
-
-            colunas_exibir = [
-                c for c in [
-                    "id",
-                    "data",
-                    "tipo",
-                    "categoria",
-                    "forma_pagamento",
-                    "descricao",
-                    "valor"
-                ]
-                if c in df_fin_exibir.columns
-            ]
-
-            df_fin_exibir = df_fin_exibir[
-                colunas_exibir
-            ]
 
             st.dataframe(
-                df_fin_exibir,
+                df_fin_eventos,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "id": "ID",
-                    "data": "📅 Data",
-                    "tipo": "Tipo",
-                    "categoria": "Categoria",
-                    "forma_pagamento": "Forma",
-                    "descricao": "Descrição",
-                    "valor": st.column_config.NumberColumn(
-                        "💰 Valor",
+                    "💰 Venda": st.column_config.NumberColumn(
+                        "💰 Venda",
+                        format="R$ %.2f"
+                    ),
+                    "💸 Custo": st.column_config.NumberColumn(
+                        "💸 Custo",
+                        format="R$ %.2f"
+                    ),
+                    "📈 Lucro": st.column_config.NumberColumn(
+                        "📈 Lucro",
+                        format="R$ %.2f"
+                    ),
+                    "🛡️ Caixa PJ": st.column_config.NumberColumn(
+                        "🛡️ Caixa PJ",
+                        format="R$ %.2f"
+                    ),
+                    "💵 Lucro Real": st.column_config.NumberColumn(
+                        "💵 Lucro Real",
                         format="R$ %.2f"
                     )
                 }
             )
 
         else:
-
-            st.info(
-                "Nenhuma movimentação encontrada no período selecionado."
-            )
-
-        st.divider()
-
-        # -----------------------------------------------------
-        # RESUMO DOS CUSTOS
-        # -----------------------------------------------------
-        st.markdown(
-            "### 💸 Composição dos Custos"
-        )
-
-        custo_col1, custo_col2 = st.columns(2)
-
-        custo_col1.metric(
-            "🎉 Custos dos Eventos",
-            f"R$ {custo_eventos:,.2f}"
-        )
-
-        custo_col2.metric(
-            "🏢 Despesas Gerais",
-            f"R$ {saida_manual:,.2f}"
-        )
+            st.info("Nenhum evento encontrado no período.")
 
     # =========================================================
-    # TAB 3 — VENDAS
+    # TAB 3 - VENDAS
     # =========================================================
+
     with tab_vendas:
 
-        st.subheader(
-            "📈 Desempenho de Vendas & Contratos"
-        )
+        st.markdown("### 📈 Desempenho de Vendas & Contratos")
 
-        # -----------------------------------------------------
-        # EVENTOS FECHADOS NO PERÍODO
-        # -----------------------------------------------------
-        if not df_eventos_periodo.empty:
-
-            eventos_fechados = df_eventos_periodo[
-                df_eventos_periodo["status"]
-                .astype(str)
-                .str.lower()
-                .isin([
-                    "aprovado",
-                    "finalizado",
-                    "concluido",
-                    "pago"
-                ])
-            ].copy()
-
-        else:
-
-            eventos_fechados = pd.DataFrame()
-
-        # -----------------------------------------------------
-        # MÉTRICAS
-        # -----------------------------------------------------
         total_eventos = (
-            len(eventos_fechados)
-            if not eventos_fechados.empty
+            len(df_eventos)
+            if not df_eventos.empty
             else 0
         )
 
-        faturamento_contratado = (
-            eventos_fechados["venda"].sum()
-            if not eventos_fechados.empty
-            and "venda" in eventos_fechados.columns
-            else 0.0
-        )
-
-        custo_contratado = (
-            eventos_fechados["custo"].sum()
-            if not eventos_fechados.empty
-            and "custo" in eventos_fechados.columns
-            else 0.0
-        )
-
-        lucro_eventos = (
-            faturamento_contratado -
-            custo_contratado
-        )
-
         ticket_medio = (
-            faturamento_contratado /
-            total_eventos
+            faturamento / total_eventos
             if total_eventos > 0
             else 0.0
         )
 
-        v1, v2, v3, v4 = st.columns(4)
+        col_v1, col_v2, col_v3 = st.columns(3)
 
-        v1.metric(
-            "📦 Eventos Fechados",
+        col_v1.metric(
+            "📦 Eventos / Contratos",
             f"{total_eventos}"
         )
 
-        v2.metric(
-            "💰 Vendas Contratadas",
-            f"R$ {faturamento_contratado:,.2f}"
+        col_v2.metric(
+            "💰 Faturamento",
+            f"R$ {faturamento:,.2f}"
         )
 
-        v3.metric(
+        col_v3.metric(
             "🎯 Ticket Médio",
             f"R$ {ticket_medio:,.2f}"
         )
 
-        v4.metric(
-            "📈 Lucro Estimado",
-            f"R$ {lucro_eventos:,.2f}"
-        )
-
         st.divider()
 
-        # -----------------------------------------------------
-        # COMPARATIVO POR EVENTO
-        # -----------------------------------------------------
-        st.markdown(
-            "### 📊 Comparativo por Evento"
-        )
+        # =====================================================
+        # GRÁFICO POR EVENTO
+        # =====================================================
 
-        if not eventos_fechados.empty:
+        st.markdown("#### 📊 Comparativo por Evento")
 
-            dados_grafico = []
+        if not df_eventos.empty:
 
-            for _, evento in eventos_fechados.iterrows():
+            df_grafico_eventos = df_eventos.copy()
 
-                cliente = evento.get(
-                    "cliente",
-                    "Cliente"
-                )
+            if "cliente" in df_grafico_eventos.columns:
+                coluna_nome = "cliente"
+            else:
+                coluna_nome = "id"
 
-                venda = float(
-                    evento.get(
+            df_grafico_eventos = (
+                df_grafico_eventos
+                .set_index(coluna_nome)
+                [
+                    [
                         "venda",
-                        0
-                    ) or 0
-                )
-
-                custo = float(
-                    evento.get(
                         "custo",
-                        0
-                    ) or 0
+                        "lucro_evento"
+                    ]
+                ]
+                .rename(
+                    columns={
+                        "venda": "Faturamento",
+                        "custo": "Custos",
+                        "lucro_evento": "Lucro"
+                    }
                 )
-
-                dados_grafico.append({
-                    "Cliente": cliente,
-                    "Faturamento": venda,
-                    "Custo": custo
-                })
-
-            df_grafico_eventos = pd.DataFrame(
-                dados_grafico
             )
 
-            if not df_grafico_eventos.empty:
-
-                df_grafico_eventos = (
-                    df_grafico_eventos
-                    .set_index("Cliente")
-                )
-
-                st.bar_chart(
-                    df_grafico_eventos[
-                        [
-                            "Faturamento",
-                            "Custo"
-                        ]
-                    ]
-                )
+            st.bar_chart(df_grafico_eventos)
 
         else:
-
-            st.info(
-                "Nenhum evento fechado no período selecionado."
-            )
+            st.info("Nenhum evento disponível.")
 
         st.divider()
 
-        # -----------------------------------------------------
-        # LISTA DE EVENTOS
-        # -----------------------------------------------------
-        st.markdown(
-            "### 📋 Detalhamento dos Eventos"
-        )
+        # =====================================================
+        # DETALHAMENTO
+        # =====================================================
 
-        if not eventos_fechados.empty:
+        st.markdown("#### 📋 Detalhamento dos Eventos")
 
-            df_vendas_exibir = pd.DataFrame()
+        if not df_eventos.empty:
 
-            dados = []
+            colunas_vendas = []
 
-            for _, evento in eventos_fechados.iterrows():
+            if "cliente" in df_eventos.columns:
+                colunas_vendas.append("cliente")
 
-                venda = float(
-                    evento.get(
-                        "venda",
-                        0
-                    ) or 0
-                )
+            if "data" in df_eventos.columns:
+                colunas_vendas.append("data")
 
-                custo = float(
-                    evento.get(
-                        "custo",
-                        0
-                    ) or 0
-                )
+            colunas_vendas.extend([
+                "venda",
+                "custo",
+                "lucro_evento",
+                "status"
+            ])
 
-                dados.append({
-                    "Cliente": evento.get(
-                        "cliente",
-                        "Cliente"
-                    ),
-                    "Data": (
-                        evento["data"].strftime(
-                            "%d/%m/%Y"
-                        )
-                        if "data" in evento
-                        and pd.notna(evento["data"])
-                        else ""
-                    ),
-                    "Venda": venda,
-                    "Custo": custo,
-                    "Lucro Estimado": venda - custo,
-                    "Status": evento.get(
-                        "status",
-                        ""
-                    )
-                })
+            colunas_vendas = [
+                c for c in colunas_vendas
+                if c in df_eventos.columns
+            ]
 
-            df_vendas_exibir = pd.DataFrame(
-                dados
+            df_vendas_exibir = df_eventos[colunas_vendas].copy()
+
+            df_vendas_exibir = df_vendas_exibir.rename(
+                columns={
+                    "cliente": "Cliente / Evento",
+                    "data": "Data",
+                    "venda": "Valor de Venda",
+                    "custo": "Custo",
+                    "lucro_evento": "Lucro",
+                    "status": "Status"
+                }
             )
 
             st.dataframe(
@@ -1646,126 +1325,98 @@ elif menu == "Relatórios":
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Cliente": "🥂 Cliente",
-                    "Data": "📅 Data",
-                    "Venda": st.column_config.NumberColumn(
-                        "💰 Venda",
+                    "Valor de Venda": st.column_config.NumberColumn(
+                        "Valor de Venda",
                         format="R$ %.2f"
                     ),
                     "Custo": st.column_config.NumberColumn(
-                        "💸 Custo",
+                        "Custo",
                         format="R$ %.2f"
                     ),
-                    "Lucro Estimado": st.column_config.NumberColumn(
-                        "📈 Lucro Estimado",
+                    "Lucro": st.column_config.NumberColumn(
+                        "Lucro",
                         format="R$ %.2f"
-                    ),
-                    "Status": "📌 Status"
+                    )
                 }
             )
 
         else:
-
-            st.info(
-                "Nenhum evento encontrado no período selecionado."
-            )
+            st.info("Nenhuma venda registrada no período.")
 
     # =========================================================
-    # TAB 4 — METAS
+    # TAB 4 - METAS
     # =========================================================
+
     with tab_metas:
 
-        st.subheader(
-            "🎯 Metas de Faturamento"
-        )
+        st.markdown("### 🎯 Metas de Faturamento Mensal")
 
-        # Meta atual
-        meta_mensal = 10000.00
+        meta_estatica = 10000.0
 
-        # Faturamento efetivo do mês atual
-        if not df_fin.empty:
+        # Faturamento apenas do mês atual
+        if not df_eventos.empty and "data" in df_eventos.columns:
 
-            df_mes_atual = df_fin[
+            df_mes_atual = df_eventos[
                 (
-                    df_fin["data"].dt.year
-                    == hoje.year
+                    df_eventos["data"].dt.year == hoje.year
                 ) &
                 (
-                    df_fin["data"].dt.month
-                    == hoje.month
-                ) &
-                (
-                    df_fin["tipo"]
-                    .astype(str)
-                    .str.lower()
-                    .eq("entrada")
+                    df_eventos["data"].dt.month == hoje.month
                 )
             ]
 
-            faturamento_mes_atual = (
-                df_mes_atual["valor"].sum()
+            fat_mes_atual = (
+                df_mes_atual["venda"].sum()
                 if not df_mes_atual.empty
                 else 0.0
             )
 
         else:
+            fat_mes_atual = 0.0
 
-            faturamento_mes_atual = 0.0
-
-        percentual_meta = (
-            faturamento_mes_atual /
-            meta_mensal
-            if meta_mensal > 0
+        pct_mes = (
+            min(1.0, fat_mes_atual / meta_estatica)
+            if meta_estatica > 0
             else 0.0
         )
 
-        percentual_progressao = min(
-            percentual_meta,
-            1.0
+        status_meta = (
+            "🟢 Atingida!"
+            if fat_mes_atual >= meta_estatica
+            else "🟡 Em andamento"
         )
 
-        if faturamento_mes_atual >= meta_mensal:
+        cm1, cm2, cm3 = st.columns(3)
 
-            status_meta = "🟢 Meta atingida"
-
-        else:
-
-            status_meta = "🟡 Meta em andamento"
-
-        m1, m2, m3 = st.columns(3)
-
-        m1.metric(
-            "🎯 Meta Mensal",
-            f"R$ {meta_mensal:,.2f}"
+        cm1.metric(
+            "📌 Meta do Mês",
+            f"R$ {meta_estatica:,.2f}"
         )
 
-        m2.metric(
+        cm2.metric(
             "💰 Faturado no Mês",
-            f"R$ {faturamento_mes_atual:,.2f}"
+            f"R$ {fat_mes_atual:,.2f}"
         )
 
-        m3.metric(
+        cm3.metric(
             "📊 Progresso",
-            f"{percentual_meta * 100:.1f}%",
+            f"{pct_mes * 100:.1f}%",
             delta=status_meta
         )
 
-        st.progress(
-            percentual_progressao
-        )
+        st.progress(pct_mes)
 
     # =========================================================
-    # TAB 5 — PRODUTOS
+    # TAB 5 - PRODUTOS
     # =========================================================
+
     with tab_prod:
 
-        st.subheader(
-            "📦 Desempenho por Produto / Serviço"
-        )
+        st.markdown("### 📦 Desempenho por Produto / Serviço")
 
         st.info(
-            "Esta área ficará disponível para o controle de produtos, "
-            "estoque e materiais utilizados nos eventos."
+            "Cadastre e vincule serviços aos orçamentos "
+            "para visualizar a distribuição por produto."
         )
         
 elif menu == "Receitas":
