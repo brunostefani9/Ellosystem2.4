@@ -1620,10 +1620,9 @@ elif menu == "Relatórios":
         )
 
         st.caption(
-            "Defina uma meta diferente para cada mês e acompanhe "
+            "Defina uma meta para cada mês e acompanhe "
             "automaticamente o faturamento realizado."
         )
-
 
         # =====================================================
         # CONFIGURAÇÃO
@@ -1644,14 +1643,11 @@ elif menu == "Relatórios":
             "Dezembro"
         ]
 
-        ano_atual = datetime.now().year
-
+        ano_atual = hoje.year
 
         # =====================================================
         # CARREGA METAS DO SUPABASE
         # =====================================================
-
-        metas_banco = {}
 
         try:
 
@@ -1659,35 +1655,18 @@ elif menu == "Relatórios":
                 supabase
                 .table("metas_mensais")
                 .select("*")
+                .eq("ano", ano_atual)
+                .order("mes")
                 .execute()
             )
 
-            dados_metas_banco = response_metas.data or []
-
-            for registro in dados_metas_banco:
-
-                mes_ano = str(
-                    registro.get("mes_ano", "")
-                )
-
-                meta_valor = registro.get(
-                    "meta_valor",
-                    0
-                )
-
-                if mes_ano:
-
-                    try:
-
-                        metas_banco[mes_ano] = float(
-                            meta_valor or 0
-                        )
-
-                    except Exception:
-
-                        metas_banco[mes_ano] = 0.0
+            dados_metas_supabase = (
+                response_metas.data or []
+            )
 
         except Exception as e:
+
+            dados_metas_supabase = []
 
             st.error(
                 f"❌ Erro ao carregar as metas: {e}"
@@ -1695,34 +1674,52 @@ elif menu == "Relatórios":
 
 
         # =====================================================
-        # CRIA DADOS PARA O EDITOR
+        # MONTA DICIONÁRIO DAS METAS
+        # =====================================================
+
+        metas_salvas = {}
+
+        for registro in dados_metas_supabase:
+
+            try:
+
+                mes = int(registro["mes"])
+
+                valor = float(
+                    registro.get(
+                        "meta_valor",
+                        0
+                    ) or 0
+                )
+
+                metas_salvas[mes] = valor
+
+            except Exception:
+                pass
+
+
+        # =====================================================
+        # GARANTE OS 12 MESES
         # =====================================================
 
         dados_metas = []
 
         for numero_mes in range(1, 13):
 
-            chave_mes = (
-                f"{ano_atual}-{numero_mes:02d}"
-            )
-
-            # Se existir no banco, usa o valor salvo.
-            # Caso contrário, inicia em 10.000.
-            valor_meta = metas_banco.get(
-                chave_mes,
+            valor_meta = metas_salvas.get(
+                numero_mes,
                 10000.0
             )
 
             dados_metas.append({
 
-                "Mês": meses_nomes[
-                    numero_mes - 1
-                ],
+                "Mês":
+                    meses_nomes[
+                        numero_mes - 1
+                    ],
 
-                "Meta": float(
+                "Meta":
                     valor_meta
-                )
-
             })
 
 
@@ -1732,7 +1729,7 @@ elif menu == "Relatórios":
 
 
         # =====================================================
-        # EDITOR DE METAS
+        # EDITOR
         # =====================================================
 
         df_metas_editado = st.data_editor(
@@ -1747,112 +1744,113 @@ elif menu == "Relatórios":
 
             column_config={
 
-                "Mês": st.column_config.TextColumn(
-                    "📅 Mês"
-                ),
+                "Mês":
+                    st.column_config.TextColumn(
+                        "📅 Mês"
+                    ),
 
-                "Meta": st.column_config.NumberColumn(
+                "Meta":
+                    st.column_config.NumberColumn(
 
-                    "🎯 Meta de Faturamento",
+                        "🎯 Meta de Faturamento",
 
-                    min_value=0.0,
+                        min_value=0.0,
 
-                    step=500.0,
+                        step=500.0,
 
-                    format="R$ %.2f"
-
-                )
-
+                        format="R$ %.2f"
+                    )
             },
 
             key="editor_metas_mensais"
-
         )
+
+
+        st.divider()
 
 
         # =====================================================
         # BOTÃO SALVAR
         # =====================================================
 
-        st.write("")
-
-        salvar_metas = st.button(
+        if st.button(
             "💾 Salvar Metas",
             type="primary",
-            use_container_width=True,
-            key="btn_salvar_metas"
-        )
-
-
-        if salvar_metas:
+            use_container_width=True
+        ):
 
             try:
 
-                erros = []
+                for indice, linha in df_metas_editado.iterrows():
 
-                for numero_mes in range(1, 13):
-
-                    mes_ano = (
-                        f"{ano_atual}-{numero_mes:02d}"
-                    )
-
-                    # -------------------------------------------------
-                    # PEGA O VALOR EDITADO DIRETAMENTE DO EDITOR
-                    # -------------------------------------------------
+                    numero_mes = indice + 1
 
                     valor_meta = float(
-                        df_metas_editado.iloc[
-                            numero_mes - 1
-                        ]["Meta"]
+                        linha["Meta"] or 0
                     )
 
 
-                    # -------------------------------------------------
-                    # VERIFICA SE O MÊS JÁ EXISTE
-                    # -------------------------------------------------
+                    # -----------------------------------------
+                    # VERIFICA SE JÁ EXISTE
+                    # -----------------------------------------
 
                     existente = (
                         supabase
                         .table("metas_mensais")
-                        .select("eu ia")
-                        .eq(
-                            "mes_ano",
-                            mes_ano
-                        )
+                        .select("id")
+                        .eq("ano", ano_atual)
+                        .eq("mes", numero_mes)
                         .execute()
                     )
 
 
-                    # -------------------------------------------------
-                    # SE EXISTE → ATUALIZA
-                    # -------------------------------------------------
+                    dados = {
+
+                        "ano":
+                            ano_atual,
+
+                        "mes":
+                            numero_mes,
+
+                        "mes_ano":
+                            meses_nomes[
+                                numero_mes - 1
+                            ],
+
+                        "meta_valor":
+                            valor_meta
+                    }
+
+
+                    # -----------------------------------------
+                    # ATUALIZA
+                    # -----------------------------------------
 
                     if existente.data:
 
                         supabase \
                             .table("metas_mensais") \
-                            .update({
-                                "meta_valor": valor_meta
-                            }) \
+                            .update(dados) \
                             .eq(
-                                "mes_ano",
-                                mes_ano
+                                "ano",
+                                ano_atual
+                            ) \
+                            .eq(
+                                "mes",
+                                numero_mes
                             ) \
                             .execute()
 
 
-                    # -------------------------------------------------
-                    # SE NÃO EXISTE → CRIA
-                    # -------------------------------------------------
+                    # -----------------------------------------
+                    # INSERE
+                    # -----------------------------------------
 
                     else:
 
                         supabase \
                             .table("metas_mensais") \
-                            .insert({
-                                "mes_ano": mes_ano,
-                                "meta_valor": valor_meta
-                            }) \
+                            .insert(dados) \
                             .execute()
 
 
@@ -1860,8 +1858,6 @@ elif menu == "Relatórios":
                     "✅ Metas salvas com sucesso!"
                 )
 
-                # Atualiza a página para carregar os valores
-                # diretamente do Supabase.
                 st.rerun()
 
 
@@ -1881,71 +1877,65 @@ elif menu == "Relatórios":
 
         df_meta_vendas = pd.DataFrame({
 
-            "mes": range(1, 13),
+            "mes":
+                range(1, 13),
 
-            "mes_nome": meses_nomes,
+            "mes_nome":
+                meses_nomes,
 
-            "meta": [
-                float(
-                    metas_banco.get(
-                        f"{ano_atual}-{i:02d}",
-                        10000.0
+            "meta":
+                [
+                    float(
+                        linha["Meta"] or 0
                     )
-                )
-                for i in range(1, 13)
-            ],
+                    for _, linha
+                    in df_metas_editado.iterrows()
+                ],
 
-            "faturamento": [0.0] * 12
-
+            "faturamento":
+                [0.0] * 12
         })
 
 
-        # -----------------------------------------------------
-        # SE O USUÁRIO SALVOU AGORA, USA OS VALORES EDITADOS
-        # -----------------------------------------------------
-
-        if salvar_metas:
-
-            df_meta_vendas["meta"] = [
-                float(
-                    df_metas_editado.iloc[
-                        i - 1
-                    ]["Meta"]
-                )
-                for i in range(1, 13)
-            ]
-
-
         # =====================================================
-        # CALCULA FATURAMENTO REAL POR MÊS
+        # CALCULA FATURAMENTO REAL
         # =====================================================
 
         if (
             not df.empty
             and "data_dt" in df.columns
+            and "faturamento_evento" in df.columns
         ):
 
             faturamento_mensal = (
-                df.groupby(
+
+                df
+                .groupby(
                     df["data_dt"].dt.month
-                )["faturamento_evento"]
+                )[
+                    "faturamento_evento"
+                ]
                 .sum()
             )
+
 
             for numero_mes in range(1, 13):
 
                 if numero_mes in faturamento_mensal.index:
 
                     df_meta_vendas.loc[
-                        df_meta_vendas["mes"] == numero_mes,
+                        df_meta_vendas["mes"]
+                        == numero_mes,
                         "faturamento"
-                    ] = faturamento_mensal[
-                        numero_mes
-                    ]
+                    ] = float(
+                        faturamento_mensal[
+                            numero_mes
+                        ]
+                    )
 
 
         # =====================================================
-        # CALCULA DIFERENÇA E PERCENTUAL
+        # DIFERENÇA
         # =====================================================
 
         df_meta_vendas["diferença"] = (
@@ -1955,9 +1945,12 @@ elif menu == "Relatórios":
             -
 
             df_meta_vendas["meta"]
-
         )
 
+
+        # =====================================================
+        # PERCENTUAL
+        # =====================================================
 
         df_meta_vendas["percentual"] = (
 
@@ -1981,6 +1974,10 @@ elif menu == "Relatórios":
         ).fillna(0)
 
 
+        # =====================================================
+        # STATUS
+        # =====================================================
+
         df_meta_vendas["status"] = (
 
             df_meta_vendas.apply(
@@ -1995,13 +1992,82 @@ elif menu == "Relatórios":
                         linha["meta"]
                     )
 
-                    else "🔴 Não atingida",
+                    else
+
+                    "🔴 Não atingida",
 
                 axis=1
+            )
+        )
 
+
+        # =====================================================
+        # ATUALIZA RESULTADOS NO SUPABASE
+        # =====================================================
+
+        for _, linha in df_meta_vendas.iterrows():
+
+            numero_mes = int(
+                linha["mes"]
             )
 
-        )
+            meta_valor = float(
+                linha["meta"]
+            )
+
+            faturamento = float(
+                linha["faturamento"]
+            )
+
+            diferenca = float(
+                linha["diferença"]
+            )
+
+            percentual = float(
+                linha["percentual"]
+            )
+
+            atingida = (
+                faturamento
+                >=
+                meta_valor
+            )
+
+
+            try:
+
+                supabase \
+                    .table("metas_mensais") \
+                    .update({
+
+                        "faturamento":
+                            faturamento,
+
+                        "diferenca":
+                            diferenca,
+
+                        "percentual":
+                            percentual,
+
+                        "atingida":
+                            atingida,
+
+                        "atualizado_em":
+                            datetime.now().isoformat()
+
+                    }) \
+                    .eq(
+                        "ano",
+                        ano_atual
+                    ) \
+                    .eq(
+                        "mes",
+                        numero_mes
+                    ) \
+                    .execute()
+
+            except Exception:
+                pass
 
 
         # =====================================================
@@ -2009,14 +2075,21 @@ elif menu == "Relatórios":
         # =====================================================
 
         meta_total_ano = (
-            df_meta_vendas["meta"].sum()
+
+            df_meta_vendas["meta"]
+            .sum()
         )
 
         faturamento_total_ano = (
-            df_meta_vendas["faturamento"].sum()
+
+            df_meta_vendas[
+                "faturamento"
+            ]
+            .sum()
         )
 
         diferenca_total_ano = (
+
             faturamento_total_ano
             -
             meta_total_ano
@@ -2033,14 +2106,16 @@ elif menu == "Relatórios":
             if meta_total_ano > 0
 
             else 0
-
         )
 
+
+        # =====================================================
+        # RESUMO
+        # =====================================================
 
         st.markdown(
             "### 📊 Resumo das Metas"
         )
-
 
         cm1, cm2, cm3, cm4 = st.columns(4)
 
@@ -2073,7 +2148,7 @@ elif menu == "Relatórios":
 
 
         # =====================================================
-        # TABELA DE ACOMPANHAMENTO
+        # ACOMPANHAMENTO MENSAL
         # =====================================================
 
         st.markdown(
@@ -2081,38 +2156,47 @@ elif menu == "Relatórios":
         )
 
 
-        df_metas_exibir = df_meta_vendas[
-            [
-                "mes_nome",
-                "meta",
-                "faturamento",
-                "diferença",
-                "percentual",
-                "status"
-            ]
-        ].copy()
+        df_metas_exibir = (
+
+            df_meta_vendas[
+
+                [
+                    "mes_nome",
+                    "meta",
+                    "faturamento",
+                    "diferença",
+                    "percentual",
+                    "status"
+                ]
+
+            ].copy()
+        )
 
 
         df_metas_exibir.rename(
 
             columns={
 
-                "mes_nome": "📅 Mês",
+                "mes_nome":
+                    "📅 Mês",
 
-                "meta": "🎯 Meta",
+                "meta":
+                    "🎯 Meta",
 
-                "faturamento": "💰 Faturamento",
+                "faturamento":
+                    "💰 Faturamento",
 
-                "diferença": "📊 Diferença",
+                "diferença":
+                    "📊 Diferença",
 
-                "percentual": "% Atingido",
+                "percentual":
+                    "% Atingido",
 
-                "status": "Status"
-
+                "status":
+                    "Status"
             },
 
             inplace=True
-
         )
 
 
@@ -2145,9 +2229,7 @@ elif menu == "Relatórios":
                     st.column_config.NumberColumn(
                         format="%.1f%%"
                     )
-
             }
-
         )
 
 
@@ -2155,7 +2237,7 @@ elif menu == "Relatórios":
 
 
         # =====================================================
-        # GRÁFICO META X FATURAMENTO
+        # GRÁFICO
         # =====================================================
 
         st.markdown(
@@ -2163,13 +2245,18 @@ elif menu == "Relatórios":
         )
 
 
-        grafico_metas = df_meta_vendas[
-            [
-                "mes_nome",
-                "meta",
-                "faturamento"
-            ]
-        ].copy()
+        grafico_metas = (
+
+            df_meta_vendas[
+
+                [
+                    "mes_nome",
+                    "meta",
+                    "faturamento"
+                ]
+
+            ].copy()
+        )
 
 
         grafico_metas.set_index(
@@ -2182,14 +2269,14 @@ elif menu == "Relatórios":
 
             columns={
 
-                "meta": "Meta",
+                "meta":
+                    "Meta",
 
-                "faturamento": "Faturamento"
-
+                "faturamento":
+                    "Faturamento"
             },
 
             inplace=True
-
         )
 
 
@@ -2202,21 +2289,35 @@ elif menu == "Relatórios":
 
 
         # =====================================================
-        # MESES ATINGIDOS / NÃO ATINGIDOS
+        # METAS ATINGIDAS / NÃO ATINGIDAS
         # =====================================================
 
-        meses_atingidos = df_meta_vendas[
-            df_meta_vendas["faturamento"]
-            >=
-            df_meta_vendas["meta"]
-        ]
+        meses_atingidos = (
+
+            df_meta_vendas[
+                df_meta_vendas[
+                    "faturamento"
+                ]
+                >=
+                df_meta_vendas[
+                    "meta"
+                ]
+            ]
+        )
 
 
-        meses_nao_atingidos = df_meta_vendas[
-            df_meta_vendas["faturamento"]
-            <
-            df_meta_vendas["meta"]
-        ]
+        meses_nao_atingidos = (
+
+            df_meta_vendas[
+                df_meta_vendas[
+                    "faturamento"
+                ]
+                <
+                df_meta_vendas[
+                    "meta"
+                ]
+            ]
+        )
 
 
         ca, cn = st.columns(2)
@@ -2231,16 +2332,24 @@ elif menu == "Relatórios":
 
             if not meses_atingidos.empty:
 
-                for _, linha in meses_atingidos.iterrows():
+                for _, linha in (
+                    meses_atingidos.iterrows()
+                ):
+
+                    excesso = (
+
+                        linha["faturamento"]
+                        -
+                        linha["meta"]
+                    )
+
 
                     st.write(
 
                         f"**{linha['mes_nome']}** — "
-
                         f"R$ {linha['faturamento']:,.2f} "
-
-                        f"(meta R$ {linha['meta']:,.2f})"
-
+                        f"(meta R$ {linha['meta']:,.2f}) "
+                        f"→ **+R$ {excesso:,.2f}**"
                     )
 
             else:
@@ -2259,9 +2368,12 @@ elif menu == "Relatórios":
 
             if not meses_nao_atingidos.empty:
 
-                for _, linha in meses_nao_atingidos.iterrows():
+                for _, linha in (
+                    meses_nao_atingidos.iterrows()
+                ):
 
                     falta = (
+
                         linha["meta"]
                         -
                         linha["faturamento"]
@@ -2271,15 +2383,14 @@ elif menu == "Relatórios":
                     st.write(
 
                         f"**{linha['mes_nome']}** — "
-
-                        f"faltam R$ {falta:,.2f}"
-
+                        f"R$ {linha['faturamento']:,.2f} "
+                        f"→ faltam **R$ {falta:,.2f}**"
                     )
 
             else:
 
                 st.success(
-                    "Todas as metas foram atingidas!"
+                    "🎉 Todas as metas foram atingidas!"
                 )
 
     # =========================================================
