@@ -852,7 +852,6 @@ elif menu == "Relatórios":
 
     # =========================================================
     # CARREGAMENTO DO FINANCEIRO
-    # LIVRO CAIXA REAL
     # =========================================================
     try:
 
@@ -953,6 +952,7 @@ elif menu == "Relatórios":
 
         # -----------------------------------------------------
         # FATURAMENTO REAL DO EVENTO
+        # CONTRATO + ADITIVOS
         # -----------------------------------------------------
         df["faturamento_evento"] = (
             df["venda_base"]
@@ -1086,13 +1086,16 @@ elif menu == "Relatórios":
     # =========================================================
     if not df.empty:
 
+        # -----------------------------------------------------
+        # LUCRO TOTAL ANTES DA RESERVA
+        # -----------------------------------------------------
         df["lucro_evento"] = (
             df["faturamento_evento"]
             - df["custo_evento"]
         )
 
         # -----------------------------------------------------
-        # 35% RESERVA / CAIXA PJ
+        # RESERVA DE EMERGÊNCIA - 35%
         # -----------------------------------------------------
         df["caixa_pj_evento"] = df[
             "lucro_evento"
@@ -1101,7 +1104,7 @@ elif menu == "Relatórios":
         )
 
         # -----------------------------------------------------
-        # LUCRO REAL APÓS RESERVA
+        # CAIXA DISPONÍVEL - 65%
         # -----------------------------------------------------
         df["lucro_real_evento"] = (
             df["lucro_evento"]
@@ -1130,13 +1133,13 @@ elif menu == "Relatórios":
         else 0.0
     )
 
-    caixa_pj_total = (
+    reserva_emergencia_total = (
         df["caixa_pj_evento"].sum()
         if not df.empty
         else 0.0
     )
 
-    lucro_real_total = (
+    caixa_disponivel_total = (
         df["lucro_real_evento"].sum()
         if not df.empty
         else 0.0
@@ -1193,8 +1196,8 @@ elif menu == "Relatórios":
         )
 
         c5.metric(
-            "🛡️ Reserva Caixa PJ",
-            f"R$ {caixa_pj_total:,.2f}",
+            "🛡️ Reserva de Emergência",
+            f"R$ {reserva_emergencia_total:,.2f}",
             help="35% do lucro positivo de cada evento."
         )
 
@@ -1212,25 +1215,27 @@ elif menu == "Relatórios":
         r1, r2, r3 = st.columns(3)
 
         r1.metric(
-            "📈 Lucro dos Eventos",
-            f"R$ {lucro_total:,.2f}"
+            "📈 Lucro Total",
+            f"R$ {lucro_total:,.2f}",
+            help="Lucro total dos eventos antes da dedução dos 35%."
         )
 
         r2.metric(
-            "🛡️ Reserva de Caixa PJ",
-            f"R$ {caixa_pj_total:,.2f}"
+            "🛡️ Reserva de Emergência",
+            f"R$ {reserva_emergencia_total:,.2f}",
+            help="35% do lucro positivo de cada evento."
         )
 
         r3.metric(
-            "💵 Lucro Real",
-            f"R$ {lucro_real_total:,.2f}",
-            help="65% restantes após separar 35% para a reserva."
+            "💵 Caixa Disponível",
+            f"R$ {caixa_disponivel_total:,.2f}",
+            help="Valor restante após separar os 35% para a Reserva de Emergência."
         )
 
         st.caption(
             "Para cada evento, 35% do lucro positivo é separado "
-            "para a Reserva de Caixa PJ. Os 65% restantes "
-            "representam o Lucro Real disponível."
+            "para a Reserva de Emergência. Os 65% restantes "
+            "representam o Caixa Disponível."
         )
 
 
@@ -1255,8 +1260,6 @@ elif menu == "Relatórios":
                 colunas_evento.append("data")
 
             colunas_evento += [
-                "venda_base",
-                "aditivos_total",
                 "faturamento_evento",
                 "custo_evento",
                 "lucro_evento",
@@ -1278,13 +1281,11 @@ elif menu == "Relatórios":
                 columns={
                     "cliente": "🥂 Cliente",
                     "data": "📅 Data",
-                    "venda_base": "📋 Contrato Base",
-                    "aditivos_total": "⏰ Aditivos",
-                    "faturamento_evento": "💰 Faturamento",
+                    "faturamento_evento": "💰 Faturamento Total",
                     "custo_evento": "💸 Custo",
-                    "lucro_evento": "📈 Lucro",
-                    "caixa_pj_evento": "🛡️ Reserva PJ (35%)",
-                    "lucro_real_evento": "💵 Lucro Real"
+                    "lucro_evento": "📈 Lucro Total",
+                    "caixa_pj_evento": "🛡️ Reserva de Emergência (35%)",
+                    "lucro_real_evento": "💵 Caixa Disponível"
                 },
                 inplace=True
             )
@@ -1355,7 +1356,6 @@ elif menu == "Relatórios":
 
     # =========================================================
     # TAB 2 - FINANCEIRO
-    # LIVRO CAIXA REAL
     # =========================================================
     with tab_fin:
 
@@ -1363,67 +1363,13 @@ elif menu == "Relatórios":
             "## 💰 Livro Caixa"
         )
 
-        entrada_total = 0.0
-        saida_total = 0.0
-
-        if not df_financeiro.empty:
-
-            # -------------------------------------------------
-            # IDENTIFICA COLUNA DE VALOR
-            # -------------------------------------------------
-            if "valor" in df_financeiro.columns:
-
-                df_financeiro["valor_num"] = pd.to_numeric(
-                    df_financeiro["valor"],
-                    errors="coerce"
-                ).fillna(0)
-
-            else:
-
-                df_financeiro["valor_num"] = 0.0
-
-
-            # -------------------------------------------------
-            # IDENTIFICA ENTRADAS E SAÍDAS
-            # -------------------------------------------------
-            if "tipo" in df_financeiro.columns:
-
-                tipos = (
-                    df_financeiro["tipo"]
-                    .astype(str)
-                    .str.lower()
-                    .str.strip()
-                )
-
-                entrada_mask = tipos.str.contains(
-                    "entrada|receita|recebimento",
-                    regex=True
-                )
-
-                saida_mask = tipos.str.contains(
-                    "saída|saida|despesa|pagamento",
-                    regex=True
-                )
-
-                entrada_total = (
-                    df_financeiro.loc[
-                        entrada_mask,
-                        "valor_num"
-                    ].sum()
-                )
-
-                saida_total = (
-                    df_financeiro.loc[
-                        saida_mask,
-                        "valor_num"
-                    ].sum()
-                )
-
-
-        saldo_caixa = (
-            entrada_total
-            - saida_total
-        )
+        # =====================================================
+        # AQUI USAMOS OS MESMOS CUSTOS DOS EVENTOS
+        # DO RESULTADO CONSOLIDADO
+        # =====================================================
+        entrada_total = faturamento
+        saida_total = custos
+        saldo_caixa = entrada_total - saida_total
 
 
         # -----------------------------------------------------
@@ -1432,17 +1378,17 @@ elif menu == "Relatórios":
         c1, c2, c3 = st.columns(3)
 
         c1.metric(
-            "💵 Total de Entradas",
+            "💵 Faturamento Total",
             f"R$ {entrada_total:,.2f}"
         )
 
         c2.metric(
-            "💸 Total de Saídas",
+            "💸 Custos dos Eventos",
             f"R$ {saida_total:,.2f}"
         )
 
         c3.metric(
-            "🏦 Saldo Atual do Caixa",
+            "🏦 Caixa Disponível",
             f"R$ {saldo_caixa:,.2f}"
         )
 
@@ -1450,24 +1396,111 @@ elif menu == "Relatórios":
         st.divider()
 
 
+        # =====================================================
+        # RESUMO DOS 35%
+        # =====================================================
         st.markdown(
-            "### 📋 Movimentações do Livro Caixa"
+            "### 🛡️ Distribuição do Lucro"
+        )
+
+        f1, f2, f3 = st.columns(3)
+
+        f1.metric(
+            "📈 Lucro Total",
+            f"R$ {lucro_total:,.2f}"
+        )
+
+        f2.metric(
+            "🛡️ Reserva de Emergência (35%)",
+            f"R$ {reserva_emergencia_total:,.2f}"
+        )
+
+        f3.metric(
+            "💵 Caixa Disponível (65%)",
+            f"R$ {caixa_disponivel_total:,.2f}"
+        )
+
+
+        st.caption(
+            "O Lucro Total corresponde ao resultado antes da separação. "
+            "35% são destinados à Reserva de Emergência e os 65% restantes "
+            "formam o Caixa Disponível."
+        )
+
+
+        st.divider()
+
+
+        # =====================================================
+        # MOVIMENTAÇÕES DO LIVRO CAIXA
+        # =====================================================
+        st.markdown(
+            "### 📋 Movimentações Financeiras"
         )
 
         if not df_financeiro.empty:
 
-            st.dataframe(
-                df_financeiro,
-                use_container_width=True,
-                hide_index=True
-            )
+            df_fin_exibicao = df_financeiro.copy()
+
+            if "valor" in df_fin_exibicao.columns:
+
+                df_fin_exibicao["valor"] = pd.to_numeric(
+                    df_fin_exibicao["valor"],
+                    errors="coerce"
+                ).fillna(0)
+
+            colunas_fin = [
+                "data",
+                "tipo",
+                "categoria",
+                "forma_pagamento",
+                "descricao",
+                "valor"
+            ]
+
+            colunas_fin = [
+                c
+                for c in colunas_fin
+                if c in df_fin_exibicao.columns
+            ]
+
+            if colunas_fin:
+
+                df_fin_exibicao = df_fin_exibicao[
+                    colunas_fin
+                ].copy()
+
+                df_fin_exibicao.rename(
+                    columns={
+                        "data": "📅 Data",
+                        "tipo": "🔄 Tipo",
+                        "categoria": "📂 Categoria",
+                        "forma_pagamento": "💳 Forma",
+                        "descricao": "📝 Descrição",
+                        "valor": "💰 Valor"
+                    },
+                    inplace=True
+                )
+
+                st.dataframe(
+                    df_fin_exibicao,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            else:
+
+                st.dataframe(
+                    df_financeiro,
+                    use_container_width=True,
+                    hide_index=True
+                )
 
         else:
 
             st.info(
                 "Nenhuma movimentação financeira encontrada."
             )
-
 
     # =========================================================
     # TAB 3 - VENDAS
