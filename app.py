@@ -5497,154 +5497,874 @@ elif menu == "Vendas":
 elif menu == "CMV":
 
     st.title("📊 Controle de CMV")
-    
+
     tab1, tab2 = st.tabs([
         "📋 Por Evento",
         "📊 Análise"
     ])
 
+    # =========================================================
+    # CONFIGURAÇÕES
+    # =========================================================
+
+    status_eventos = [
+        "aprovado",
+        "finalizado",
+        "concluido",
+        "pago"
+    ]
+
+    categorias_cmv = [
+        "Bebidas",
+        "Frutas",
+        "Gelo",
+        "Insumos",
+        "Outros"
+    ]
+
+    # =========================================================
+    # 📋 TAB 1 - POR EVENTO
+    # =========================================================
+
     with tab1:
-    
-        df_eventos = pd.DataFrame(
-            supabase.table("eventos")
-            .select("*")
-            .eq("status", "aprovado")
-            .execute().data or []
-        )
-    
+
+        try:
+
+            df_eventos = pd.DataFrame(
+                supabase.table("eventos")
+                .select("*")
+                .in_("status", status_eventos)
+                .order("data")
+                .execute()
+                .data
+                or []
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Erro ao carregar os eventos: {e}"
+            )
+
+            df_eventos = pd.DataFrame()
+
+
         if df_eventos.empty:
-            st.info("Nenhum evento aprovado")
+
+            st.info(
+                "Nenhum evento encontrado para controle de CMV."
+            )
+
         else:
-    
+
+            st.caption(
+                "Registre somente os valores que realmente foram gastos "
+                "para realizar cada evento. O custo previsto do orçamento "
+                "não é alterado."
+            )
+
+
+            # =====================================================
+            # LOOP DOS EVENTOS
+            # =====================================================
+
             for _, row in df_eventos.iterrows():
-    
-                st.subheader(f"{row['cliente']} - {row['data']}")
-    
-                valor_venda = row.get("venda", 0)
-                custo_previsto = row.get("custo", 0)
-    
-                # =========================
-                # BUSCAR CUSTOS
-                # =========================
+
+                evento_id = row["id"]
+
+                cliente = row.get(
+                    "cliente",
+                    "Cliente"
+                )
+
+                data_evento = row.get(
+                    "data",
+                    ""
+                )
+
+                valor_venda = float(
+                    pd.to_numeric(
+                        row.get("venda", 0),
+                        errors="coerce"
+                    )
+                    or 0
+                )
+
+                custo_previsto = float(
+                    pd.to_numeric(
+                        row.get("custo", 0),
+                        errors="coerce"
+                    )
+                    or 0
+                )
+
+
+                # =================================================
+                # CABEÇALHO DO EVENTO
+                # =================================================
+
+                st.markdown(
+                    f"## 🎉 {cliente}"
+                )
+
+                st.caption(
+                    f"📅 Evento: {data_evento} | "
+                    f"ID: {evento_id}"
+                )
+
+
+                # =================================================
+                # BUSCAR CUSTOS REAIS
+                # =================================================
+
+                try:
+
+                    custos = pd.DataFrame(
+                        supabase.table("evento_custos")
+                        .select("*")
+                        .eq(
+                            "evento_id",
+                            evento_id
+                        )
+                        .order("id")
+                        .execute()
+                        .data
+                        or []
+                    )
+
+                except Exception as e:
+
+                    st.error(
+                        f"❌ Erro ao carregar custos do evento: {e}"
+                    )
+
+                    custos = pd.DataFrame()
+
+
+                # =================================================
+                # CÁLCULOS
+                # =================================================
+
+                if not custos.empty:
+
+                    custos["valor"] = pd.to_numeric(
+                        custos["valor"],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    total_real = float(
+                        custos["valor"].sum()
+                    )
+
+                else:
+
+                    total_real = 0.0
+
+
+                lucro_real = (
+                    valor_venda
+                    - total_real
+                )
+
+
+                economia = (
+                    custo_previsto
+                    - total_real
+                )
+
+
+                cmv_percentual = (
+                    (total_real / valor_venda) * 100
+                    if valor_venda > 0
+                    else 0
+                )
+
+
+                # =================================================
+                # MÉTRICAS
+                # =================================================
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                col1.metric(
+                    "💰 Faturamento",
+                    f"R$ {valor_venda:,.2f}"
+                )
+
+                col2.metric(
+                    "📋 Custo Previsto",
+                    f"R$ {custo_previsto:,.2f}"
+                )
+
+                col3.metric(
+                    "💸 Custo Real",
+                    f"R$ {total_real:,.2f}"
+                )
+
+                col4.metric(
+                    "📊 CMV",
+                    f"{cmv_percentual:.2f}%"
+                )
+
+
+                col5, col6 = st.columns(2)
+
+                col5.metric(
+                    "📈 Lucro Real",
+                    f"R$ {lucro_real:,.2f}"
+                )
+
+                col6.metric(
+                    "💰 Diferença vs. Previsto",
+                    f"R$ {economia:,.2f}",
+                    help=(
+                        "Diferença entre o custo previsto no orçamento "
+                        "e o custo realmente lançado no CMV."
+                    )
+                )
+
+
+                # =================================================
+                # STATUS DO CMV
+                # =================================================
+
+                if custos.empty:
+
+                    st.info(
+                        "🟡 Este evento ainda não possui custos reais "
+                        "lançados no CMV."
+                    )
+
+                elif cmv_percentual > 50:
+
+                    st.error(
+                        f"🚨 CMV crítico: {cmv_percentual:.2f}%"
+                    )
+
+                elif cmv_percentual > 40:
+
+                    st.warning(
+                        f"⚠️ CMV alto: {cmv_percentual:.2f}%"
+                    )
+
+                else:
+
+                    st.success(
+                        f"🟢 CMV controlado: {cmv_percentual:.2f}%"
+                    )
+
+
+                st.divider()
+
+
+                # =================================================
+                # ➕ LANÇAR CUSTO REAL
+                # =================================================
+
+                st.markdown(
+                    "### ➕ Lançar custo real"
+                )
+
+                st.caption(
+                    "Informe somente aquilo que realmente foi comprado "
+                    "ou gasto para este evento."
+                )
+
+
+                col_a, col_b = st.columns(2)
+
+                categoria = col_a.selectbox(
+                    "Categoria",
+                    categorias_cmv,
+                    key=f"cmv_categoria_{evento_id}"
+                )
+
+                valor = col_b.number_input(
+                    "Valor realmente gasto (R$)",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                    key=f"cmv_valor_{evento_id}"
+                )
+
+
+                descricao = st.text_input(
+                    "Descrição",
+                    placeholder=(
+                        "Ex.: Compra de frutas, gelo, bebidas, "
+                        "insumos etc."
+                    ),
+                    key=f"cmv_descricao_{evento_id}"
+                )
+
+
+                if st.button(
+                    "💾 Registrar Custo",
+                    key=f"cmv_adicionar_{evento_id}",
+                    use_container_width=True
+                ):
+
+                    if valor <= 0:
+
+                        st.warning(
+                            "⚠️ Informe um valor maior que zero."
+                        )
+
+                    elif not descricao.strip():
+
+                        st.warning(
+                            "⚠️ Informe uma descrição do custo."
+                        )
+
+                    else:
+
+                        try:
+
+                            supabase.table(
+                                "evento_custos"
+                            ).insert({
+
+                                "evento_id": int(
+                                    evento_id
+                                ),
+
+                                "descricao": (
+                                    f"{categoria} - "
+                                    f"{descricao.strip()}"
+                                ),
+
+                                "valor": float(
+                                    valor
+                                )
+
+                            }).execute()
+
+
+                            st.success(
+                                "✅ Custo real registrado!"
+                            )
+
+                            st.rerun()
+
+
+                        except Exception as e:
+
+                            st.error(
+                                f"❌ Erro ao registrar custo: {e}"
+                            )
+
+
+                # =================================================
+                # LISTA DOS CUSTOS REAIS
+                # =================================================
+
+                st.markdown(
+                    "### 📋 Custos reais registrados"
+                )
+
+
+                if custos.empty:
+
+                    st.info(
+                        "Nenhum custo real registrado para este evento."
+                    )
+
+                else:
+
+                    df_custos_exibir = custos.copy()
+
+
+                    # -------------------------------------------------
+                    # PREPARAÇÃO DA EXIBIÇÃO
+                    # -------------------------------------------------
+
+                    colunas_custos = []
+
+                    if "id" in df_custos_exibir.columns:
+
+                        colunas_custos.append(
+                            "id"
+                        )
+
+                    if "descricao" in df_custos_exibir.columns:
+
+                        colunas_custos.append(
+                            "descricao"
+                        )
+
+                    if "valor" in df_custos_exibir.columns:
+
+                        colunas_custos.append(
+                            "valor"
+                        )
+
+
+                    df_custos_exibir = (
+                        df_custos_exibir[
+                            colunas_custos
+                        ]
+                        .copy()
+                    )
+
+
+                    df_custos_exibir.rename(
+                        columns={
+
+                            "id": "ID",
+
+                            "descricao": "Descrição",
+
+                            "valor": "Valor"
+
+                        },
+                        inplace=True
+                    )
+
+
+                    st.dataframe(
+                        df_custos_exibir,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+
+                            "Valor":
+                                st.column_config.NumberColumn(
+                                    "💰 Valor",
+                                    format="R$ %.2f"
+                                )
+
+                        }
+                    )
+
+
+                    # =================================================
+                    # EXCLUSÃO DE CUSTO
+                    # =================================================
+
+                    with st.expander(
+                        "🗑️ Corrigir / excluir um custo"
+                    ):
+
+                        ids_disponiveis = (
+                            custos["id"]
+                            .dropna()
+                            .tolist()
+                            if "id" in custos.columns
+                            else []
+                        )
+
+
+                        if ids_disponiveis:
+
+                            id_excluir = st.selectbox(
+                                "Selecione o lançamento",
+                                ids_disponiveis,
+                                key=f"cmv_excluir_id_{evento_id}"
+                            )
+
+
+                            if st.button(
+                                "❌ Excluir custo selecionado",
+                                key=f"cmv_excluir_{evento_id}",
+                                type="secondary"
+                            ):
+
+                                try:
+
+                                    supabase.table(
+                                        "evento_custos"
+                                    ).delete().eq(
+                                        "id",
+                                        int(id_excluir)
+                                    ).execute()
+
+
+                                    st.success(
+                                        "✅ Custo excluído."
+                                    )
+
+                                    st.rerun()
+
+
+                                except Exception as e:
+
+                                    st.error(
+                                        f"❌ Erro ao excluir custo: {e}"
+                                    )
+
+
+                st.divider()
+
+
+    # =========================================================
+    # 📊 TAB 2 - ANÁLISE
+    # =========================================================
+
+    with tab2:
+
+        st.markdown(
+            "## 📊 Análise de CMV"
+        )
+
+        st.caption(
+            "Comparação entre o custo previsto no orçamento "
+            "e o custo realmente realizado em cada evento."
+        )
+
+
+        # =====================================================
+        # BUSCAR EVENTOS
+        # =====================================================
+
+        try:
+
+            df_eventos = pd.DataFrame(
+                supabase.table("eventos")
+                .select("*")
+                .in_(
+                    "status",
+                    status_eventos
+                )
+                .order("data")
+                .execute()
+                .data
+                or []
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Erro ao carregar eventos: {e}"
+            )
+
+            df_eventos = pd.DataFrame()
+
+
+        resumo = []
+
+
+        # =====================================================
+        # CONSOLIDAR CADA EVENTO
+        # =====================================================
+
+        for _, row in df_eventos.iterrows():
+
+            evento_id = row["id"]
+
+
+            try:
+
                 custos = pd.DataFrame(
                     supabase.table("evento_custos")
                     .select("*")
-                    .eq("evento_id", row["id"])
-                    .execute().data or []
+                    .eq(
+                        "evento_id",
+                        evento_id
+                    )
+                    .execute()
+                    .data
+                    or []
                 )
-    
-                total_real = custos["valor"].sum() if not custos.empty else 0
-                lucro_real = valor_venda - total_real
-    
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Venda", f"R$ {valor_venda:,.2f}")
-                col2.metric("Previsto", f"R$ {custo_previsto:,.2f}")
-                col3.metric("Real", f"R$ {total_real:,.2f}")
-    
-                st.metric("Lucro Real", f"R$ {lucro_real:,.2f}")
-    
-                # =========================
-                # LANÇAR CUSTO
-                # =========================
-                st.markdown("### ➕ Lançar custo")
-    
-                descricao = st.text_input(
-                    "Descrição",
-                    key=f"desc_{row['id']}"
-                )
-    
-                valor = st.number_input(
-                    "Valor",
-                    min_value=0.0,
-                    key=f"valor_{row['id']}"
-                )
-    
-                if st.button(f"Adicionar {row['id']}"):
-                    supabase.table("evento_custos").insert({
-                        "evento_id": row["id"],
-                        "descricao": descricao,
-                        "valor": valor
-                    }).execute()
-    
-                    st.success("Custo adicionado")
-                    st.rerun()
-    
-                # =========================
-                # LISTA
-                # =========================
-                st.markdown("### 📋 Custos")
-    
-                if custos.empty:
-                    st.info("Sem custos lançados")
-                else:
-                    for _, c in custos.iterrows():
-                        st.write(f"{c['descricao']} → R$ {c['valor']:,.2f}")
-    
-                st.divider()
-    
-    with tab2:
-    
-        df_eventos = pd.DataFrame(
-            supabase.table("eventos")
-            .select("*")
-            .eq("status", "aprovado")
-            .execute().data or []
-        )
-    
-        resumo = []
-    
-        for _, row in df_eventos.iterrows():
-    
-            custos = pd.DataFrame(
-                supabase.table("evento_custos")
-                .select("*")
-                .eq("evento_id", row["id"])
-                .execute().data or []
-            )
-    
-            total_real = custos["valor"].sum() if not custos.empty else 0
-            lucro = row.get("venda", 0) - total_real
 
-            valor_venda = row.get("venda", 0)
-            cmv = (total_real / valor_venda) * 100 if valor_venda > 0 else 0
-    
+            except Exception:
+
+                custos = pd.DataFrame()
+
+
+            if not custos.empty:
+
+                custos["valor"] = pd.to_numeric(
+                    custos["valor"],
+                    errors="coerce"
+                ).fillna(0)
+
+                total_real = float(
+                    custos["valor"].sum()
+                )
+
+            else:
+
+                total_real = 0.0
+
+
+            valor_venda = float(
+                pd.to_numeric(
+                    row.get("venda", 0),
+                    errors="coerce"
+                )
+                or 0
+            )
+
+
+            custo_previsto = float(
+                pd.to_numeric(
+                    row.get("custo", 0),
+                    errors="coerce"
+                )
+                or 0
+            )
+
+
+            lucro = (
+                valor_venda
+                - total_real
+            )
+
+
+            diferenca = (
+                custo_previsto
+                - total_real
+            )
+
+
+            cmv = (
+                (total_real / valor_venda) * 100
+                if valor_venda > 0
+                else 0
+            )
+
+
             resumo.append({
-                "Cliente": row["cliente"],
-                "Venda": row.get("venda", 0),
-                "Previsto": row.get("custo", 0),
-                "Real": total_real,
-                "Lucro": lucro,
-                "CMV (%)": round(cmv, 2)
+
+                "Cliente":
+                    row.get(
+                        "cliente",
+                        "Cliente"
+                    ),
+
+                "Data":
+                    row.get(
+                        "data",
+                        ""
+                    ),
+
+                "Venda":
+                    valor_venda,
+
+                "Previsto":
+                    custo_previsto,
+
+                "Real":
+                    total_real,
+
+                "Diferença":
+                    diferenca,
+
+                "Lucro":
+                    lucro,
+
+                "CMV (%)":
+                    round(
+                        cmv,
+                        2
+                    )
+
             })
-            
-        df_resumo = pd.DataFrame(resumo)
+
+
+        df_resumo = pd.DataFrame(
+            resumo
+        )
+
+
+        # =====================================================
+        # SEM DADOS
+        # =====================================================
 
         if df_resumo.empty:
-            st.info("Sem dados")
+
+            st.info(
+                "Nenhum evento disponível para análise."
+            )
+
         else:
-            st.dataframe(df_resumo)
-        
-            # 🔥 ALERTAS DE CMV
+
+            # =================================================
+            # TABELA
+            # =================================================
+
+            st.dataframe(
+                df_resumo,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+
+                    "Venda":
+                        st.column_config.NumberColumn(
+                            "💰 Venda",
+                            format="R$ %.2f"
+                        ),
+
+                    "Previsto":
+                        st.column_config.NumberColumn(
+                            "📋 Previsto",
+                            format="R$ %.2f"
+                        ),
+
+                    "Real":
+                        st.column_config.NumberColumn(
+                            "💸 Custo Real",
+                            format="R$ %.2f"
+                        ),
+
+                    "Diferença":
+                        st.column_config.NumberColumn(
+                            "📊 Economia / Diferença",
+                            format="R$ %.2f"
+                        ),
+
+                    "Lucro":
+                        st.column_config.NumberColumn(
+                            "📈 Lucro Real",
+                            format="R$ %.2f"
+                        ),
+
+                    "CMV (%)":
+                        st.column_config.NumberColumn(
+                            "📊 CMV",
+                            format="%.2f%%"
+                        )
+
+                }
+            )
+
+
+            st.divider()
+
+
+            # =================================================
+            # ALERTAS
+            # =================================================
+
+            st.markdown(
+                "### 🚨 Alertas de CMV"
+            )
+
+
+            alertas = False
+
+
             for _, r in df_resumo.iterrows():
+
                 if r["CMV (%)"] > 50:
-                    st.error(f"🚨 {r['Cliente']} com CMV crítico: {r['CMV (%)']}%")
+
+                    st.error(
+                        f"🚨 **{r['Cliente']}** — "
+                        f"CMV crítico: "
+                        f"{r['CMV (%)']:.2f}%"
+                    )
+
+                    alertas = True
+
+
                 elif r["CMV (%)"] > 40:
-                    st.warning(f"⚠️ {r['Cliente']} com CMV alto: {r['CMV (%)']}%")
-        
-            # =========================
+
+                    st.warning(
+                        f"⚠️ **{r['Cliente']}** — "
+                        f"CMV alto: "
+                        f"{r['CMV (%)']:.2f}%"
+                    )
+
+                    alertas = True
+
+
+            if not alertas:
+
+                st.success(
+                    "🟢 Nenhum evento apresentou CMV acima de 40%."
+                )
+
+
+            st.divider()
+
+
+            # =================================================
             # MÉTRICAS GERAIS
-            # =========================
-            total_venda = df_resumo["Venda"].sum()
-            total_custo = df_resumo["Real"].sum()
-            total_lucro = df_resumo["Lucro"].sum()
-        
-            st.metric("Total Venda", f"R$ {total_venda:,.2f}")
-            st.metric("Total Custo", f"R$ {total_custo:,.2f}")
-            st.metric("Total Lucro", f"R$ {total_lucro:,.2f}")
-        
-            if total_venda > 0:
-                cmv_medio = (total_custo / total_venda) * 100
-                st.metric("CMV Médio", f"{cmv_medio:.2f}%")
+            # =================================================
+
+            total_venda = float(
+                df_resumo["Venda"].sum()
+            )
+
+            total_previsto = float(
+                df_resumo["Previsto"].sum()
+            )
+
+            total_custo = float(
+                df_resumo["Real"].sum()
+            )
+
+            total_diferenca = float(
+                df_resumo["Diferença"].sum()
+            )
+
+            total_lucro = float(
+                df_resumo["Lucro"].sum()
+            )
+
+
+            cmv_medio = (
+                (total_custo / total_venda) * 100
+                if total_venda > 0
+                else 0
+            )
+
+
+            st.markdown(
+                "### 📊 Consolidado"
+            )
+
+
+            c1, c2, c3, c4, c5 = st.columns(5)
+
+
+            c1.metric(
+                "💰 Total Faturado",
+                f"R$ {total_venda:,.2f}"
+            )
+
+
+            c2.metric(
+                "📋 Custo Previsto",
+                f"R$ {total_previsto:,.2f}"
+            )
+
+
+            c3.metric(
+                "💸 Custo Real",
+                f"R$ {total_custo:,.2f}"
+            )
+
+
+            c4.metric(
+                "💰 Economia",
+                f"R$ {total_diferenca:,.2f}"
+            )
+
+
+            c5.metric(
+                "📈 Lucro Real",
+                f"R$ {total_lucro:,.2f}"
+            )
+
+
+            st.metric(
+                "📊 CMV Médio",
+                f"{cmv_medio:.2f}%"
+            )
+
+
+            # =================================================
+            # EXPLICAÇÃO
+            # =================================================
+
+            st.info(
+                "💡 **Como interpretar:** o Custo Previsto é o valor "
+                "calculado originalmente no orçamento. O Custo Real "
+                "é somente aquilo que você efetivamente lançou como "
+                "gasto após o evento. A diferença entre os dois "
+                "representa o valor que não foi gasto naquele evento."
+            )
 
 elif menu == "Financeiro":
 
