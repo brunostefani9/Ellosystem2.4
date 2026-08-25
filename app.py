@@ -5225,9 +5225,9 @@ elif menu == "Orçamentos":
                         )
         
                     st.divider()
-        # =========================
+        # =========================================================
         # ABA 3 - APROVADOS
-        # =========================
+        # =========================================================
         with tab3:
         
             st.subheader("✅ Eventos Aprovados")
@@ -5240,132 +5240,675 @@ elif menu == "Orçamentos":
             )
         
             if df_eventos.empty:
+        
                 st.info("Nenhum evento aprovado")
+        
             else:
+        
                 for _, row in df_eventos.iterrows():
         
-                    # 🔥 CORREÇÃO: Garante que os itens existam fora da condicional do botão
+                    evento_id = row["id"]
+        
+                    # =====================================================
+                    # BUSCAR ITENS DO EVENTO
+                    # =====================================================
+        
                     itens = pd.DataFrame(
                         supabase.table("evento_itens")
                         .select("*")
-                        .eq("evento_id", row["id"])
+                        .eq("evento_id", evento_id)
                         .execute().data or []
                     )
-
-                    icone = "🍸" if row.get("modalidade") == "Bar Completo" else "👷"
-
-                    st.write(
-                        f"{icone} {row.get('modalidade', 'Bar Completo')} | "
-                        f"👤 {row['cliente']} | "
-                        f"📅 {row['data']} | "
-                        f"📍 {row['cidade']}"
+        
+                    modalidade = row.get(
+                        "modalidade",
+                        "Bar Completo"
                     )
         
-                    if st.button(f"📋 Checklist aprovado {row['id']}", key=f"check_aprov_{row['id']}"):
-                        
-                        modalidade = row.get("modalidade", "Bar Completo")
-                        
-                        st.subheader("📋 Checklist do Evento")
-                        st.info(f"Modalidade: {modalidade}")
-
-                        if modalidade == "Bar Completo":
-                            
-                            st.markdown(f"""
-                            ### 📍 Informações do Evento
-                            
-                            **👤 Cliente:** {row['cliente']}  
-                            📞 {row['telefone']}  
-                            
-                            📅 {row['data']}  
-                            📍 {row['cidade']} - {row['endereco']}  
-                            
-                            🎉 Tipo: {row['tipo_evento']}  
-                            
-                            🕒 Chegada equipe: {row['hora_chegada']}  
-                            🍸 Início serviço: {row['hora_inicio']}  
-                            👥 Convidados chegam: {row['hora_convidados']}  
-                            
-                            👥 Nº convidados: {row['convidados']}  
-                            """)
+                    icone = (
+                        "🍸"
+                        if modalidade == "Bar Completo"
+                        else "👷"
+                    )
         
-                            st.markdown("### 👥 Equipe")
-            
-                            if "equipe" in row and row["equipe"]:
-                                nomes = [n.strip() for n in row["equipe"].split("\n") if n.strip()]
-                                for nome in nomes:
-                                    st.write(f"✔ {nome}")
-                            else:
-                                st.write("Sem equipe definida")
-            
-                            if not itens.empty:
-                                df_checklist = itens.copy()
-            
-                                def definir_categoria(unidade):
-                                    if unidade == "garrafas":
-                                        return "Bebidas"
-                                    elif unidade == "g":
-                                        return "Frutas"
-                                    else:
-                                        return "Outros"
-            
-                                df_checklist["Categoria"] = df_checklist["unidade"].apply(definir_categoria)
-            
-                                df_checklist["Início"] = ""
-                                df_checklist["Fim"] = ""
-            
-                                st.dataframe(
-                                    df_checklist[["Categoria", "produto", "quantidade", "Início", "Fim"]]
-                                    .rename(columns={
-                                        "produto": "Produto",
-                                        "quantidade": "Qtde"
-                                    })
-                                )
-                            else:
-                                st.warning("Nenhum item encontrado")
-
+                    # =====================================================
+                    # CABEÇALHO
+                    # =====================================================
+        
+                    st.markdown(
+                        f"### {icone} {row.get('cliente', 'Sem cliente')}"
+                    )
+        
+                    st.caption(
+                        f"📅 {row.get('data', '')} | "
+                        f"📍 {row.get('cidade', '')} | "
+                        f"🆔 Evento #{evento_id}"
+                    )
+        
+                    # =====================================================
+                    # BOTÃO EDITAR EVENTO
+                    # =====================================================
+        
+                    if f"editar_aprovado_{evento_id}" not in st.session_state:
+        
+                        st.session_state[
+                            f"editar_aprovado_{evento_id}"
+                        ] = False
+        
+                    if st.button(
+                        "✏️ Editar Evento",
+                        key=f"editar_btn_{evento_id}"
+                    ):
+        
+                        st.session_state[
+                            f"editar_aprovado_{evento_id}"
+                        ] = not st.session_state[
+                            f"editar_aprovado_{evento_id}"
+                        ]
+        
+                    # =====================================================
+                    # EDITOR DO EVENTO
+                    # =====================================================
+        
+                    if st.session_state[
+                        f"editar_aprovado_{evento_id}"
+                    ]:
+        
+                        st.divider()
+        
+                        st.markdown(
+                            "## ✏️ Editar informações do evento"
+                        )
+        
+                        st.info(
+                            "As alterações serão salvas no evento aprovado. "
+                            "O valor da venda também será atualizado no registro de vendas."
+                        )
+        
+                        # =================================================
+                        # DADOS PRINCIPAIS
+                        # =================================================
+        
+                        col1, col2 = st.columns(2)
+        
+                        with col1:
+        
+                            novo_cliente = st.text_input(
+                                "👤 Cliente",
+                                value=str(
+                                    row.get("cliente", "") or ""
+                                ),
+                                key=f"edit_cliente_{evento_id}"
+                            )
+        
+                            nova_data = st.text_input(
+                                "📅 Data",
+                                value=str(
+                                    row.get("data", "") or ""
+                                ),
+                                key=f"edit_data_{evento_id}"
+                            )
+        
+                            nova_cidade = st.text_input(
+                                "📍 Cidade",
+                                value=str(
+                                    row.get("cidade", "") or ""
+                                ),
+                                key=f"edit_cidade_{evento_id}"
+                            )
+        
+                            novo_telefone = st.text_input(
+                                "📞 Telefone",
+                                value=str(
+                                    row.get("telefone", "") or ""
+                                ),
+                                key=f"edit_telefone_{evento_id}"
+                            )
+        
+                            novo_endereco = st.text_input(
+                                "🏠 Endereço",
+                                value=str(
+                                    row.get("endereco", "") or ""
+                                ),
+                                key=f"edit_endereco_{evento_id}"
+                            )
+        
+                        with col2:
+        
+                            novo_tipo = st.text_input(
+                                "🎉 Tipo de evento",
+                                value=str(
+                                    row.get("tipo_evento", "") or ""
+                                ),
+                                key=f"edit_tipo_{evento_id}"
+                            )
+        
+                            nova_hora_chegada = st.text_input(
+                                "🕒 Chegada da equipe",
+                                value=str(
+                                    row.get("hora_chegada", "") or ""
+                                ),
+                                key=f"edit_hora_chegada_{evento_id}"
+                            )
+        
+                            nova_hora_inicio = st.text_input(
+                                "🍸 Início do serviço",
+                                value=str(
+                                    row.get("hora_inicio", "") or ""
+                                ),
+                                key=f"edit_hora_inicio_{evento_id}"
+                            )
+        
+                            nova_hora_convidados = st.text_input(
+                                "👥 Chegada dos convidados",
+                                value=str(
+                                    row.get("hora_convidados", "") or ""
+                                ),
+                                key=f"edit_hora_convidados_{evento_id}"
+                            )
+        
+                            novos_convidados = st.number_input(
+                                "👥 Nº de convidados",
+                                min_value=0,
+                                value=int(
+                                    row.get("convidados", 0) or 0
+                                ),
+                                step=1,
+                                key=f"edit_convidados_{evento_id}"
+                            )
+        
+                        # =================================================
+                        # FINANCEIRO
+                        # =================================================
+        
+                        st.markdown(
+                            "### 💰 Informações financeiras"
+                        )
+        
+                        valor_venda_atual = float(
+                            row.get("venda", 0) or 0
+                        )
+        
+                        novo_valor_venda = st.number_input(
+                            "💰 Valor de venda",
+                            min_value=0.0,
+                            value=valor_venda_atual,
+                            step=50.0,
+                            format="%.2f",
+                            key=f"edit_venda_{evento_id}"
+                        )
+        
+                        # =================================================
+                        # EQUIPE
+                        # =================================================
+        
+                        st.markdown(
+                            "### 👥 Equipe"
+                        )
+        
+                        equipe_atual = str(
+                            row.get("equipe", "") or ""
+                        )
+        
+                        nova_equipe = st.text_area(
+                            "Nomes da equipe (um por linha)",
+                            value=equipe_atual,
+                            key=f"edit_equipe_{evento_id}"
+                        )
+        
+                        # =================================================
+                        # CARTA DE DRINKS
+                        # =================================================
+        
+                        if modalidade == "Bar Completo":
+        
+                            st.markdown(
+                                "### 🍸 Carta de Drinks"
+                            )
+        
+                            drinks_atual = str(
+                                row.get("drinks", "") or ""
+                            )
+        
+                            novos_drinks = st.text_area(
+                                "Drinks selecionados (um por linha)",
+                                value=drinks_atual,
+                                key=f"edit_drinks_{evento_id}",
+                                height=150
+                            )
+        
                         else:
-                            st.markdown(f"""
-                            ### 📍 Informações do Evento
-                            
-                            **👤 Cliente:** {row['cliente']}
-                            
-                            📞 {row['telefone']}
-                            
-                            📅 {row['data']}
-                            📍 {row['cidade']} - {row['endereco']}
-                            
-                            🎉 Tipo: {row['tipo_evento']}
-                            
-                            🕒 Chegada equipe: {row['hora_chegada']}
-                            👥 Chegada convidados: {row['hora_convidados']}
-                            
-                            💰 Valor contratado: R$ {row['venda']:,.2f}
-                            """)
-                            
-                            if not itens.empty:
-                                st.dataframe(
-                                    itens[["categoria", "produto", "quantidade"]]
-                                    .rename(columns={
+        
+                            novos_drinks = str(
+                                row.get("drinks", "") or ""
+                            )
+        
+                        # =================================================
+                        # ITENS / QUANTIDADES
+                        # =================================================
+        
+                        st.markdown(
+                            "### 📦 Produtos e quantidades"
+                        )
+        
+                        if itens.empty:
+        
+                            st.info(
+                                "Nenhum item cadastrado neste evento."
+                            )
+        
+                            df_itens_editado = pd.DataFrame()
+        
+                        else:
+        
+                            colunas_itens = [
+                                "id",
+                                "categoria",
+                                "produto",
+                                "quantidade",
+                                "unidade"
+                            ]
+        
+                            colunas_existentes = [
+                                c
+                                for c in colunas_itens
+                                if c in itens.columns
+                            ]
+        
+                            df_itens_editor = itens[
+                                colunas_existentes
+                            ].copy()
+        
+                            df_itens_editor = df_itens_editor.rename(
+                                columns={
+                                    "id": "ID",
+                                    "categoria": "Categoria",
+                                    "produto": "Produto",
+                                    "quantidade": "Quantidade",
+                                    "unidade": "Unidade"
+                                }
+                            )
+        
+                            df_itens_editado = st.data_editor(
+        
+                                df_itens_editor,
+        
+                                use_container_width=True,
+        
+                                hide_index=True,
+        
+                                disabled=[
+                                    "ID",
+                                    "Categoria",
+                                    "Unidade"
+                                ],
+        
+                                column_config={
+        
+                                    "ID":
+                                        st.column_config.NumberColumn(
+                                            "ID"
+                                        ),
+        
+                                    "Categoria":
+                                        st.column_config.TextColumn(
+                                            "Categoria"
+                                        ),
+        
+                                    "Produto":
+                                        st.column_config.TextColumn(
+                                            "Produto"
+                                        ),
+        
+                                    "Quantidade":
+                                        st.column_config.NumberColumn(
+                                            "Quantidade",
+                                            min_value=0,
+                                            format="%.3f"
+                                        ),
+        
+                                    "Unidade":
+                                        st.column_config.TextColumn(
+                                            "Unidade"
+                                        )
+                                },
+        
+                                key=f"editar_itens_{evento_id}"
+                            )
+        
+                        # =================================================
+                        # SALVAR ALTERAÇÕES
+                        # =================================================
+        
+                        if st.button(
+                            "💾 Salvar alterações",
+                            key=f"salvar_edicao_{evento_id}"
+                        ):
+        
+                            # ---------------------------------------------
+                            # ATUALIZAR EVENTO
+                            # ---------------------------------------------
+        
+                            supabase.table("eventos")\
+                                .update({
+        
+                                    "cliente":
+                                        novo_cliente,
+        
+                                    "data":
+                                        nova_data,
+        
+                                    "cidade":
+                                        nova_cidade,
+        
+                                    "telefone":
+                                        novo_telefone,
+        
+                                    "endereco":
+                                        novo_endereco,
+        
+                                    "tipo_evento":
+                                        novo_tipo,
+        
+                                    "hora_chegada":
+                                        nova_hora_chegada,
+        
+                                    "hora_inicio":
+                                        nova_hora_inicio,
+        
+                                    "hora_convidados":
+                                        nova_hora_convidados,
+        
+                                    "convidados":
+                                        novos_convidados,
+        
+                                    "venda":
+                                        novo_valor_venda,
+        
+                                    "equipe":
+                                        nova_equipe,
+        
+                                    "drinks":
+                                        novos_drinks
+        
+                                })\
+                                .eq(
+                                    "id",
+                                    evento_id
+                                )\
+                                .execute()
+        
+                            # ---------------------------------------------
+                            # ATUALIZAR ITENS
+                            # ---------------------------------------------
+        
+                            if (
+                                not itens.empty
+                                and not df_itens_editado.empty
+                            ):
+        
+                                for _, item in df_itens_editado.iterrows():
+        
+                                    item_id = item.get(
+                                        "ID"
+                                    )
+        
+                                    quantidade = float(
+                                        item.get(
+                                            "Quantidade",
+                                            0
+                                        ) or 0
+                                    )
+        
+                                    supabase.table(
+                                        "evento_itens"
+                                    ).update({
+        
+                                        "produto":
+                                            item.get(
+                                                "Produto",
+                                                ""
+                                            ),
+        
+                                        "quantidade":
+                                            quantidade
+        
+                                    }).eq(
+                                        "id",
+                                        int(item_id)
+                                    ).execute()
+        
+                            # ---------------------------------------------
+                            # ATUALIZAR VENDA
+                            # ---------------------------------------------
+        
+                            venda_existente = pd.DataFrame(
+                                supabase.table("vendas")
+                                .select("*")
+                                .eq(
+                                    "evento_id",
+                                    evento_id
+                                )
+                                .execute().data or []
+                            )
+        
+                            if not venda_existente.empty:
+        
+                                supabase.table("vendas")\
+                                    .update({
+        
+                                        "cliente":
+                                            novo_cliente,
+        
+                                        "data":
+                                            nova_data,
+        
+                                        "valor_venda":
+                                            novo_valor_venda,
+        
+                                        "lucro":
+                                            novo_valor_venda
+                                            - float(
+                                                row.get(
+                                                    "custo",
+                                                    0
+                                                ) or 0
+                                            )
+        
+                                    })\
+                                    .eq(
+                                        "evento_id",
+                                        evento_id
+                                    )\
+                                    .execute()
+        
+                            st.success(
+                                "✅ Evento atualizado com sucesso!"
+                            )
+        
+                            st.session_state[
+                                f"editar_aprovado_{evento_id}"
+                            ] = False
+        
+                            st.rerun()
+        
+                    # =====================================================
+                    # CHECKLIST
+                    # =====================================================
+        
+                    if st.button(
+                        f"📋 Checklist aprovado {evento_id}",
+                        key=f"check_aprov_{evento_id}"
+                    ):
+        
+                        st.session_state[
+                            f"mostrar_check_aprov_{evento_id}"
+                        ] = not st.session_state.get(
+                            f"mostrar_check_aprov_{evento_id}",
+                            False
+                        )
+        
+                    if st.session_state.get(
+                        f"mostrar_check_aprov_{evento_id}",
+                        False
+                    ):
+        
+                        st.divider()
+        
+                        st.subheader(
+                            "📋 Checklist do Evento"
+                        )
+        
+                        st.info(
+                            f"🍸 Modalidade: {modalidade}"
+                        )
+        
+                        # =================================================
+                        # INFORMAÇÕES
+                        # =================================================
+        
+                        st.markdown(
+                            "### 📍 Informações do Evento"
+                        )
+        
+                        st.write(
+                            f"**👤 Cliente:** "
+                            f"{row.get('cliente', '')}"
+                        )
+        
+                        st.write(
+                            f"**📞 Telefone:** "
+                            f"{row.get('telefone', '')}"
+                        )
+        
+                        st.write(
+                            f"**📅 Data:** "
+                            f"{row.get('data', '')}"
+                        )
+        
+                        st.write(
+                            f"**📍 Cidade:** "
+                            f"{row.get('cidade', '')}"
+                        )
+        
+                        st.write(
+                            f"**🏠 Endereço:** "
+                            f"{row.get('endereco', '')}"
+                        )
+        
+                        st.write(
+                            f"**🎉 Tipo:** "
+                            f"{row.get('tipo_evento', '')}"
+                        )
+        
+                        st.write(
+                            f"**🕒 Chegada equipe:** "
+                            f"{row.get('hora_chegada', '')}"
+                        )
+        
+                        st.write(
+                            f"**🍸 Início serviço:** "
+                            f"{row.get('hora_inicio', '')}"
+                        )
+        
+                        st.write(
+                            f"**👥 Convidados:** "
+                            f"{row.get('convidados', 0)}"
+                        )
+        
+                        # =================================================
+                        # DRINKS
+                        # =================================================
+        
+                        st.markdown(
+                            "### 🍸 Carta de Drinks"
+                        )
+        
+                        drinks = row.get(
+                            "drinks",
+                            ""
+                        )
+        
+                        if drinks:
+        
+                            for drink in str(
+                                drinks
+                            ).split("\n"):
+        
+                                if drink.strip():
+        
+                                    st.write(
+                                        f"☐ {drink.strip()}"
+                                    )
+        
+                        else:
+        
+                            st.info(
+                                "Nenhum drink cadastrado."
+                            )
+        
+                        # =================================================
+                        # ITENS
+                        # =================================================
+        
+                        st.markdown(
+                            "### 📦 Itens do Evento"
+                        )
+        
+                        if itens.empty:
+        
+                            st.info(
+                                "Nenhum item cadastrado."
+                            )
+        
+                        else:
+        
+                            st.dataframe(
+                                itens[
+                                    [
+                                        "categoria",
+                                        "produto",
+                                        "quantidade",
+                                        "unidade"
+                                    ]
+                                ].rename(
+                                    columns={
                                         "categoria": "Categoria",
                                         "produto": "Produto",
-                                        "quantidade": "Quantidade"
-                                    }),
-                                    use_container_width=True
-                                )
-                            else:
-                                st.info("Nenhum item cadastrado.")
+                                        "quantidade": "Quantidade",
+                                        "unidade": "Unidade"
+                                    }
+                                ),
+                                use_container_width=True,
+                                hide_index=True
+                            )
         
-                    if st.button(f"✔ Finalizar {row['id']}", key=f"fin_{row['id']}"):
+                    # =====================================================
+                    # FINALIZAR
+                    # =====================================================
+        
+                    if st.button(
+                        f"✔ Finalizar {evento_id}",
+                        key=f"fin_{evento_id}"
+                    ):
+        
                         supabase.table("eventos")\
-                            .update({"status": "finalizado"})\
-                            .eq("id", row["id"])\
+                            .update({
+                                "status": "finalizado"
+                            })\
+                            .eq(
+                                "id",
+                                evento_id
+                            )\
                             .execute()
-                        
-                        st.success("Evento finalizado!")
+        
+                        st.success(
+                            "✅ Evento finalizado!"
+                        )
+        
                         st.rerun()
         
                     st.divider()
-
 elif menu == "Cachês":
 
     st.title("👥 Gestão de Cachês")
