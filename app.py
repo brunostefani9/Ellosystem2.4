@@ -144,6 +144,7 @@ menu = st.sidebar.radio(
 "Menu",
 [
 "Relatórios",
+"Eventos",
 "Precificação",
 "Estoque",
 "Receitas",
@@ -2406,7 +2407,1222 @@ elif menu == "Relatórios":
             "Cadastre e vincule serviços aos orçamentos "
             "para visualizar a distribuição por produto."
         )
-        
+
+
+elif menu == "Eventos":
+
+    st.title("📋 Eventos")
+
+    # =========================================================
+    # CARREGAR EVENTOS
+    # =========================================================
+
+    response = (
+        supabase.table("eventos")
+        .select("*")
+        .in_(
+            "status",
+            [
+                "aprovado",
+                "finalizado",
+                "concluido",
+                "pago"
+            ]
+        )
+        .order("data", desc=False)
+        .execute()
+    )
+
+    df_eventos = pd.DataFrame(
+        response.data or []
+    )
+
+    # =========================================================
+    # PREPARAR DADOS
+    # =========================================================
+
+    if not df_eventos.empty:
+
+        df_eventos["data_dt"] = pd.to_datetime(
+            df_eventos["data"],
+            errors="coerce"
+        )
+
+        df_eventos["venda"] = pd.to_numeric(
+            df_eventos.get("venda", 0),
+            errors="coerce"
+        ).fillna(0)
+
+        df_eventos["convidados"] = pd.to_numeric(
+            df_eventos.get("convidados", 0),
+            errors="coerce"
+        ).fillna(0)
+
+    # =========================================================
+    # DATA ATUAL
+    # =========================================================
+
+    hoje = pd.Timestamp.now().normalize()
+
+    # =========================================================
+    # SEPARAR PRÓXIMOS E REALIZADOS
+    # =========================================================
+
+    if not df_eventos.empty:
+
+        df_proximos = df_eventos[
+            (
+                df_eventos["data_dt"] >= hoje
+            )
+            &
+            (
+                df_eventos["status"] == "aprovado"
+            )
+        ].copy()
+
+        df_realizados = df_eventos[
+            (
+                df_eventos["status"].isin(
+                    [
+                        "finalizado",
+                        "concluido",
+                        "pago"
+                    ]
+                )
+            )
+            |
+            (
+                (df_eventos["data_dt"] < hoje)
+                &
+                (df_eventos["status"] == "aprovado")
+            )
+        ].copy()
+
+    else:
+
+        df_proximos = pd.DataFrame()
+        df_realizados = pd.DataFrame()
+
+    # =========================================================
+    # INDICADORES
+    # =========================================================
+
+    eventos_realizados = len(
+        df_realizados
+    )
+
+    proximos_eventos = len(
+        df_proximos
+    )
+
+    total_vendido = (
+        df_realizados["venda"].sum()
+        if not df_realizados.empty
+        else 0
+    )
+
+    total_pessoas = (
+        df_realizados["convidados"].sum()
+        if not df_realizados.empty
+        else 0
+    )
+
+    # =========================================================
+    # MAIOR EVENTO
+    # =========================================================
+
+    if not df_realizados.empty:
+
+        maior_evento = df_realizados.loc[
+            df_realizados["convidados"].idxmax()
+        ]
+
+        maior_evento_nome = maior_evento.get(
+            "cliente",
+            "N/A"
+        )
+
+        maior_evento_qtd = maior_evento.get(
+            "convidados",
+            0
+        )
+
+    else:
+
+        maior_evento_nome = "N/A"
+        maior_evento_qtd = 0
+
+    # =========================================================
+    # MAIOR VENDA
+    # =========================================================
+
+    if not df_realizados.empty:
+
+        maior_venda = df_realizados.loc[
+            df_realizados["venda"].idxmax()
+        ]
+
+        maior_venda_nome = maior_venda.get(
+            "cliente",
+            "N/A"
+        )
+
+        maior_venda_valor = maior_venda.get(
+            "venda",
+            0
+        )
+
+    else:
+
+        maior_venda_nome = "N/A"
+        maior_venda_valor = 0
+
+    # =========================================================
+    # TICKET MÉDIO
+    # =========================================================
+
+    ticket_medio = (
+        total_vendido / eventos_realizados
+        if eventos_realizados > 0
+        else 0
+    )
+
+    # =========================================================
+    # PAINEL PRINCIPAL
+    # =========================================================
+
+    st.markdown(
+        "## 📊 Visão Geral"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "🎉 Eventos Realizados",
+        eventos_realizados
+    )
+
+    c2.metric(
+        "📅 Próximos Eventos",
+        proximos_eventos
+    )
+
+    c3.metric(
+        "💰 Total Vendido",
+        f"R$ {total_vendido:,.2f}"
+    )
+
+    c4.metric(
+        "👥 Pessoas Atendidas",
+        f"{total_pessoas:,.0f}"
+    )
+
+    c5, c6, c7 = st.columns(3)
+
+    c5.metric(
+        "🏆 Maior Evento",
+        f"{maior_evento_qtd:,.0f} pessoas"
+    )
+
+    c6.metric(
+        "💎 Maior Venda",
+        f"R$ {maior_venda_valor:,.2f}"
+    )
+
+    c7.metric(
+        "📈 Ticket Médio",
+        f"R$ {ticket_medio:,.2f}"
+    )
+
+    if maior_evento_nome != "N/A":
+
+        st.caption(
+            f"🏆 Maior evento: **{maior_evento_nome}** "
+            f"({maior_evento_qtd:,.0f} convidados)"
+        )
+
+    if maior_venda_nome != "N/A":
+
+        st.caption(
+            f"💎 Maior venda: **{maior_venda_nome}** "
+            f"(R$ {maior_venda_valor:,.2f})"
+        )
+
+    # =========================================================
+    # PRÓXIMOS EVENTOS
+    # =========================================================
+
+    st.divider()
+
+    st.markdown(
+        "## 📅 Próximos Eventos"
+    )
+
+    if df_proximos.empty:
+
+        st.info(
+            "Nenhum próximo evento aprovado."
+        )
+
+    else:
+
+        proximos_exibir = df_proximos[
+            [
+                "data",
+                "cliente",
+                "cidade",
+                "convidados",
+                "venda",
+                "status"
+            ]
+        ].copy()
+
+        proximos_exibir.rename(
+            columns={
+                "data": "Data",
+                "cliente": "Cliente",
+                "cidade": "Cidade",
+                "convidados": "Convidados",
+                "venda": "Venda",
+                "status": "Status"
+            },
+            inplace=True
+        )
+
+        st.dataframe(
+            proximos_exibir,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+
+                "Data":
+                    st.column_config.DateColumn(
+                        "📅 Data"
+                    ),
+
+                "Cliente":
+                    st.column_config.TextColumn(
+                        "👤 Cliente"
+                    ),
+
+                "Cidade":
+                    st.column_config.TextColumn(
+                        "📍 Cidade"
+                    ),
+
+                "Convidados":
+                    st.column_config.NumberColumn(
+                        "👥 Convidados"
+                    ),
+
+                "Venda":
+                    st.column_config.NumberColumn(
+                        "💰 Venda",
+                        format="R$ %.2f"
+                    ),
+
+                "Status":
+                    st.column_config.TextColumn(
+                        "📌 Status"
+                    )
+            }
+        )
+
+    # =========================================================
+    # EVOLUÇÃO MENSAL
+    # =========================================================
+
+    st.divider()
+
+    st.markdown(
+        "## 📈 Evolução dos Eventos"
+    )
+
+    if not df_realizados.empty:
+
+        df_grafico = df_realizados.copy()
+
+        df_grafico["Mes"] = (
+            df_grafico["data_dt"]
+            .dt.to_period("M")
+            .astype(str)
+        )
+
+        eventos_mes = (
+            df_grafico
+            .groupby("Mes")
+            .size()
+        )
+
+        if not eventos_mes.empty:
+
+            st.line_chart(
+                eventos_mes
+            )
+
+    else:
+
+        st.info(
+            "Ainda não existem eventos realizados "
+            "para gerar o gráfico."
+        )
+
+    # =========================================================
+    # HISTÓRICO
+    # =========================================================
+
+    st.divider()
+
+    st.markdown(
+        "## 📋 Histórico de Eventos"
+    )
+
+    busca = st.text_input(
+        "🔎 Buscar cliente, cidade ou evento"
+    )
+
+    df_lista = df_eventos.copy()
+
+    if busca:
+
+        filtro_cliente = (
+            df_lista["cliente"]
+            .astype(str)
+            .str.contains(
+                busca,
+                case=False,
+                na=False
+            )
+        )
+
+        filtro_cidade = (
+            df_lista["cidade"]
+            .astype(str)
+            .str.contains(
+                busca,
+                case=False,
+                na=False
+            )
+        )
+
+        filtro_id = (
+            df_lista["id"]
+            .astype(str)
+            .str.contains(
+                busca,
+                case=False,
+                na=False
+            )
+        )
+
+        df_lista = df_lista[
+            filtro_cliente
+            |
+            filtro_cidade
+            |
+            filtro_id
+        ]
+
+    # =========================================================
+    # EVENTOS
+    # =========================================================
+
+    if df_lista.empty:
+
+        st.info(
+            "Nenhum evento encontrado."
+        )
+
+    else:
+
+        for _, row in df_lista.iterrows():
+
+            evento_id = row["id"]
+
+            cliente = row.get(
+                "cliente",
+                "Sem cliente"
+            )
+
+            data_evento = row.get(
+                "data",
+                ""
+            )
+
+            cidade = row.get(
+                "cidade",
+                ""
+            )
+
+            status = row.get(
+                "status",
+                ""
+            )
+
+            convidados = row.get(
+                "convidados",
+                0
+            )
+
+            venda = row.get(
+                "venda",
+                0
+            )
+
+            # =================================================
+            # STATUS
+            # =================================================
+
+            if status == "aprovado":
+
+                icone_status = "🟢"
+
+            elif status == "finalizado":
+
+                icone_status = "🔵"
+
+            elif status == "concluido":
+
+                icone_status = "✅"
+
+            elif status == "pago":
+
+                icone_status = "💰"
+
+            else:
+
+                icone_status = "⚪"
+
+            # =================================================
+            # CABEÇALHO
+            # =================================================
+
+            st.markdown(
+                f"### 🍸 {cliente}"
+            )
+
+            st.caption(
+                f"🆔 Evento #{evento_id}  |  "
+                f"📅 {data_evento}  |  "
+                f"📍 {cidade}  |  "
+                f"{icone_status} {status.upper()}"
+            )
+
+            ec1, ec2, ec3 = st.columns(3)
+
+            ec1.metric(
+                "👥 Convidados",
+                f"{float(convidados):,.0f}"
+            )
+
+            ec2.metric(
+                "💰 Venda",
+                f"R$ {float(venda):,.2f}"
+            )
+
+            ec3.write(
+                f"**Status:** {status.upper()}"
+            )
+
+            # =================================================
+            # CONTROLE DE ABERTURA
+            # =================================================
+
+            chave_aberto = (
+                f"evento_aberto_{evento_id}"
+            )
+
+            if chave_aberto not in st.session_state:
+
+                st.session_state[
+                    chave_aberto
+                ] = False
+
+            if st.button(
+                "📋 Abrir Evento",
+                key=f"abrir_evento_{evento_id}"
+            ):
+
+                st.session_state[
+                    chave_aberto
+                ] = not st.session_state[
+                    chave_aberto
+                ]
+
+            # =================================================
+            # EVENTO ABERTO
+            # =================================================
+
+            if st.session_state[
+                chave_aberto
+            ]:
+
+                st.divider()
+
+                # =================================================
+                # INFORMAÇÕES
+                # =================================================
+
+                st.markdown(
+                    "## 📍 Informações do Evento"
+                )
+
+                i1, i2, i3 = st.columns(3)
+
+                with i1:
+
+                    st.write(
+                        f"**👤 Cliente:** {cliente}"
+                    )
+
+                    st.write(
+                        f"**📞 Telefone:** "
+                        f"{row.get('telefone', '')}"
+                    )
+
+                    st.write(
+                        f"**🎉 Tipo:** "
+                        f"{row.get('tipo_evento', '')}"
+                    )
+
+                with i2:
+
+                    st.write(
+                        f"**📅 Data:** {data_evento}"
+                    )
+
+                    st.write(
+                        f"**📍 Cidade:** {cidade}"
+                    )
+
+                    st.write(
+                        f"**🏠 Endereço:** "
+                        f"{row.get('endereco', '')}"
+                    )
+
+                with i3:
+
+                    st.write(
+                        f"**🕒 Chegada equipe:** "
+                        f"{row.get('hora_chegada', '')}"
+                    )
+
+                    st.write(
+                        f"**🍸 Início:** "
+                        f"{row.get('hora_inicio', '')}"
+                    )
+
+                    st.write(
+                        f"**👥 Convidados:** "
+                        f"{row.get('convidados', 0)}"
+                    )
+
+                # =================================================
+                # CARTA DE DRINKS
+                # =================================================
+
+                st.divider()
+
+                st.markdown(
+                    "## 🍸 Carta de Drinks"
+                )
+
+                drinks = row.get(
+                    "drinks",
+                    ""
+                )
+
+                if drinks:
+
+                    lista_drinks = [
+                        d.strip()
+                        for d in str(drinks).split("\n")
+                        if d.strip()
+                    ]
+
+                    if lista_drinks:
+
+                        d1, d2 = st.columns(2)
+
+                        for i, drink in enumerate(
+                            lista_drinks
+                        ):
+
+                            with (
+                                d1
+                                if i % 2 == 0
+                                else d2
+                            ):
+
+                                st.write(
+                                    f"☐ {drink}"
+                                )
+
+                    else:
+
+                        st.info(
+                            "Nenhum drink cadastrado."
+                        )
+
+                else:
+
+                    st.info(
+                        "Este evento não possui "
+                        "carta de drinks cadastrada."
+                    )
+
+                # =================================================
+                # BUSCAR ITENS
+                # =================================================
+
+                itens = pd.DataFrame(
+                    supabase.table(
+                        "evento_itens"
+                    )
+                    .select("*")
+                    .eq(
+                        "evento_id",
+                        evento_id
+                    )
+                    .execute()
+                    .data or []
+                )
+
+                # =================================================
+                # CONFERÊNCIA
+                # =================================================
+
+                st.divider()
+
+                st.markdown(
+                    "## 📦 Conferência do Evento"
+                )
+
+                st.info(
+                    "Sistema = quantidade calculada "
+                    "no orçamento."
+                )
+
+                if itens.empty:
+
+                    st.warning(
+                        "Nenhum item encontrado "
+                        "neste evento."
+                    )
+
+                else:
+
+                    categorias_estoque = [
+                        "bebidas",
+                        "insumos",
+                        "frutas",
+                        "locação",
+                        "custos"
+                    ]
+
+                    itens_check = itens[
+                        itens["categoria"]
+                        .astype(str)
+                        .str.lower()
+                        .isin(
+                            categorias_estoque
+                        )
+                    ].copy()
+
+                    if itens_check.empty:
+
+                        st.info(
+                            "Nenhum item de estoque "
+                            "para conferência."
+                        )
+
+                    else:
+
+                        # =============================================
+                        # BUSCAR DADOS JÁ SALVOS
+                        # =============================================
+
+                        dados_existentes = pd.DataFrame(
+                            supabase.table(
+                                "evento_conferencia"
+                            )
+                            .select("*")
+                            .eq(
+                                "evento_id",
+                                evento_id
+                            )
+                            .execute()
+                            .data or []
+                        )
+
+                        lista = []
+
+                        for _, item in itens_check.iterrows():
+
+                            produto = str(
+                                item.get(
+                                    "produto",
+                                    ""
+                                )
+                            )
+
+                            categoria = str(
+                                item.get(
+                                    "categoria",
+                                    ""
+                                )
+                            )
+
+                            unidade = str(
+                                item.get(
+                                    "unidade",
+                                    "un"
+                                )
+                            )
+
+                            quantidade_sistema = float(
+                                item.get(
+                                    "quantidade",
+                                    0
+                                ) or 0
+                            )
+
+                            existente = pd.DataFrame()
+
+                            if not dados_existentes.empty:
+
+                                existente = (
+                                    dados_existentes[
+                                        dados_existentes[
+                                            "produto"
+                                        ]
+                                        .astype(str)
+                                        == produto
+                                    ]
+                                )
+
+                            if not existente.empty:
+
+                                registro = existente.iloc[0]
+
+                                quantidade_ida = float(
+                                    registro.get(
+                                        "quantidade_ida",
+                                        0
+                                    ) or 0
+                                )
+
+                                quantidade_volta = float(
+                                    registro.get(
+                                        "quantidade_volta",
+                                        0
+                                    ) or 0
+                                )
+
+                                quantidade_conferencia = float(
+                                    registro.get(
+                                        "quantidade_conferencia",
+                                        0
+                                    ) or 0
+                                )
+
+                                observacao = str(
+                                    registro.get(
+                                        "observacao",
+                                        ""
+                                    ) or ""
+                                )
+
+                            else:
+
+                                quantidade_ida = 0
+                                quantidade_volta = 0
+                                quantidade_conferencia = 0
+                                observacao = ""
+
+                            consumo = (
+                                quantidade_ida
+                                - quantidade_volta
+                            )
+
+                            perda = max(
+                                0,
+                                quantidade_volta
+                                - quantidade_conferencia
+                            )
+
+                            lista.append({
+
+                                "Categoria":
+                                    categoria,
+
+                                "Produto":
+                                    produto,
+
+                                "Unidade":
+                                    unidade,
+
+                                "Sistema":
+                                    quantidade_sistema,
+
+                                "Ida":
+                                    quantidade_ida,
+
+                                "Volta":
+                                    quantidade_volta,
+
+                                "Conferência":
+                                    quantidade_conferencia,
+
+                                "Consumo":
+                                    consumo,
+
+                                "Perda":
+                                    perda,
+
+                                "Observação":
+                                    observacao
+                            })
+
+                        df_conferencia = pd.DataFrame(
+                            lista
+                        )
+
+                        # =============================================
+                        # EDITOR
+                        # =============================================
+
+                        df_editado = st.data_editor(
+
+                            df_conferencia,
+
+                            use_container_width=True,
+
+                            hide_index=True,
+
+                            disabled=[
+                                "Categoria",
+                                "Produto",
+                                "Unidade",
+                                "Sistema",
+                                "Consumo",
+                                "Perda"
+                            ],
+
+                            column_config={
+
+                                "Categoria":
+                                    st.column_config.TextColumn(
+                                        "Categoria"
+                                    ),
+
+                                "Produto":
+                                    st.column_config.TextColumn(
+                                        "📦 Produto"
+                                    ),
+
+                                "Unidade":
+                                    st.column_config.TextColumn(
+                                        "Unidade"
+                                    ),
+
+                                "Sistema":
+                                    st.column_config.NumberColumn(
+                                        "🧮 Sistema"
+                                    ),
+
+                                "Ida":
+                                    st.column_config.NumberColumn(
+                                        "🚚 Ida",
+                                        min_value=0
+                                    ),
+
+                                "Volta":
+                                    st.column_config.NumberColumn(
+                                        "🔙 Volta",
+                                        min_value=0
+                                    ),
+
+                                "Conferência":
+                                    st.column_config.NumberColumn(
+                                        "🔎 Conferência",
+                                        min_value=0
+                                    ),
+
+                                "Consumo":
+                                    st.column_config.NumberColumn(
+                                        "📉 Consumo"
+                                    ),
+
+                                "Perda":
+                                    st.column_config.NumberColumn(
+                                        "🚨 Perda"
+                                    ),
+
+                                "Observação":
+                                    st.column_config.TextColumn(
+                                        "📝 Observação"
+                                    )
+                            },
+
+                            key=(
+                                f"editor_conferencia_"
+                                f"{evento_id}"
+                            )
+                        )
+
+                        # =============================================
+                        # SALVAR CONFERÊNCIA
+                        # =============================================
+
+                        if st.button(
+                            "💾 Salvar Conferência",
+                            key=(
+                                f"salvar_conferencia_"
+                                f"{evento_id}"
+                            )
+                        ):
+
+                            supabase.table(
+                                "evento_conferencia"
+                            ) \
+                            .delete() \
+                            .eq(
+                                "evento_id",
+                                evento_id
+                            ) \
+                            .execute()
+
+                            for _, item in (
+                                df_editado.iterrows()
+                            ):
+
+                                ida = float(
+                                    item["Ida"]
+                                    or 0
+                                )
+
+                                volta = float(
+                                    item["Volta"]
+                                    or 0
+                                )
+
+                                conferencia = float(
+                                    item["Conferência"]
+                                    or 0
+                                )
+
+                                consumo = (
+                                    ida - volta
+                                )
+
+                                perda = max(
+                                    0,
+                                    volta
+                                    - conferencia
+                                )
+
+                                supabase.table(
+                                    "evento_conferencia"
+                                ).insert({
+
+                                    "evento_id":
+                                        evento_id,
+
+                                    "produto":
+                                        item["Produto"],
+
+                                    "categoria":
+                                        item["Categoria"],
+
+                                    "unidade":
+                                        item["Unidade"],
+
+                                    "quantidade_sistema":
+                                        float(
+                                            item["Sistema"]
+                                            or 0
+                                        ),
+
+                                    "quantidade_ida":
+                                        ida,
+
+                                    "quantidade_volta":
+                                        volta,
+
+                                    "quantidade_conferencia":
+                                        conferencia,
+
+                                    "consumo":
+                                        consumo,
+
+                                    "perda":
+                                        perda,
+
+                                    "observacao":
+                                        item["Observação"]
+
+                                }).execute()
+
+                            st.success(
+                                "✅ Conferência salva!"
+                            )
+
+                            st.rerun()
+
+                # =================================================
+                # RESUMO DA CONFERÊNCIA
+                # =================================================
+
+                st.divider()
+
+                st.markdown(
+                    "## 📊 Resumo da Conferência"
+                )
+
+                conferencia_atual = pd.DataFrame(
+                    supabase.table(
+                        "evento_conferencia"
+                    )
+                    .select("*")
+                    .eq(
+                        "evento_id",
+                        evento_id
+                    )
+                    .execute()
+                    .data or []
+                )
+
+                if conferencia_atual.empty:
+
+                    st.info(
+                        "A conferência ainda não "
+                        "foi registrada."
+                    )
+
+                else:
+
+                    conferencia_atual[
+                        "consumo"
+                    ] = pd.to_numeric(
+                        conferencia_atual[
+                            "consumo"
+                        ],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    conferencia_atual[
+                        "perda"
+                    ] = pd.to_numeric(
+                        conferencia_atual[
+                            "perda"
+                        ],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    total_consumo = (
+                        conferencia_atual[
+                            "consumo"
+                        ].sum()
+                    )
+
+                    total_perda = (
+                        conferencia_atual[
+                            "perda"
+                        ].sum()
+                    )
+
+                    r1, r2 = st.columns(2)
+
+                    r1.metric(
+                        "📉 Consumo",
+                        f"{total_consumo:,.2f}"
+                    )
+
+                    r2.metric(
+                        "🚨 Perdas / Divergências",
+                        f"{total_perda:,.2f}"
+                    )
+
+                    if total_perda > 0:
+
+                        st.error(
+                            "🚨 Foram encontradas "
+                            "perdas/divergências."
+                        )
+
+                    else:
+
+                        st.success(
+                            "✅ Nenhuma perda registrada."
+                        )
+
+                # =================================================
+                # RESULTADO FINANCEIRO
+                # =================================================
+
+                st.divider()
+
+                st.markdown(
+                    "## 💰 Resultado Financeiro"
+                )
+
+                venda_evento = float(
+                    row.get(
+                        "venda",
+                        0
+                    ) or 0
+                )
+
+                custo_evento = float(
+                    row.get(
+                        "custo",
+                        0
+                    ) or 0
+                )
+
+                lucro_evento = (
+                    venda_evento
+                    - custo_evento
+                )
+
+                f1, f2, f3 = st.columns(3)
+
+                f1.metric(
+                    "💰 Venda",
+                    f"R$ {venda_evento:,.2f}"
+                )
+
+                f2.metric(
+                    "💸 Custo",
+                    f"R$ {custo_evento:,.2f}"
+                )
+
+                f3.metric(
+                    "📈 Lucro",
+                    f"R$ {lucro_evento:,.2f}"
+                )
+
+                # =================================================
+                # FECHAR
+                # =================================================
+
+                if st.button(
+                    "🔽 Fechar Evento",
+                    key=(
+                        f"fechar_evento_"
+                        f"{evento_id}"
+                    )
+                ):
+
+                    st.session_state[
+                        chave_aberto
+                    ] = False
+
+                    st.rerun()
+
+            st.divider()
+
 elif menu == "Receitas":
 
     st.title("Receitas")
@@ -4090,7 +5306,7 @@ elif menu == "Orçamentos":
             df_eventos = pd.DataFrame(
                 supabase.table("eventos")
                 .select("*")
-                .in_("status", ["pendente", "aprovado", "finalizado"])
+                .eq("status", "pendente")
                 .order("data", desc=False)
                 .execute().data or []
             )
@@ -5117,8 +6333,87 @@ elif menu == "Orçamentos":
                     # =====================================================
                     # AÇÕES
                     # =====================================================
-        
+                    
                     col1, col2 = st.columns(2)
+                    
+                    if col1.button(
+                        f"✅ Aprovar {evento_id}",
+                        key=f"aprovar_{evento_id}"
+                    ):
+                    
+                        supabase.table("eventos")\
+                            .update({
+                                "status": "aprovado"
+                            })\
+                            .eq(
+                                "id",
+                                evento_id
+                            )\
+                            .execute()
+                    
+                        valor_venda = float(
+                            row.get(
+                                "venda",
+                                0
+                            ) or 0
+                        )
+                    
+                        custo = float(
+                            row.get(
+                                "custo",
+                                0
+                            ) or 0
+                        )
+                    
+                        lucro = (
+                            valor_venda
+                            - custo
+                        )
+                    
+                        supabase.table("vendas").insert({
+                    
+                            "evento_id": evento_id,
+                            "cliente": row["cliente"],
+                            "data": row["data"],
+                            "valor_venda": valor_venda,
+                            "custo": custo,
+                            "lucro": lucro
+                    
+                        }).execute()
+                    
+                        st.success(
+                            "✅ Evento aprovado e venda registrada!"
+                        )
+                    
+                        st.rerun()
+                    
+                    
+                    if col2.button(
+                        f"🗑 Excluir {evento_id}",
+                        key=f"excluir_{evento_id}"
+                    ):
+                    
+                        supabase.table("evento_itens")\
+                            .delete()\
+                            .eq(
+                                "evento_id",
+                                evento_id
+                            )\
+                            .execute()
+                    
+                        supabase.table("eventos")\
+                            .delete()\
+                            .eq(
+                                "id",
+                                evento_id
+                            )\
+                            .execute()
+                    
+                        st.success(
+                            "🗑 Evento excluído com sucesso!"
+                        )
+                    
+                        st.rerun()
         
                     # =====================================================
                     # APROVAR - SOMENTE PENDENTE
