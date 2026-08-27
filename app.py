@@ -2438,6 +2438,20 @@ elif menu == "Eventos":
     )
 
     # =========================================================
+    # CARREGAR ADITIVOS / HORAS EXTRAS
+    # =========================================================
+
+    response_aditivos = (
+        supabase.table("aditivos_evento")
+        .select("*")
+        .execute()
+    )
+
+    df_aditivos = pd.DataFrame(
+        response_aditivos.data or []
+    )
+
+    # =========================================================
     # PREPARAR DADOS
     # =========================================================
 
@@ -2457,6 +2471,61 @@ elif menu == "Eventos":
             df_eventos.get("convidados", 0),
             errors="coerce"
         ).fillna(0)
+
+        # =====================================================
+        # ADITIVOS
+        # =====================================================
+
+        if (
+            not df_aditivos.empty
+            and "evento_id" in df_aditivos.columns
+            and "valor_cliente" in df_aditivos.columns
+        ):
+
+            df_aditivos["valor_cliente"] = pd.to_numeric(
+                df_aditivos["valor_cliente"],
+                errors="coerce"
+            ).fillna(0)
+
+            aditivos_agrupados = (
+                df_aditivos
+                .groupby("evento_id")["valor_cliente"]
+                .sum()
+                .reset_index()
+            )
+
+            aditivos_agrupados.rename(
+                columns={
+                    "valor_cliente": "aditivos"
+                },
+                inplace=True
+            )
+
+            df_eventos = df_eventos.merge(
+                aditivos_agrupados,
+                left_on="id",
+                right_on="evento_id",
+                how="left"
+            )
+
+            df_eventos["aditivos"] = (
+                df_eventos["aditivos"]
+                .fillna(0)
+            )
+
+        else:
+
+            df_eventos["aditivos"] = 0.0
+
+        # =====================================================
+        # FATURAMENTO REAL
+        # =====================================================
+
+        df_eventos["faturamento"] = (
+            df_eventos["venda"]
+            +
+            df_eventos["aditivos"]
+        )
 
     # =========================================================
     # DATA ATUAL
@@ -2515,8 +2584,12 @@ elif menu == "Eventos":
         df_proximos
     )
 
+    # =========================================================
+    # TOTAL FATURADO
+    # =========================================================
+
     total_vendido = (
-        df_realizados["venda"].sum()
+        df_realizados["faturamento"].sum()
         if not df_realizados.empty
         else 0
     )
@@ -2559,7 +2632,7 @@ elif menu == "Eventos":
     if not df_realizados.empty:
 
         maior_venda = df_realizados.loc[
-            df_realizados["venda"].idxmax()
+            df_realizados["faturamento"].idxmax()
         ]
 
         maior_venda_nome = maior_venda.get(
@@ -2568,7 +2641,7 @@ elif menu == "Eventos":
         )
 
         maior_venda_valor = maior_venda.get(
-            "venda",
+            "faturamento",
             0
         )
 
@@ -2608,7 +2681,7 @@ elif menu == "Eventos":
     )
 
     c3.metric(
-        "💰 Total Vendido",
+        "💰 Total Faturado",
         f"R$ {total_vendido:,.2f}"
     )
 
@@ -2673,6 +2746,8 @@ elif menu == "Eventos":
                 "cidade",
                 "convidados",
                 "venda",
+                "aditivos",
+                "faturamento",
                 "status"
             ]
         ].copy()
@@ -2683,7 +2758,9 @@ elif menu == "Eventos":
                 "cliente": "Cliente",
                 "cidade": "Cidade",
                 "convidados": "Convidados",
-                "venda": "Venda",
+                "venda": "Contrato Base",
+                "aditivos": "Aditivos",
+                "faturamento": "Faturamento",
                 "status": "Status"
             },
             inplace=True
@@ -2715,9 +2792,21 @@ elif menu == "Eventos":
                         "👥 Convidados"
                     ),
 
-                "Venda":
+                "Contrato Base":
                     st.column_config.NumberColumn(
-                        "💰 Venda",
+                        "📋 Contrato Base",
+                        format="R$ %.2f"
+                    ),
+
+                "Aditivos":
+                    st.column_config.NumberColumn(
+                        "⏰ Aditivos",
+                        format="R$ %.2f"
+                    ),
+
+                "Faturamento":
+                    st.column_config.NumberColumn(
+                        "💰 Faturamento",
                         format="R$ %.2f"
                     ),
 
@@ -2869,6 +2958,16 @@ elif menu == "Eventos":
                 0
             )
 
+            aditivos = row.get(
+                "aditivos",
+                0
+            )
+
+            faturamento = row.get(
+                "faturamento",
+                venda
+            )
+
             # =================================================
             # STATUS
             # =================================================
@@ -2908,7 +3007,7 @@ elif menu == "Eventos":
                 f"{icone_status} {status.upper()}"
             )
 
-            ec1, ec2, ec3 = st.columns(3)
+            ec1, ec2, ec3, ec4 = st.columns(4)
 
             ec1.metric(
                 "👥 Convidados",
@@ -2916,12 +3015,18 @@ elif menu == "Eventos":
             )
 
             ec2.metric(
-                "💰 Venda",
+                "📋 Contrato Base",
                 f"R$ {float(venda):,.2f}"
             )
 
-            ec3.write(
-                f"**Status:** {status.upper()}"
+            ec3.metric(
+                "⏰ Aditivos",
+                f"R$ {float(aditivos):,.2f}"
+            )
+
+            ec4.metric(
+                "💰 Faturamento",
+                f"R$ {float(faturamento):,.2f}"
             )
 
             # =================================================
@@ -3574,6 +3679,19 @@ elif menu == "Eventos":
                     ) or 0
                 )
 
+                aditivos_evento = float(
+                    row.get(
+                        "aditivos",
+                        0
+                    ) or 0
+                )
+
+                faturamento_evento = (
+                    venda_evento
+                    +
+                    aditivos_evento
+                )
+
                 custo_evento = float(
                     row.get(
                         "custo",
@@ -3582,23 +3700,29 @@ elif menu == "Eventos":
                 )
 
                 lucro_evento = (
-                    venda_evento
-                    - custo_evento
+                    faturamento_evento
+                    -
+                    custo_evento
                 )
 
-                f1, f2, f3 = st.columns(3)
+                f1, f2, f3, f4 = st.columns(4)
 
                 f1.metric(
-                    "💰 Venda",
+                    "📋 Contrato",
                     f"R$ {venda_evento:,.2f}"
                 )
 
                 f2.metric(
-                    "💸 Custo",
-                    f"R$ {custo_evento:,.2f}"
+                    "⏰ Aditivos",
+                    f"R$ {aditivos_evento:,.2f}"
                 )
 
                 f3.metric(
+                    "💰 Faturamento",
+                    f"R$ {faturamento_evento:,.2f}"
+                )
+
+                f4.metric(
                     "📈 Lucro",
                     f"R$ {lucro_evento:,.2f}"
                 )
