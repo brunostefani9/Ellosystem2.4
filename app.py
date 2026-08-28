@@ -341,6 +341,7 @@ menu = st.sidebar.radio(
         "Relatórios",
         "Eventos",
         "Copos, Taças e Decor",
+        "Materiais de Bar",
         "Precificação",
         "Estoque",
         "Receitas",
@@ -5524,6 +5525,380 @@ elif menu == "Copos, Taças e Decor":
                             st.error(
                                 f"Erro ao excluir: {e}"
                             )
+
+
+# =========================================================
+# MATERIAIS DE BAR
+# =========================================================
+
+elif menu == "Materiais de Bar":
+
+    st.title("🍸 Materiais de Bar")
+
+    aba_cadastro, aba_lista = st.tabs(
+        [
+            "➕ Cadastro",
+            "📋 Lista"
+        ]
+    )
+
+    # =====================================================
+    # CADASTRO
+    # =====================================================
+
+    with aba_cadastro:
+
+        st.subheader("Cadastro de Materiais de Bar")
+
+        with st.form(
+            "form_materiais_bar",
+            clear_on_submit=True
+        ):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                categoria = st.selectbox(
+                    "Categoria",
+                    [
+                        "Coqueteleira",
+                        "Dosador",
+                        "Colher Bailarina",
+                        "Faca",
+                        "Tábua de Corte",
+                        "Balde",
+                        "Suporte de Balde",
+                        "Pegador",
+                        "Pinça",
+                        "Outros"
+                    ]
+                )
+
+                nome = st.text_input(
+                    "Nome / Modelo"
+                )
+
+            with col2:
+
+                quantidade = st.number_input(
+                    "Quantidade disponível",
+                    min_value=0,
+                    step=1
+                )
+
+                observacao = st.text_area(
+                    "Observação"
+                )
+
+            cadastrar = st.form_submit_button(
+                "💾 Cadastrar"
+            )
+
+        if cadastrar:
+
+            if not nome.strip():
+
+                st.error(
+                    "Informe o nome ou modelo do material."
+                )
+
+            else:
+
+                try:
+
+                    supabase.table(
+                        "materiais_bar"
+                    ).insert({
+
+                        "categoria":
+                            categoria,
+
+                        "nome":
+                            normalizar_nome(nome),
+
+                        "quantidade":
+                            quantidade,
+
+                        "observacao":
+                            observacao.strip()
+
+                    }).execute()
+
+                    st.success(
+                        "✅ Material de bar cadastrado!"
+                    )
+
+                    st.rerun()
+
+                except Exception as e:
+
+                    st.error(
+                        f"Erro ao cadastrar: {e}"
+                    )
+
+    # =====================================================
+    # LISTA
+    # =====================================================
+
+    with aba_lista:
+
+        st.subheader(
+            "Materiais de Bar cadastrados"
+        )
+
+        try:
+
+            dados = (
+                supabase
+                .table("materiais_bar")
+                .select("*")
+                .order("categoria")
+                .order("nome")
+                .execute()
+            )
+
+            df_bar = pd.DataFrame(
+                dados.data
+                if dados.data
+                else []
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"Erro ao carregar materiais de bar: {e}"
+            )
+
+            df_bar = pd.DataFrame()
+
+
+        if df_bar.empty:
+
+            st.info(
+                "Nenhum material de bar cadastrado."
+            )
+
+        else:
+
+            # =================================================
+            # PESQUISA
+            # =================================================
+
+            busca = st.text_input(
+                "🔎 Pesquisar",
+                key="busca_materiais_bar"
+            )
+
+            if busca.strip():
+
+                busca = busca.strip()
+
+                filtro = (
+                    df_bar["nome"]
+                    .fillna("")
+                    .astype(str)
+                    .str.contains(
+                        busca,
+                        case=False,
+                        na=False
+                    )
+                    |
+                    df_bar["categoria"]
+                    .fillna("")
+                    .astype(str)
+                    .str.contains(
+                        busca,
+                        case=False,
+                        na=False
+                    )
+                )
+
+                df_bar = df_bar[filtro]
+
+
+            if df_bar.empty:
+
+                st.info(
+                    "Nenhum material encontrado."
+                )
+
+            else:
+
+                # =================================================
+                # TOTAL
+                # =================================================
+
+                total_materiais = int(
+                    df_bar["quantidade"]
+                    .fillna(0)
+                    .sum()
+                )
+
+                st.metric(
+                    "🍸 Total de materiais disponíveis",
+                    total_materiais
+                )
+
+                st.divider()
+
+                # =================================================
+                # EDITOR
+                # =================================================
+
+                df_editado = st.data_editor(
+
+                    df_bar,
+
+                    use_container_width=True,
+
+                    hide_index=True,
+
+                    column_config={
+
+                        "id":
+                            st.column_config.NumberColumn(
+                                "ID",
+                                disabled=True
+                            ),
+
+                        "categoria":
+                            st.column_config.SelectboxColumn(
+                                "Categoria",
+                                options=[
+                                    "Coqueteleira",
+                                    "Dosador",
+                                    "Colher Bailarina",
+                                    "Faca",
+                                    "Tábua de Corte",
+                                    "Balde",
+                                    "Suporte de Balde",
+                                    "Pegador",
+                                    "Pinça",
+                                    "Outros"
+                                ]
+                            ),
+
+                        "nome":
+                            st.column_config.TextColumn(
+                                "Nome / Modelo"
+                            ),
+
+                        "quantidade":
+                            st.column_config.NumberColumn(
+                                "Quantidade",
+                                min_value=0,
+                                step=1
+                            ),
+
+                        "observacao":
+                            st.column_config.TextColumn(
+                                "Observação"
+                            ),
+
+                        "created_at":
+                            st.column_config.DatetimeColumn(
+                                "Cadastro",
+                                disabled=True
+                            )
+                    }
+                )
+
+                # =================================================
+                # SALVAR ALTERAÇÕES
+                # =================================================
+
+                if st.button(
+                    "💾 Salvar alterações",
+                    key="salvar_materiais_bar"
+                ):
+
+                    try:
+
+                        for _, row in df_editado.iterrows():
+
+                            supabase.table(
+                                "materiais_bar"
+                            ).update({
+
+                                "categoria":
+                                    str(
+                                        row["categoria"]
+                                    ).strip(),
+
+                                "nome":
+                                    normalizar_nome(
+                                        row["nome"]
+                                    ),
+
+                                "quantidade":
+                                    int(
+                                        row["quantidade"]
+                                        or 0
+                                    ),
+
+                                "observacao":
+                                    str(
+                                        row["observacao"]
+                                    ).strip()
+
+                            }).eq(
+                                "id",
+                                row["id"]
+                            ).execute()
+
+                        st.success(
+                            "✅ Alterações salvas!"
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Erro ao salvar: {e}"
+                        )
+
+                # =================================================
+                # EXCLUIR
+                # =================================================
+
+                st.divider()
+
+                item_excluir = st.selectbox(
+
+                    "Selecionar material para excluir",
+
+                    df_bar["id"].tolist(),
+
+                    key="excluir_material_bar"
+                )
+
+                if st.button(
+                    "🗑️ Excluir selecionado",
+                    key="botao_excluir_material_bar"
+                ):
+
+                    try:
+
+                        supabase.table(
+                            "materiais_bar"
+                        ).delete().eq(
+                            "id",
+                            item_excluir
+                        ).execute()
+
+                        st.success(
+                            "Material excluído."
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Erro ao excluir: {e}"
+                        )
 
 
 elif menu == "Receitas":
