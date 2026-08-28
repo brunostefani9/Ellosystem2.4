@@ -340,6 +340,7 @@ menu = st.sidebar.radio(
     [
         "Relatórios",
         "Eventos",
+        "🥂 Copos, Taças e Decor",
         "Precificação",
         "Estoque",
         "Receitas",
@@ -352,6 +353,255 @@ menu = st.sidebar.radio(
     ]
 )
 
+# =========================================================
+# TELA — COPOS, TAÇAS E DECOR
+# =========================================================
+
+def tela_copos_tacas_decor():
+
+    st.title("🥂 Copos, Taças e Decor")
+
+    st.caption(
+        "Cadastro dos materiais utilizados nos eventos. "
+        "Copos e taças serão utilizados posteriormente "
+        "para identificar o recipiente de cada drink."
+    )
+
+    # =====================================================
+    # ABAS
+    # =====================================================
+
+    aba_copos, aba_decor = st.tabs(
+        [
+            "🥂 Copos e Taças",
+            "🎀 Materiais Decorativos"
+        ]
+    )
+
+    # =====================================================
+    # ABA — COPOS E TAÇAS
+    # =====================================================
+
+    with aba_copos:
+
+        st.subheader("🥂 Copos e Taças")
+
+        st.info(
+            "Cadastre aqui os copos e taças disponíveis "
+            "para utilização nos eventos."
+        )
+
+        # -------------------------------------------------
+        # CADASTRO
+        # -------------------------------------------------
+
+        st.markdown("### ➕ Cadastrar Copo ou Taça")
+
+        with st.form(
+            "form_copos_tacas",
+            clear_on_submit=True
+        ):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                tipo = st.selectbox(
+                    "Tipo",
+                    [
+                        "Copo",
+                        "Taça"
+                    ],
+                    key="tipo_copo_taca"
+                )
+
+                nome = st.text_input(
+                    "Nome",
+                    placeholder="Ex.: Long Drink",
+                    key="nome_copo_taca"
+                )
+
+                modelo = st.text_input(
+                    "Modelo",
+                    placeholder="Ex.: Cristal",
+                    key="modelo_copo_taca"
+                )
+
+            with col2:
+
+                capacidade = st.number_input(
+                    "Capacidade (ml)",
+                    min_value=0.0,
+                    step=10.0,
+                    format="%.0f",
+                    key="capacidade_copo_taca"
+                )
+
+                quantidade = st.number_input(
+                    "Quantidade disponível",
+                    min_value=0,
+                    step=1,
+                    format="%d",
+                    key="quantidade_copo_taca"
+                )
+
+                observacao = st.text_input(
+                    "Observação",
+                    placeholder="Ex.: Guardado no estoque principal",
+                    key="observacao_copo_taca"
+                )
+
+            cadastrar = st.form_submit_button(
+                "💾 Cadastrar"
+            )
+
+        if cadastrar:
+
+            if not nome.strip():
+
+                st.error(
+                    "Informe o nome do copo ou taça."
+                )
+
+            elif quantidade <= 0:
+
+                st.error(
+                    "A quantidade deve ser maior que zero."
+                )
+
+            else:
+
+                st.success(
+                    "✅ Cadastro preparado com sucesso!"
+                )
+
+                st.info(
+                    "A gravação no Supabase será ativada "
+                    "assim que criarmos a tabela."
+                )
+
+
+        st.divider()
+
+        # -------------------------------------------------
+        # LISTA
+        # -------------------------------------------------
+
+        st.markdown("### 📋 Lista de Copos e Taças")
+
+        st.info(
+            "A lista será carregada do Supabase "
+            "quando a tabela for criada."
+        )
+
+
+    # =====================================================
+    # ABA — MATERIAIS DECORATIVOS
+    # =====================================================
+
+    with aba_decor:
+
+        st.subheader("🎀 Materiais Decorativos")
+
+        st.info(
+            "Cadastre aqui os materiais utilizados "
+            "na decoração dos eventos."
+        )
+
+        # -------------------------------------------------
+        # CADASTRO
+        # -------------------------------------------------
+
+        st.markdown("### ➕ Cadastrar Material Decorativo")
+
+        with st.form(
+            "form_materiais_decorativos",
+            clear_on_submit=True
+        ):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                nome_decor = st.text_input(
+                    "Nome do material",
+                    placeholder="Ex.: Vaso de mesa",
+                    key="nome_material_decorativo"
+                )
+
+                categoria = st.selectbox(
+                    "Categoria",
+                    [
+                        "Mesa",
+                        "Bar",
+                        "Ambientação",
+                        "Iluminação",
+                        "Identificação",
+                        "Outros"
+                    ],
+                    key="categoria_material_decorativo"
+                )
+
+            with col2:
+
+                quantidade_decor = st.number_input(
+                    "Quantidade disponível",
+                    min_value=0,
+                    step=1,
+                    format="%d",
+                    key="quantidade_material_decorativo"
+                )
+
+                observacao_decor = st.text_input(
+                    "Observação",
+                    placeholder="Ex.: Material frágil",
+                    key="observacao_material_decorativo"
+                )
+
+            cadastrar_decor = st.form_submit_button(
+                "💾 Cadastrar"
+            )
+
+        if cadastrar_decor:
+
+            if not nome_decor.strip():
+
+                st.error(
+                    "Informe o nome do material."
+                )
+
+            elif quantidade_decor <= 0:
+
+                st.error(
+                    "A quantidade deve ser maior que zero."
+                )
+
+            else:
+
+                st.success(
+                    "✅ Cadastro preparado com sucesso!"
+                )
+
+                st.info(
+                    "A gravação no Supabase será ativada "
+                    "assim que criarmos a tabela."
+                )
+
+
+        st.divider()
+
+        # -------------------------------------------------
+        # LISTA
+        # -------------------------------------------------
+
+        st.markdown(
+            "### 📋 Lista de Materiais Decorativos"
+        )
+
+        st.info(
+            "A lista será carregada do Supabase "
+            "quando a tabela for criada."
+        )
 
 # =========================================================
 # TELA DE PRECIFICAÇÃO
@@ -1961,6 +2211,7 @@ elif menu == "Relatórios":
         st.divider()
 
 
+        
         # =====================================================
         # RESULTADO REAL
         # =====================================================
@@ -4501,6 +4752,779 @@ elif menu == "Eventos":
                     st.rerun()
 
             st.divider()
+
+
+# =========================================================
+# COPOS, TAÇAS E DECOR
+# =========================================================
+
+elif menu == "Copos, Taças e Decor":
+
+    st.title("🥂 Copos, Taças e Decor")
+
+    aba_copos, aba_decor = st.tabs(
+        [
+            "🥂 Copos e Taças",
+            "✨ Materiais Decorativos"
+        ]
+    )
+
+    # =====================================================
+    # ABA — COPOS E TAÇAS
+    # =====================================================
+
+    with aba_copos:
+
+        cadastro, lista = st.tabs(
+            [
+                "➕ Cadastro",
+                "📋 Lista"
+            ]
+        )
+
+        # =================================================
+        # CADASTRO
+        # =================================================
+
+        with cadastro:
+
+            st.subheader("Cadastro de Copos e Taças")
+
+            with st.form(
+                "form_copos_tacas",
+                clear_on_submit=True
+            ):
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    tipo = st.selectbox(
+                        "Tipo",
+                        [
+                            "Copo",
+                            "Taça"
+                        ]
+                    )
+
+                    nome = st.text_input(
+                        "Nome"
+                    )
+
+                    modelo = st.text_input(
+                        "Modelo"
+                    )
+
+                with col2:
+
+                    capacidade = st.number_input(
+                        "Capacidade (ml)",
+                        min_value=0.0,
+                        step=10.0,
+                        format="%.0f"
+                    )
+
+                    quantidade = st.number_input(
+                        "Quantidade disponível",
+                        min_value=0,
+                        step=1
+                    )
+
+                    observacao = st.text_area(
+                        "Observação"
+                    )
+
+                cadastrar = st.form_submit_button(
+                    "💾 Cadastrar"
+                )
+
+            if cadastrar:
+
+                if not nome.strip():
+
+                    st.error(
+                        "Informe o nome do copo ou taça."
+                    )
+
+                elif quantidade < 0:
+
+                    st.error(
+                        "A quantidade não pode ser negativa."
+                    )
+
+                else:
+
+                    try:
+
+                        supabase.table(
+                            "copos_tacas"
+                        ).insert({
+
+                            "tipo": tipo,
+
+                            "nome": normalizar_nome(
+                                nome
+                            ),
+
+                            "modelo": modelo.strip(),
+
+                            "capacidade": capacidade,
+
+                            "quantidade": quantidade,
+
+                            "observacao": observacao.strip()
+
+                        }).execute()
+
+                        st.success(
+                            "✅ Copo/Taça cadastrado com sucesso!"
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Erro ao cadastrar: {e}"
+                        )
+
+        # =================================================
+        # LISTA
+        # =================================================
+
+        with lista:
+
+            st.subheader(
+                "Copos e Taças cadastrados"
+            )
+
+            try:
+
+                dados = (
+                    supabase
+                    .table("copos_tacas")
+                    .select("*")
+                    .order("tipo")
+                    .execute()
+                )
+
+                df_copos = pd.DataFrame(
+                    dados.data
+                    if dados.data
+                    else []
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"Erro ao carregar copos e taças: {e}"
+                )
+
+                df_copos = pd.DataFrame()
+
+
+            if df_copos.empty:
+
+                st.info(
+                    "Nenhum copo ou taça cadastrado."
+                )
+
+            else:
+
+                # -----------------------------------------
+                # PESQUISA
+                # -----------------------------------------
+
+                busca = st.text_input(
+                    "🔎 Pesquisar",
+                    key="busca_copos_tacas"
+                )
+
+                if busca.strip():
+
+                    busca = busca.strip()
+
+                    filtro = (
+                        df_copos["nome"]
+                        .fillna("")
+                        .astype(str)
+                        .str.contains(
+                            busca,
+                            case=False,
+                            na=False
+                        )
+                        |
+                        df_copos["modelo"]
+                        .fillna("")
+                        .astype(str)
+                        .str.contains(
+                            busca,
+                            case=False,
+                            na=False
+                        )
+                        |
+                        df_copos["tipo"]
+                        .fillna("")
+                        .astype(str)
+                        .str.contains(
+                            busca,
+                            case=False,
+                            na=False
+                        )
+                    )
+
+                    df_copos = df_copos[filtro]
+
+
+                if df_copos.empty:
+
+                    st.info(
+                        "Nenhum item encontrado."
+                    )
+
+                else:
+
+                    # -------------------------------------
+                    # TOTAL
+                    # -------------------------------------
+
+                    total_copos = int(
+                        df_copos["quantidade"]
+                        .fillna(0)
+                        .sum()
+                    )
+
+                    st.metric(
+                        "🥂 Total disponível",
+                        total_copos
+                    )
+
+                    st.divider()
+
+                    # -------------------------------------
+                    # EDITOR
+                    # -------------------------------------
+
+                    df_editado = st.data_editor(
+
+                        df_copos,
+
+                        use_container_width=True,
+
+                        hide_index=True,
+
+                        column_config={
+
+                            "id":
+                                st.column_config.NumberColumn(
+                                    "ID",
+                                    disabled=True
+                                ),
+
+                            "tipo":
+                                st.column_config.SelectboxColumn(
+                                    "Tipo",
+                                    options=[
+                                        "Copo",
+                                        "Taça"
+                                    ]
+                                ),
+
+                            "nome":
+                                st.column_config.TextColumn(
+                                    "Nome"
+                                ),
+
+                            "modelo":
+                                st.column_config.TextColumn(
+                                    "Modelo"
+                                ),
+
+                            "capacidade":
+                                st.column_config.NumberColumn(
+                                    "Capacidade (ml)",
+                                    min_value=0,
+                                    step=10
+                                ),
+
+                            "quantidade":
+                                st.column_config.NumberColumn(
+                                    "Quantidade",
+                                    min_value=0,
+                                    step=1
+                                ),
+
+                            "observacao":
+                                st.column_config.TextColumn(
+                                    "Observação"
+                                ),
+
+                            "created_at":
+                                st.column_config.DatetimeColumn(
+                                    "Cadastro",
+                                    disabled=True
+                                )
+                        }
+                    )
+
+                    # -------------------------------------
+                    # SALVAR
+                    # -------------------------------------
+
+                    if st.button(
+                        "💾 Salvar alterações",
+                        key="salvar_copos_tacas"
+                    ):
+
+                        try:
+
+                            for _, row in df_editado.iterrows():
+
+                                supabase.table(
+                                    "copos_tacas"
+                                ).update({
+
+                                    "tipo":
+                                        str(
+                                            row["tipo"]
+                                        ).strip(),
+
+                                    "nome":
+                                        normalizar_nome(
+                                            row["nome"]
+                                        ),
+
+                                    "modelo":
+                                        str(
+                                            row["modelo"]
+                                        ).strip(),
+
+                                    "capacidade":
+                                        float(
+                                            row["capacidade"]
+                                            or 0
+                                        ),
+
+                                    "quantidade":
+                                        int(
+                                            row["quantidade"]
+                                            or 0
+                                        ),
+
+                                    "observacao":
+                                        str(
+                                            row["observacao"]
+                                        ).strip()
+
+                                }).eq(
+                                    "id",
+                                    row["id"]
+                                ).execute()
+
+                            st.success(
+                                "✅ Alterações salvas!"
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+
+                            st.error(
+                                f"Erro ao salvar: {e}"
+                            )
+
+                    # -------------------------------------
+                    # EXCLUIR
+                    # -------------------------------------
+
+                    st.divider()
+
+                    item_excluir = st.selectbox(
+
+                        "Selecionar item para excluir",
+
+                        df_copos["id"].tolist(),
+
+                        key="excluir_copo_taca"
+                    )
+
+                    if st.button(
+                        "🗑️ Excluir selecionado",
+                        key="botao_excluir_copo_taca"
+                    ):
+
+                        try:
+
+                            supabase.table(
+                                "copos_tacas"
+                            ).delete().eq(
+                                "id",
+                                item_excluir
+                            ).execute()
+
+                            st.success(
+                                "Item excluído."
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+
+                            st.error(
+                                f"Erro ao excluir: {e}"
+                            )
+
+
+    # =====================================================
+    # ABA — MATERIAIS DECORATIVOS
+    # =====================================================
+
+    with aba_decor:
+
+        cadastro_decor, lista_decor = st.tabs(
+            [
+                "➕ Cadastro",
+                "📋 Lista"
+            ]
+        )
+
+        # =================================================
+        # CADASTRO
+        # =================================================
+
+        with cadastro_decor:
+
+            st.subheader(
+                "Cadastro de Materiais Decorativos"
+            )
+
+            with st.form(
+                "form_materiais_decorativos",
+                clear_on_submit=True
+            ):
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    nome = st.text_input(
+                        "Nome do material"
+                    )
+
+                    categoria = st.text_input(
+                        "Categoria"
+                    )
+
+                with col2:
+
+                    quantidade = st.number_input(
+                        "Quantidade disponível",
+                        min_value=0,
+                        step=1
+                    )
+
+                    observacao = st.text_area(
+                        "Observação"
+                    )
+
+                cadastrar = st.form_submit_button(
+                    "💾 Cadastrar"
+                )
+
+            if cadastrar:
+
+                if not nome.strip():
+
+                    st.error(
+                        "Informe o nome do material."
+                    )
+
+                else:
+
+                    try:
+
+                        supabase.table(
+                            "materiais_decorativos"
+                        ).insert({
+
+                            "nome":
+                                normalizar_nome(
+                                    nome
+                                ),
+
+                            "categoria":
+                                categoria.strip(),
+
+                            "quantidade":
+                                quantidade,
+
+                            "observacao":
+                                observacao.strip()
+
+                        }).execute()
+
+                        st.success(
+                            "✅ Material decorativo cadastrado!"
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Erro ao cadastrar: {e}"
+                        )
+
+        # =================================================
+        # LISTA
+        # =================================================
+
+        with lista_decor:
+
+            st.subheader(
+                "Materiais Decorativos cadastrados"
+            )
+
+            try:
+
+                dados = (
+                    supabase
+                    .table("materiais_decorativos")
+                    .select("*")
+                    .order("nome")
+                    .execute()
+                )
+
+                df_decor = pd.DataFrame(
+                    dados.data
+                    if dados.data
+                    else []
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"Erro ao carregar materiais: {e}"
+                )
+
+                df_decor = pd.DataFrame()
+
+
+            if df_decor.empty:
+
+                st.info(
+                    "Nenhum material decorativo cadastrado."
+                )
+
+            else:
+
+                # -----------------------------------------
+                # PESQUISA
+                # -----------------------------------------
+
+                busca = st.text_input(
+                    "🔎 Pesquisar",
+                    key="busca_materiais_decorativos"
+                )
+
+                if busca.strip():
+
+                    busca = busca.strip()
+
+                    filtro = (
+                        df_decor["nome"]
+                        .fillna("")
+                        .astype(str)
+                        .str.contains(
+                            busca,
+                            case=False,
+                            na=False
+                        )
+                        |
+                        df_decor["categoria"]
+                        .fillna("")
+                        .astype(str)
+                        .str.contains(
+                            busca,
+                            case=False,
+                            na=False
+                        )
+                    )
+
+                    df_decor = df_decor[filtro]
+
+
+                if df_decor.empty:
+
+                    st.info(
+                        "Nenhum material encontrado."
+                    )
+
+                else:
+
+                    # -------------------------------------
+                    # TOTAL
+                    # -------------------------------------
+
+                    total_decor = int(
+                        df_decor["quantidade"]
+                        .fillna(0)
+                        .sum()
+                    )
+
+                    st.metric(
+                        "✨ Total de materiais disponíveis",
+                        total_decor
+                    )
+
+                    st.divider()
+
+                    # -------------------------------------
+                    # EDITOR
+                    # -------------------------------------
+
+                    df_editado = st.data_editor(
+
+                        df_decor,
+
+                        use_container_width=True,
+
+                        hide_index=True,
+
+                        column_config={
+
+                            "id":
+                                st.column_config.NumberColumn(
+                                    "ID",
+                                    disabled=True
+                                ),
+
+                            "nome":
+                                st.column_config.TextColumn(
+                                    "Nome"
+                                ),
+
+                            "categoria":
+                                st.column_config.TextColumn(
+                                    "Categoria"
+                                ),
+
+                            "quantidade":
+                                st.column_config.NumberColumn(
+                                    "Quantidade",
+                                    min_value=0,
+                                    step=1
+                                ),
+
+                            "observacao":
+                                st.column_config.TextColumn(
+                                    "Observação"
+                                ),
+
+                            "created_at":
+                                st.column_config.DatetimeColumn(
+                                    "Cadastro",
+                                    disabled=True
+                                )
+                        }
+                    )
+
+                    # -------------------------------------
+                    # SALVAR
+                    # -------------------------------------
+
+                    if st.button(
+                        "💾 Salvar alterações",
+                        key="salvar_materiais_decorativos"
+                    ):
+
+                        try:
+
+                            for _, row in df_editado.iterrows():
+
+                                supabase.table(
+                                    "materiais_decorativos"
+                                ).update({
+
+                                    "nome":
+                                        normalizar_nome(
+                                            row["nome"]
+                                        ),
+
+                                    "categoria":
+                                        str(
+                                            row["categoria"]
+                                        ).strip(),
+
+                                    "quantidade":
+                                        int(
+                                            row["quantidade"]
+                                            or 0
+                                        ),
+
+                                    "observacao":
+                                        str(
+                                            row["observacao"]
+                                        ).strip()
+
+                                }).eq(
+                                    "id",
+                                    row["id"]
+                                ).execute()
+
+                            st.success(
+                                "✅ Alterações salvas!"
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+
+                            st.error(
+                                f"Erro ao salvar: {e}"
+                            )
+
+                    # -------------------------------------
+                    # EXCLUIR
+                    # -------------------------------------
+
+                    st.divider()
+
+                    item_excluir = st.selectbox(
+
+                        "Selecionar material para excluir",
+
+                        df_decor["id"].tolist(),
+
+                        key="excluir_material_decorativo"
+                    )
+
+                    if st.button(
+                        "🗑️ Excluir selecionado",
+                        key="botao_excluir_material_decorativo"
+                    ):
+
+                        try:
+
+                            supabase.table(
+                                "materiais_decorativos"
+                            ).delete().eq(
+                                "id",
+                                item_excluir
+                            ).execute()
+
+                            st.success(
+                                "Material excluído."
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+
+                            st.error(
+                                f"Erro ao excluir: {e}"
+                            )
+
 
 elif menu == "Receitas":
 
