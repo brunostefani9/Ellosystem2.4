@@ -340,7 +340,7 @@ menu = st.sidebar.radio(
     [
         "Relatórios",
         "Eventos",
-        "🥂 Copos, Taças e Decor",
+        "Copos, Taças e Decor",
         "Precificação",
         "Estoque",
         "Receitas",
