@@ -341,7 +341,7 @@ menu = st.sidebar.radio(
         "Relatórios",
         "Eventos",
         "Copos, Taças e Decor",
-        "Materiais de Bar",
+        "Materiais e Utensílios de Bar",
         "Precificação",
         "Estoque",
         "Receitas",
@@ -4763,6 +4763,10 @@ elif menu == "Copos, Taças e Decor":
 
     st.title("🥂 Copos, Taças e Decor")
 
+    st.caption(
+        "Controle de estoque, reposição, perdas e materiais utilizados nos eventos."
+    )
+
     aba_copos, aba_decor = st.tabs(
         [
             "🥂 Copos e Taças",
@@ -4776,10 +4780,11 @@ elif menu == "Copos, Taças e Decor":
 
     with aba_copos:
 
-        cadastro, lista = st.tabs(
+        cadastro, estoque, perdas = st.tabs(
             [
                 "➕ Cadastro",
-                "📋 Lista"
+                "📋 Estoque",
+                "⚠️ Perdas / Quebras"
             ]
         )
 
@@ -4789,14 +4794,19 @@ elif menu == "Copos, Taças e Decor":
 
         with cadastro:
 
-            st.subheader("Cadastro de Copos e Taças")
+            st.subheader("➕ Cadastro de Copos e Taças")
+
+            st.info(
+                "O custo de copos e taças NÃO será incluído no custo dos drinks. "
+                "Eles serão utilizados posteriormente no checklist do orçamento."
+            )
 
             with st.form(
                 "form_copos_tacas",
                 clear_on_submit=True
             ):
 
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
 
                 with col1:
 
@@ -4805,15 +4815,20 @@ elif menu == "Copos, Taças e Decor":
                         [
                             "Copo",
                             "Taça"
-                        ]
+                        ],
+                        key="cad_tipo_copo"
                     )
 
                     nome = st.text_input(
-                        "Nome"
+                        "Nome",
+                        placeholder="Ex.: Taça Martini",
+                        key="cad_nome_copo"
                     )
 
                     modelo = st.text_input(
-                        "Modelo"
+                        "Modelo",
+                        placeholder="Ex.: Martini 250ml",
+                        key="cad_modelo_copo"
                     )
 
                 with col2:
@@ -4822,21 +4837,46 @@ elif menu == "Copos, Taças e Decor":
                         "Capacidade (ml)",
                         min_value=0.0,
                         step=10.0,
-                        format="%.0f"
+                        format="%.0f",
+                        key="cad_capacidade_copo"
                     )
 
                     quantidade = st.number_input(
                         "Quantidade disponível",
                         min_value=0,
-                        step=1
+                        step=1,
+                        key="cad_quantidade_copo"
+                    )
+
+                    preco_compra = st.number_input(
+                        "Valor unitário de compra",
+                        min_value=0.0,
+                        step=0.01,
+                        format="R$ %.2f",
+                        key="cad_preco_compra_copo"
+                    )
+
+                with col3:
+
+                    valor_reposicao = st.number_input(
+                        "Valor de reposição / cobrança",
+                        min_value=0.0,
+                        step=0.50,
+                        format="R$ %.2f",
+                        help=(
+                            "Valor utilizado caso seja necessário repassar "
+                            "uma perda/quebra ao cliente."
+                        ),
+                        key="cad_valor_reposicao_copo"
                     )
 
                     observacao = st.text_area(
-                        "Observação"
+                        "Observação",
+                        key="cad_obs_copo"
                     )
 
                 cadastrar = st.form_submit_button(
-                    "💾 Cadastrar"
+                    "💾 Cadastrar copo / taça"
                 )
 
             if cadastrar:
@@ -4853,6 +4893,18 @@ elif menu == "Copos, Taças e Decor":
                         "A quantidade não pode ser negativa."
                     )
 
+                elif preco_compra < 0:
+
+                    st.error(
+                        "O valor de compra não pode ser negativo."
+                    )
+
+                elif valor_reposicao < 0:
+
+                    st.error(
+                        "O valor de reposição não pode ser negativo."
+                    )
+
                 else:
 
                     try:
@@ -4861,19 +4913,29 @@ elif menu == "Copos, Taças e Decor":
                             "copos_tacas"
                         ).insert({
 
-                            "tipo": tipo,
+                            "tipo":
+                                tipo,
 
-                            "nome": normalizar_nome(
-                                nome
-                            ),
+                            "nome":
+                                normalizar_nome(nome),
 
-                            "modelo": modelo.strip(),
+                            "modelo":
+                                modelo.strip(),
 
-                            "capacidade": capacidade,
+                            "capacidade":
+                                capacidade,
 
-                            "quantidade": quantidade,
+                            "quantidade":
+                                quantidade,
 
-                            "observacao": observacao.strip()
+                            "preco_compra":
+                                preco_compra,
+
+                            "valor_reposicao":
+                                valor_reposicao,
+
+                            "observacao":
+                                observacao.strip()
 
                         }).execute()
 
@@ -4889,15 +4951,14 @@ elif menu == "Copos, Taças e Decor":
                             f"Erro ao cadastrar: {e}"
                         )
 
+
         # =================================================
-        # LISTA
+        # ESTOQUE
         # =================================================
 
-        with lista:
+        with estoque:
 
-            st.subheader(
-                "Copos e Taças cadastrados"
-            )
+            st.subheader("📋 Estoque de Copos e Taças")
 
             try:
 
@@ -4906,6 +4967,7 @@ elif menu == "Copos, Taças e Decor":
                     .table("copos_tacas")
                     .select("*")
                     .order("tipo")
+                    .order("nome")
                     .execute()
                 )
 
@@ -4918,7 +4980,7 @@ elif menu == "Copos, Taças e Decor":
             except Exception as e:
 
                 st.error(
-                    f"Erro ao carregar copos e taças: {e}"
+                    f"Erro ao carregar estoque: {e}"
                 )
 
                 df_copos = pd.DataFrame()
@@ -4933,19 +4995,77 @@ elif menu == "Copos, Taças e Decor":
             else:
 
                 # -----------------------------------------
+                # INDICADORES
+                # -----------------------------------------
+
+                total_itens = int(
+                    df_copos["quantidade"]
+                    .fillna(0)
+                    .sum()
+                )
+
+                valor_estoque = (
+                    df_copos["quantidade"].fillna(0)
+                    *
+                    df_copos["preco_compra"].fillna(0)
+                ).sum()
+
+                valor_reposicao = (
+                    df_copos["quantidade"].fillna(0)
+                    *
+                    df_copos["valor_reposicao"].fillna(0)
+                ).sum()
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+
+                    st.metric(
+                        "🥂 Quantidade total",
+                        f"{total_itens:,}".replace(",", ".")
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "💰 Valor do estoque",
+                        f"R$ {valor_estoque:,.2f}".replace(
+                            ",", "X"
+                        ).replace(
+                            ".", ","
+                        ).replace(
+                            "X", "."
+                        )
+                    )
+
+                with col3:
+
+                    st.metric(
+                        "🔄 Valor de reposição",
+                        f"R$ {valor_reposicao:,.2f}".replace(
+                            ",", "X"
+                        ).replace(
+                            ".", ","
+                        ).replace(
+                            "X", "."
+                        )
+                    )
+
+                st.divider()
+
+                # -----------------------------------------
                 # PESQUISA
                 # -----------------------------------------
 
                 busca = st.text_input(
-                    "🔎 Pesquisar",
-                    key="busca_copos_tacas"
+                    "🔎 Pesquisar copo ou taça",
+                    key="busca_estoque_copos"
                 )
 
                 if busca.strip():
 
-                    busca = busca.strip()
-
                     filtro = (
+
                         df_copos["nome"]
                         .fillna("")
                         .astype(str)
@@ -4954,7 +5074,9 @@ elif menu == "Copos, Taças e Decor":
                             case=False,
                             na=False
                         )
+
                         |
+
                         df_copos["modelo"]
                         .fillna("")
                         .astype(str)
@@ -4963,7 +5085,9 @@ elif menu == "Copos, Taças e Decor":
                             case=False,
                             na=False
                         )
+
                         |
+
                         df_copos["tipo"]
                         .fillna("")
                         .astype(str)
@@ -4986,25 +5110,103 @@ elif menu == "Copos, Taças e Decor":
                 else:
 
                     # -------------------------------------
-                    # TOTAL
+                    # TABELA
                     # -------------------------------------
 
-                    total_copos = int(
-                        df_copos["quantidade"]
-                        .fillna(0)
-                        .sum()
+                    df_exibicao = df_copos.copy()
+
+                    df_exibicao["valor_total"] = (
+                        df_exibicao["quantidade"].fillna(0)
+                        *
+                        df_exibicao["preco_compra"].fillna(0)
                     )
 
-                    st.metric(
-                        "🥂 Total disponível",
-                        total_copos
+                    df_exibicao["valor_reposicao_total"] = (
+                        df_exibicao["quantidade"].fillna(0)
+                        *
+                        df_exibicao["valor_reposicao"].fillna(0)
+                    )
+
+                    st.dataframe(
+
+                        df_exibicao[
+                            [
+                                "tipo",
+                                "nome",
+                                "modelo",
+                                "capacidade",
+                                "quantidade",
+                                "preco_compra",
+                                "valor_total",
+                                "valor_reposicao",
+                                "valor_reposicao_total"
+                            ]
+                        ],
+
+                        use_container_width=True,
+
+                        hide_index=True,
+
+                        column_config={
+
+                            "tipo":
+                                st.column_config.TextColumn(
+                                    "Tipo"
+                                ),
+
+                            "nome":
+                                st.column_config.TextColumn(
+                                    "Nome"
+                                ),
+
+                            "modelo":
+                                st.column_config.TextColumn(
+                                    "Modelo"
+                                ),
+
+                            "capacidade":
+                                st.column_config.NumberColumn(
+                                    "Capacidade (ml)"
+                                ),
+
+                            "quantidade":
+                                st.column_config.NumberColumn(
+                                    "Quantidade"
+                                ),
+
+                            "preco_compra":
+                                st.column_config.NumberColumn(
+                                    "Compra unitária",
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_total":
+                                st.column_config.NumberColumn(
+                                    "Valor em estoque",
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_reposicao":
+                                st.column_config.NumberColumn(
+                                    "Reposição unitária",
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_reposicao_total":
+                                st.column_config.NumberColumn(
+                                    "Reposição total",
+                                    format="R$ %.2f"
+                                )
+                        }
                     )
 
                     st.divider()
 
                     # -------------------------------------
-                    # EDITOR
+                    # EDIÇÃO
                     # -------------------------------------
+
+                    st.subheader("✏️ Editar cadastro")
 
                     df_editado = st.data_editor(
 
@@ -5055,6 +5257,20 @@ elif menu == "Copos, Taças e Decor":
                                     step=1
                                 ),
 
+                            "preco_compra":
+                                st.column_config.NumberColumn(
+                                    "Compra unitária",
+                                    min_value=0,
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_reposicao":
+                                st.column_config.NumberColumn(
+                                    "Reposição unitária",
+                                    min_value=0,
+                                    format="R$ %.2f"
+                                ),
+
                             "observacao":
                                 st.column_config.TextColumn(
                                     "Observação"
@@ -5068,13 +5284,9 @@ elif menu == "Copos, Taças e Decor":
                         }
                     )
 
-                    # -------------------------------------
-                    # SALVAR
-                    # -------------------------------------
-
                     if st.button(
                         "💾 Salvar alterações",
-                        key="salvar_copos_tacas"
+                        key="salvar_estoque_copos"
                     ):
 
                         try:
@@ -5112,6 +5324,18 @@ elif menu == "Copos, Taças e Decor":
                                             or 0
                                         ),
 
+                                    "preco_compra":
+                                        float(
+                                            row["preco_compra"]
+                                            or 0
+                                        ),
+
+                                    "valor_reposicao":
+                                        float(
+                                            row["valor_reposicao"]
+                                            or 0
+                                        ),
+
                                     "observacao":
                                         str(
                                             row["observacao"]
@@ -5134,37 +5358,169 @@ elif menu == "Copos, Taças e Decor":
                                 f"Erro ao salvar: {e}"
                             )
 
-                    # -------------------------------------
-                    # EXCLUIR
-                    # -------------------------------------
 
-                    st.divider()
+        # =================================================
+        # PERDAS / QUEBRAS
+        # =================================================
 
-                    item_excluir = st.selectbox(
+        with perdas:
 
-                        "Selecionar item para excluir",
+            st.subheader(
+                "⚠️ Registrar perda ou quebra"
+            )
 
-                        df_copos["id"].tolist(),
+            st.info(
+                "O registro de perda reduz o estoque. "
+                "O valor de reposição será utilizado futuramente "
+                "no controle de perdas do evento."
+            )
 
-                        key="excluir_copo_taca"
+            try:
+
+                dados = (
+                    supabase
+                    .table("copos_tacas")
+                    .select("*")
+                    .order("nome")
+                    .execute()
+                )
+
+                df_perdas = pd.DataFrame(
+                    dados.data
+                    if dados.data
+                    else []
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"Erro ao carregar copos e taças: {e}"
+                )
+
+                df_perdas = pd.DataFrame()
+
+
+            if not df_perdas.empty:
+
+                opcoes = {
+                    f"{row['tipo']} — {row['nome']} — "
+                    f"Estoque: {int(row['quantidade'])}":
+                    row["id"]
+
+                    for _, row in df_perdas.iterrows()
+                }
+
+                item_selecionado = st.selectbox(
+                    "Selecionar item",
+                    list(opcoes.keys()),
+                    key="perda_copo_item"
+                )
+
+                id_item = opcoes[item_selecionado]
+
+                item = df_perdas[
+                    df_perdas["id"] == id_item
+                ].iloc[0]
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    quantidade_perdida = st.number_input(
+                        "Quantidade perdida",
+                        min_value=1,
+                        step=1,
+                        key="quantidade_perda_copo"
                     )
 
-                    if st.button(
-                        "🗑️ Excluir selecionado",
-                        key="botao_excluir_copo_taca"
-                    ):
+                with col2:
+
+                    motivo = st.selectbox(
+                        "Motivo",
+                        [
+                            "Quebra",
+                            "Perda",
+                            "Dano",
+                            "Descarte",
+                            "Outro"
+                        ],
+                        key="motivo_perda_copo"
+                    )
+
+                observacao_perda = st.text_area(
+                    "Observação",
+                    key="obs_perda_copo"
+                )
+
+                if st.button(
+                    "⚠️ Registrar perda",
+                    key="registrar_perda_copo"
+                ):
+
+                    estoque_atual = int(
+                        item["quantidade"] or 0
+                    )
+
+                    if quantidade_perdida > estoque_atual:
+
+                        st.error(
+                            f"Estoque insuficiente. "
+                            f"Disponível: {estoque_atual}."
+                        )
+
+                    else:
+
+                        novo_estoque = (
+                            estoque_atual
+                            -
+                            quantidade_perdida
+                        )
 
                         try:
 
                             supabase.table(
                                 "copos_tacas"
-                            ).delete().eq(
+                            ).update({
+
+                                "quantidade":
+                                    novo_estoque
+
+                            }).eq(
                                 "id",
-                                item_excluir
+                                id_item
                             ).execute()
 
+
+                            supabase.table(
+                                "movimentacoes_copos"
+                            ).insert({
+
+                                "copo_taca_id":
+                                    id_item,
+
+                                "tipo_movimentacao":
+                                    "PERDA",
+
+                                "quantidade":
+                                    quantidade_perdida,
+
+                                "motivo":
+                                    motivo,
+
+                                "observacao":
+                                    observacao_perda.strip(),
+
+                                "valor_reposicao":
+                                    float(
+                                        item["valor_reposicao"]
+                                        or 0
+                                    )
+
+                            }).execute()
+
+
                             st.success(
-                                "Item excluído."
+                                "✅ Perda registrada e estoque atualizado!"
                             )
 
                             st.rerun()
@@ -5172,8 +5528,14 @@ elif menu == "Copos, Taças e Decor":
                         except Exception as e:
 
                             st.error(
-                                f"Erro ao excluir: {e}"
+                                f"Erro ao registrar perda: {e}"
                             )
+
+            else:
+
+                st.info(
+                    "Cadastre copos e taças primeiro."
+                )
 
 
     # =====================================================
@@ -5182,10 +5544,11 @@ elif menu == "Copos, Taças e Decor":
 
     with aba_decor:
 
-        cadastro_decor, lista_decor = st.tabs(
+        cadastro_decor, estoque_decor, perdas_decor = st.tabs(
             [
                 "➕ Cadastro",
-                "📋 Lista"
+                "📋 Estoque",
+                "⚠️ Perdas"
             ]
         )
 
@@ -5196,11 +5559,11 @@ elif menu == "Copos, Taças e Decor":
         with cadastro_decor:
 
             st.subheader(
-                "Cadastro de Materiais Decorativos"
+                "➕ Cadastro de Material Decorativo"
             )
 
             with st.form(
-                "form_materiais_decorativos",
+                "form_material_decorativo",
                 clear_on_submit=True
             ):
 
@@ -5209,14 +5572,14 @@ elif menu == "Copos, Taças e Decor":
                 with col1:
 
                     nome = st.text_input(
-                        "Nome do material"
+                        "Nome do material",
+                        placeholder="Ex.: Vela LED"
                     )
 
                     categoria = st.text_input(
-                        "Categoria"
+                        "Categoria",
+                        placeholder="Ex.: Iluminação"
                     )
-
-                with col2:
 
                     quantidade = st.number_input(
                         "Quantidade disponível",
@@ -5224,12 +5587,28 @@ elif menu == "Copos, Taças e Decor":
                         step=1
                     )
 
+                with col2:
+
+                    preco_compra = st.number_input(
+                        "Valor unitário de compra",
+                        min_value=0.0,
+                        step=0.01,
+                        format="R$ %.2f"
+                    )
+
+                    valor_reposicao = st.number_input(
+                        "Valor de reposição",
+                        min_value=0.0,
+                        step=0.50,
+                        format="R$ %.2f"
+                    )
+
                     observacao = st.text_area(
                         "Observação"
                     )
 
                 cadastrar = st.form_submit_button(
-                    "💾 Cadastrar"
+                    "💾 Cadastrar material"
                 )
 
             if cadastrar:
@@ -5249,9 +5628,7 @@ elif menu == "Copos, Taças e Decor":
                         ).insert({
 
                             "nome":
-                                normalizar_nome(
-                                    nome
-                                ),
+                                normalizar_nome(nome),
 
                             "categoria":
                                 categoria.strip(),
@@ -5259,13 +5636,19 @@ elif menu == "Copos, Taças e Decor":
                             "quantidade":
                                 quantidade,
 
+                            "preco_compra":
+                                preco_compra,
+
+                            "valor_reposicao":
+                                valor_reposicao,
+
                             "observacao":
                                 observacao.strip()
 
                         }).execute()
 
                         st.success(
-                            "✅ Material decorativo cadastrado!"
+                            "✅ Material cadastrado!"
                         )
 
                         st.rerun()
@@ -5276,14 +5659,15 @@ elif menu == "Copos, Taças e Decor":
                             f"Erro ao cadastrar: {e}"
                         )
 
+
         # =================================================
-        # LISTA
+        # ESTOQUE
         # =================================================
 
-        with lista_decor:
+        with estoque_decor:
 
             st.subheader(
-                "Materiais Decorativos cadastrados"
+                "📋 Estoque de Materiais Decorativos"
             )
 
             try:
@@ -5319,20 +5703,70 @@ elif menu == "Copos, Taças e Decor":
 
             else:
 
-                # -----------------------------------------
-                # PESQUISA
-                # -----------------------------------------
+                total_decor = int(
+                    df_decor["quantidade"]
+                    .fillna(0)
+                    .sum()
+                )
+
+                valor_estoque_decor = (
+                    df_decor["quantidade"].fillna(0)
+                    *
+                    df_decor["preco_compra"].fillna(0)
+                ).sum()
+
+                valor_reposicao_decor = (
+                    df_decor["quantidade"].fillna(0)
+                    *
+                    df_decor["valor_reposicao"].fillna(0)
+                ).sum()
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+
+                    st.metric(
+                        "✨ Quantidade total",
+                        f"{total_decor:,}".replace(",", ".")
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "💰 Valor do estoque",
+                        f"R$ {valor_estoque_decor:,.2f}".replace(
+                            ",", "X"
+                        ).replace(
+                            ".", ","
+                        ).replace(
+                            "X", "."
+                        )
+                    )
+
+                with col3:
+
+                    st.metric(
+                        "🔄 Valor de reposição",
+                        f"R$ {valor_reposicao_decor:,.2f}".replace(
+                            ",", "X"
+                        ).replace(
+                            ".", ","
+                        ).replace(
+                            "X", "."
+                        )
+                    )
+
+                st.divider()
 
                 busca = st.text_input(
-                    "🔎 Pesquisar",
-                    key="busca_materiais_decorativos"
+                    "🔎 Pesquisar material",
+                    key="busca_decor_estoque"
                 )
 
                 if busca.strip():
 
-                    busca = busca.strip()
-
                     filtro = (
+
                         df_decor["nome"]
                         .fillna("")
                         .astype(str)
@@ -5341,7 +5775,9 @@ elif menu == "Copos, Taças e Decor":
                             case=False,
                             na=False
                         )
+
                         |
+
                         df_decor["categoria"]
                         .fillna("")
                         .astype(str)
@@ -5355,34 +5791,86 @@ elif menu == "Copos, Taças e Decor":
                     df_decor = df_decor[filtro]
 
 
-                if df_decor.empty:
+                if not df_decor.empty:
 
-                    st.info(
-                        "Nenhum material encontrado."
+                    df_exibicao = df_decor.copy()
+
+                    df_exibicao["valor_total"] = (
+                        df_exibicao["quantidade"].fillna(0)
+                        *
+                        df_exibicao["preco_compra"].fillna(0)
                     )
 
-                else:
-
-                    # -------------------------------------
-                    # TOTAL
-                    # -------------------------------------
-
-                    total_decor = int(
-                        df_decor["quantidade"]
-                        .fillna(0)
-                        .sum()
+                    df_exibicao["valor_reposicao_total"] = (
+                        df_exibicao["quantidade"].fillna(0)
+                        *
+                        df_exibicao["valor_reposicao"].fillna(0)
                     )
 
-                    st.metric(
-                        "✨ Total de materiais disponíveis",
-                        total_decor
+                    st.dataframe(
+
+                        df_exibicao[
+                            [
+                                "nome",
+                                "categoria",
+                                "quantidade",
+                                "preco_compra",
+                                "valor_total",
+                                "valor_reposicao",
+                                "valor_reposicao_total"
+                            ]
+                        ],
+
+                        use_container_width=True,
+
+                        hide_index=True,
+
+                        column_config={
+
+                            "nome":
+                                st.column_config.TextColumn(
+                                    "Nome"
+                                ),
+
+                            "categoria":
+                                st.column_config.TextColumn(
+                                    "Categoria"
+                                ),
+
+                            "quantidade":
+                                st.column_config.NumberColumn(
+                                    "Quantidade"
+                                ),
+
+                            "preco_compra":
+                                st.column_config.NumberColumn(
+                                    "Compra unitária",
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_total":
+                                st.column_config.NumberColumn(
+                                    "Valor em estoque",
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_reposicao":
+                                st.column_config.NumberColumn(
+                                    "Reposição unitária",
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_reposicao_total":
+                                st.column_config.NumberColumn(
+                                    "Reposição total",
+                                    format="R$ %.2f"
+                                )
+                        }
                     )
 
                     st.divider()
 
-                    # -------------------------------------
-                    # EDITOR
-                    # -------------------------------------
+                    st.subheader("✏️ Editar cadastro")
 
                     df_editado = st.data_editor(
 
@@ -5417,6 +5905,20 @@ elif menu == "Copos, Taças e Decor":
                                     step=1
                                 ),
 
+                            "preco_compra":
+                                st.column_config.NumberColumn(
+                                    "Compra unitária",
+                                    min_value=0,
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_reposicao":
+                                st.column_config.NumberColumn(
+                                    "Reposição unitária",
+                                    min_value=0,
+                                    format="R$ %.2f"
+                                ),
+
                             "observacao":
                                 st.column_config.TextColumn(
                                     "Observação"
@@ -5430,13 +5932,9 @@ elif menu == "Copos, Taças e Decor":
                         }
                     )
 
-                    # -------------------------------------
-                    # SALVAR
-                    # -------------------------------------
-
                     if st.button(
                         "💾 Salvar alterações",
-                        key="salvar_materiais_decorativos"
+                        key="salvar_decor"
                     ):
 
                         try:
@@ -5463,6 +5961,18 @@ elif menu == "Copos, Taças e Decor":
                                             or 0
                                         ),
 
+                                    "preco_compra":
+                                        float(
+                                            row["preco_compra"]
+                                            or 0
+                                        ),
+
+                                    "valor_reposicao":
+                                        float(
+                                            row["valor_reposicao"]
+                                            or 0
+                                        ),
+
                                     "observacao":
                                         str(
                                             row["observacao"]
@@ -5485,37 +5995,160 @@ elif menu == "Copos, Taças e Decor":
                                 f"Erro ao salvar: {e}"
                             )
 
-                    # -------------------------------------
-                    # EXCLUIR
-                    # -------------------------------------
 
-                    st.divider()
+        # =================================================
+        # PERDAS DECORATIVOS
+        # =================================================
 
-                    item_excluir = st.selectbox(
+        with perdas_decor:
 
-                        "Selecionar material para excluir",
+            st.subheader(
+                "⚠️ Registrar perda de material"
+            )
 
-                        df_decor["id"].tolist(),
+            st.info(
+                "A perda será descontada automaticamente do estoque."
+            )
 
-                        key="excluir_material_decorativo"
+            try:
+
+                dados = (
+                    supabase
+                    .table("materiais_decorativos")
+                    .select("*")
+                    .order("nome")
+                    .execute()
+                )
+
+                df_perdas = pd.DataFrame(
+                    dados.data
+                    if dados.data
+                    else []
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"Erro ao carregar materiais: {e}"
+                )
+
+                df_perdas = pd.DataFrame()
+
+
+            if not df_perdas.empty:
+
+                opcoes = {
+                    f"{row['nome']} — "
+                    f"Estoque: {int(row['quantidade'])}":
+                    row["id"]
+
+                    for _, row in df_perdas.iterrows()
+                }
+
+                item_selecionado = st.selectbox(
+                    "Selecionar material",
+                    list(opcoes.keys()),
+                    key="perda_decor_item"
+                )
+
+                id_item = opcoes[item_selecionado]
+
+                item = df_perdas[
+                    df_perdas["id"] == id_item
+                ].iloc[0]
+
+                quantidade_perdida = st.number_input(
+                    "Quantidade perdida",
+                    min_value=1,
+                    step=1,
+                    key="quantidade_perda_decor"
+                )
+
+                motivo = st.selectbox(
+                    "Motivo",
+                    [
+                        "Perda",
+                        "Dano",
+                        "Descarte",
+                        "Outro"
+                    ],
+                    key="motivo_perda_decor"
+                )
+
+                observacao_perda = st.text_area(
+                    "Observação",
+                    key="obs_perda_decor"
+                )
+
+                if st.button(
+                    "⚠️ Registrar perda",
+                    key="registrar_perda_decor"
+                ):
+
+                    estoque_atual = int(
+                        item["quantidade"] or 0
                     )
 
-                    if st.button(
-                        "🗑️ Excluir selecionado",
-                        key="botao_excluir_material_decorativo"
-                    ):
+                    if quantidade_perdida > estoque_atual:
+
+                        st.error(
+                            f"Estoque insuficiente. "
+                            f"Disponível: {estoque_atual}."
+                        )
+
+                    else:
+
+                        novo_estoque = (
+                            estoque_atual
+                            -
+                            quantidade_perdida
+                        )
 
                         try:
 
                             supabase.table(
                                 "materiais_decorativos"
-                            ).delete().eq(
+                            ).update({
+
+                                "quantidade":
+                                    novo_estoque
+
+                            }).eq(
                                 "id",
-                                item_excluir
+                                id_item
                             ).execute()
 
+
+                            supabase.table(
+                                "movimentacoes_decorativos"
+                            ).insert({
+
+                                "material_id":
+                                    id_item,
+
+                                "tipo_movimentacao":
+                                    "PERDA",
+
+                                "quantidade":
+                                    quantidade_perdida,
+
+                                "motivo":
+                                    motivo,
+
+                                "observacao":
+                                    observacao_perda.strip(),
+
+                                "valor_reposicao":
+                                    float(
+                                        item["valor_reposicao"]
+                                        or 0
+                                    )
+
+                            }).execute()
+
+
                             st.success(
-                                "Material excluído."
+                                "✅ Perda registrada e estoque atualizado!"
                             )
 
                             st.rerun()
@@ -5523,19 +6156,25 @@ elif menu == "Copos, Taças e Decor":
                         except Exception as e:
 
                             st.error(
-                                f"Erro ao excluir: {e}"
+                                f"Erro ao registrar perda: {e}"
                             )
 
+            else:
+
+                st.info(
+                    "Cadastre materiais decorativos primeiro."
+                )
+
 
 # =========================================================
-# MATERIAIS DE BAR
+# MATERIAIS E UTENSÍLIOS DE BAR
 # =========================================================
 
-elif menu == "Materiais de Bar":
+elif menu == "Materiais e Utensílios de Bar":
 
-    st.title("🍸 Materiais de Bar")
+    st.title("🍸 Materiais e Utensílios de Bar")
 
-    aba_cadastro, aba_lista = st.tabs(
+    cadastro, lista = st.tabs(
         [
             "➕ Cadastro",
             "📋 Lista"
@@ -5543,12 +6182,12 @@ elif menu == "Materiais de Bar":
     )
 
     # =====================================================
-    # CADASTRO
+    # ABA — CADASTRO
     # =====================================================
 
-    with aba_cadastro:
+    with cadastro:
 
-        st.subheader("Cadastro de Materiais de Bar")
+        st.subheader("Cadastro de Materiais e Utensílios")
 
         with st.form(
             "form_materiais_bar",
@@ -5557,27 +6196,41 @@ elif menu == "Materiais de Bar":
 
             col1, col2 = st.columns(2)
 
+            # -------------------------------------------------
+            # COLUNA 1
+            # -------------------------------------------------
+
             with col1:
+
+                nome = st.text_input(
+                    "Nome do material / utensílio"
+                )
 
                 categoria = st.selectbox(
                     "Categoria",
                     [
-                        "Coqueteleira",
-                        "Dosador",
-                        "Colher Bailarina",
-                        "Faca",
-                        "Tábua de Corte",
-                        "Balde",
-                        "Suporte de Balde",
-                        "Pegador",
-                        "Pinça",
+                        "Utensílio",
+                        "Equipamento",
+                        "Material de Bar",
+                        "Acessório",
                         "Outros"
                     ]
                 )
 
-                nome = st.text_input(
-                    "Nome / Modelo"
+                unidade = st.selectbox(
+                    "Unidade de controle",
+                    [
+                        "Unidade",
+                        "Kit",
+                        "Caixa",
+                        "Pacote",
+                        "Par"
+                    ]
                 )
+
+            # -------------------------------------------------
+            # COLUNA 2
+            # -------------------------------------------------
 
             with col2:
 
@@ -5585,6 +6238,13 @@ elif menu == "Materiais de Bar":
                     "Quantidade disponível",
                     min_value=0,
                     step=1
+                )
+
+                valor_unitario = st.number_input(
+                    "Valor unitário atual",
+                    min_value=0.0,
+                    step=0.01,
+                    format="%.2f"
                 )
 
                 observacao = st.text_area(
@@ -5595,12 +6255,28 @@ elif menu == "Materiais de Bar":
                 "💾 Cadastrar"
             )
 
+        # =====================================================
+        # PROCESSAR CADASTRO
+        # =====================================================
+
         if cadastrar:
 
             if not nome.strip():
 
                 st.error(
-                    "Informe o nome ou modelo do material."
+                    "Informe o nome do material ou utensílio."
+                )
+
+            elif quantidade < 0:
+
+                st.error(
+                    "A quantidade não pode ser negativa."
+                )
+
+            elif valor_unitario < 0:
+
+                st.error(
+                    "O valor unitário não pode ser negativo."
                 )
 
             else:
@@ -5608,17 +6284,26 @@ elif menu == "Materiais de Bar":
                 try:
 
                     supabase.table(
-                        "materiais_bar"
+                        "materiais_utensilios_bar"
                     ).insert({
-
-                        "categoria":
-                            categoria,
 
                         "nome":
                             normalizar_nome(nome),
 
+                        "categoria":
+                            categoria,
+
+                        "unidade":
+                            unidade,
+
                         "quantidade":
                             quantidade,
+
+                        "valor_unitario":
+                            valor_unitario,
+
+                        "valor_total":
+                            quantidade * valor_unitario,
 
                         "observacao":
                             observacao.strip()
@@ -5626,7 +6311,7 @@ elif menu == "Materiais de Bar":
                     }).execute()
 
                     st.success(
-                        "✅ Material de bar cadastrado!"
+                        "✅ Material/utensílio cadastrado com sucesso!"
                     )
 
                     st.rerun()
@@ -5637,28 +6322,29 @@ elif menu == "Materiais de Bar":
                         f"Erro ao cadastrar: {e}"
                     )
 
+
     # =====================================================
-    # LISTA
+    # ABA — LISTA
     # =====================================================
 
-    with aba_lista:
+    with lista:
 
         st.subheader(
-            "Materiais de Bar cadastrados"
+            "📦 Estoque de Materiais e Utensílios"
         )
 
         try:
 
             dados = (
                 supabase
-                .table("materiais_bar")
+                .table("materiais_utensilios_bar")
                 .select("*")
                 .order("categoria")
                 .order("nome")
                 .execute()
             )
 
-            df_bar = pd.DataFrame(
+            df_materiais = pd.DataFrame(
                 dados.data
                 if dados.data
                 else []
@@ -5667,16 +6353,16 @@ elif menu == "Materiais de Bar":
         except Exception as e:
 
             st.error(
-                f"Erro ao carregar materiais de bar: {e}"
+                f"Erro ao carregar materiais: {e}"
             )
 
-            df_bar = pd.DataFrame()
+            df_materiais = pd.DataFrame()
 
 
-        if df_bar.empty:
+        if df_materiais.empty:
 
             st.info(
-                "Nenhum material de bar cadastrado."
+                "Nenhum material ou utensílio cadastrado."
             )
 
         else:
@@ -5686,8 +6372,8 @@ elif menu == "Materiais de Bar":
             # =================================================
 
             busca = st.text_input(
-                "🔎 Pesquisar",
-                key="busca_materiais_bar"
+                "🔎 Pesquisar material ou utensílio",
+                key="busca_materiais_utensilios_bar"
             )
 
             if busca.strip():
@@ -5695,7 +6381,8 @@ elif menu == "Materiais de Bar":
                 busca = busca.strip()
 
                 filtro = (
-                    df_bar["nome"]
+
+                    df_materiais["nome"]
                     .fillna("")
                     .astype(str)
                     .str.contains(
@@ -5703,8 +6390,21 @@ elif menu == "Materiais de Bar":
                         case=False,
                         na=False
                     )
+
                     |
-                    df_bar["categoria"]
+
+                    df_materiais["categoria"]
+                    .fillna("")
+                    .astype(str)
+                    .str.contains(
+                        busca,
+                        case=False,
+                        na=False
+                    )
+
+                    |
+
+                    df_materiais["unidade"]
                     .fillna("")
                     .astype(str)
                     .str.contains(
@@ -5714,10 +6414,10 @@ elif menu == "Materiais de Bar":
                     )
                 )
 
-                df_bar = df_bar[filtro]
+                df_materiais = df_materiais[filtro]
 
 
-            if df_bar.empty:
+            if df_materiais.empty:
 
                 st.info(
                     "Nenhum material encontrado."
@@ -5726,21 +6426,59 @@ elif menu == "Materiais de Bar":
             else:
 
                 # =================================================
-                # TOTAL
+                # CALCULAR VALOR TOTAL
                 # =================================================
 
-                total_materiais = int(
-                    df_bar["quantidade"]
+                df_materiais["valor_total"] = (
+                    df_materiais["quantidade"]
+                    .fillna(0)
+                    .astype(float)
+                    *
+                    df_materiais["valor_unitario"]
+                    .fillna(0)
+                    .astype(float)
+                )
+
+
+                # =================================================
+                # INDICADORES
+                # =================================================
+
+                quantidade_total = int(
+                    df_materiais["quantidade"]
                     .fillna(0)
                     .sum()
                 )
 
-                st.metric(
-                    "🍸 Total de materiais disponíveis",
-                    total_materiais
+                valor_total_estoque = (
+                    df_materiais["valor_total"]
+                    .fillna(0)
+                    .sum()
                 )
 
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    st.metric(
+                        "📦 Quantidade total",
+                        quantidade_total
+                    )
+
+                with col2:
+
+                    st.metric(
+                        "💰 Valor total do estoque",
+                        f"R$ {valor_total_estoque:,.2f}"
+                        .replace(",", "X")
+                        .replace(".", ",")
+                        .replace("X", ".")
+                    )
+
+
                 st.divider()
+
 
                 # =================================================
                 # EDITOR
@@ -5748,7 +6486,7 @@ elif menu == "Materiais de Bar":
 
                 df_editado = st.data_editor(
 
-                    df_bar,
+                    df_materiais,
 
                     use_container_width=True,
 
@@ -5762,26 +6500,33 @@ elif menu == "Materiais de Bar":
                                 disabled=True
                             ),
 
+                        "nome":
+                            st.column_config.TextColumn(
+                                "Nome"
+                            ),
+
                         "categoria":
                             st.column_config.SelectboxColumn(
                                 "Categoria",
                                 options=[
-                                    "Coqueteleira",
-                                    "Dosador",
-                                    "Colher Bailarina",
-                                    "Faca",
-                                    "Tábua de Corte",
-                                    "Balde",
-                                    "Suporte de Balde",
-                                    "Pegador",
-                                    "Pinça",
+                                    "Utensílio",
+                                    "Equipamento",
+                                    "Material de Bar",
+                                    "Acessório",
                                     "Outros"
                                 ]
                             ),
 
-                        "nome":
-                            st.column_config.TextColumn(
-                                "Nome / Modelo"
+                        "unidade":
+                            st.column_config.SelectboxColumn(
+                                "Unidade",
+                                options=[
+                                    "Unidade",
+                                    "Kit",
+                                    "Caixa",
+                                    "Pacote",
+                                    "Par"
+                                ]
                             ),
 
                         "quantidade":
@@ -5789,6 +6534,20 @@ elif menu == "Materiais de Bar":
                                 "Quantidade",
                                 min_value=0,
                                 step=1
+                            ),
+
+                        "valor_unitario":
+                            st.column_config.NumberColumn(
+                                "💰 Valor Unitário",
+                                format="R$ %.2f",
+                                min_value=0
+                            ),
+
+                        "valor_total":
+                            st.column_config.NumberColumn(
+                                "💰 Valor Total",
+                                format="R$ %.2f",
+                                disabled=True
                             ),
 
                         "observacao":
@@ -5804,38 +6563,64 @@ elif menu == "Materiais de Bar":
                     }
                 )
 
+
                 # =================================================
                 # SALVAR ALTERAÇÕES
                 # =================================================
 
                 if st.button(
                     "💾 Salvar alterações",
-                    key="salvar_materiais_bar"
+                    key="salvar_materiais_utensilios_bar"
                 ):
 
                     try:
 
                         for _, row in df_editado.iterrows():
 
-                            supabase.table(
-                                "materiais_bar"
-                            ).update({
+                            quantidade = int(
+                                row["quantidade"]
+                                or 0
+                            )
 
-                                "categoria":
-                                    str(
-                                        row["categoria"]
-                                    ).strip(),
+                            valor_unitario = float(
+                                row["valor_unitario"]
+                                or 0
+                            )
+
+                            valor_total = (
+                                quantidade
+                                *
+                                valor_unitario
+                            )
+
+
+                            supabase.table(
+                                "materiais_utensilios_bar"
+                            ).update({
 
                                 "nome":
                                     normalizar_nome(
                                         row["nome"]
                                     ),
 
+                                "categoria":
+                                    str(
+                                        row["categoria"]
+                                    ).strip(),
+
+                                "unidade":
+                                    str(
+                                        row["unidade"]
+                                    ).strip(),
+
                                 "quantidade":
-                                    int(
-                                        row["quantidade"]
-                                        or 0
-                                    ),
+                                    quantidade,
+
+                                "valor_unitario":
+                                    valor_unitario,
+
+                                "valor_total":
+                                    valor_total,
 
                                 "observacao":
                                     str(
@@ -5847,17 +6632,20 @@ elif menu == "Materiais de Bar":
                                 row["id"]
                             ).execute()
 
+
                         st.success(
                             "✅ Alterações salvas!"
                         )
 
                         st.rerun()
 
+
                     except Exception as e:
 
                         st.error(
                             f"Erro ao salvar: {e}"
                         )
+
 
                 # =================================================
                 # EXCLUIR
@@ -5867,29 +6655,30 @@ elif menu == "Materiais de Bar":
 
                 item_excluir = st.selectbox(
 
-                    "Selecionar material para excluir",
+                    "Selecionar item para excluir",
 
-                    df_bar["id"].tolist(),
+                    df_materiais["id"].tolist(),
 
-                    key="excluir_material_bar"
+                    key="excluir_material_utensilio"
                 )
+
 
                 if st.button(
                     "🗑️ Excluir selecionado",
-                    key="botao_excluir_material_bar"
+                    key="botao_excluir_material_utensilio"
                 ):
 
                     try:
 
                         supabase.table(
-                            "materiais_bar"
+                            "materiais_utensilios_bar"
                         ).delete().eq(
                             "id",
                             item_excluir
                         ).execute()
 
                         st.success(
-                            "Material excluído."
+                            "Material/utensílio excluído."
                         )
 
                         st.rerun()
