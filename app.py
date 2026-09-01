@@ -5537,7 +5537,7 @@ elif menu == "Materiais e Utensílios de Bar":
     cadastro, lista = st.tabs(
         [
             "➕ Cadastro",
-            "📋 Lista"
+            "📋 Estoque"
         ]
     )
 
@@ -5547,10 +5547,10 @@ elif menu == "Materiais e Utensílios de Bar":
 
     with cadastro:
 
-        st.subheader("Cadastro de Materiais e Utensílios")
+        st.subheader("➕ Cadastro de Material / Utensílio")
 
         with st.form(
-            "form_materiais_bar",
+            "form_materiais_utensilios_bar",
             clear_on_submit=True
         ):
 
@@ -5563,7 +5563,8 @@ elif menu == "Materiais e Utensílios de Bar":
             with col1:
 
                 nome = st.text_input(
-                    "Nome do material / utensílio"
+                    "Nome do material / utensílio",
+                    placeholder="Ex.: Coqueteleira, dosador, colher bailarina..."
                 )
 
                 categoria = st.selectbox(
@@ -5597,18 +5598,25 @@ elif menu == "Materiais e Utensílios de Bar":
                 quantidade = st.number_input(
                     "Quantidade disponível",
                     min_value=0,
+                    value=0,
                     step=1
                 )
 
                 valor_unitario = st.number_input(
-                    "Valor unitário atual",
+                    "Valor unitário de referência",
                     min_value=0.0,
+                    value=0.0,
                     step=0.01,
-                    format="%.2f"
+                    format="%.2f",
+                    help=(
+                        "Valor de referência de uma unidade. "
+                        "Não interfere no custo dos drinks."
+                    )
                 )
 
                 observacao = st.text_area(
-                    "Observação"
+                    "Observação",
+                    placeholder="Ex.: Uso exclusivo para eventos grandes..."
                 )
 
             cadastrar = st.form_submit_button(
@@ -5621,7 +5629,9 @@ elif menu == "Materiais e Utensílios de Bar":
 
         if cadastrar:
 
-            if not nome.strip():
+            nome_limpo = normalizar_nome(nome)
+
+            if not nome_limpo:
 
                 st.error(
                     "Informe o nome do material ou utensílio."
@@ -5641,6 +5651,12 @@ elif menu == "Materiais e Utensílios de Bar":
 
             else:
 
+                valor_total = (
+                    quantidade
+                    *
+                    valor_unitario
+                )
+
                 try:
 
                     supabase.table(
@@ -5648,7 +5664,7 @@ elif menu == "Materiais e Utensílios de Bar":
                     ).insert({
 
                         "nome":
-                            normalizar_nome(nome),
+                            nome_limpo,
 
                         "categoria":
                             categoria,
@@ -5657,13 +5673,13 @@ elif menu == "Materiais e Utensílios de Bar":
                             unidade,
 
                         "quantidade":
-                            quantidade,
+                            int(quantidade),
 
                         "valor_unitario":
-                            valor_unitario,
+                            float(valor_unitario),
 
                         "valor_total":
-                            quantidade * valor_unitario,
+                            float(valor_total),
 
                         "observacao":
                             observacao.strip()
@@ -5684,7 +5700,7 @@ elif menu == "Materiais e Utensílios de Bar":
 
 
     # =====================================================
-    # ABA — LISTA
+    # ABA — ESTOQUE
     # =====================================================
 
     with lista:
@@ -5718,6 +5734,10 @@ elif menu == "Materiais e Utensílios de Bar":
 
             df_materiais = pd.DataFrame()
 
+
+        # =================================================
+        # NENHUM ITEM
+        # =================================================
 
         if df_materiais.empty:
 
@@ -5774,8 +5794,14 @@ elif menu == "Materiais e Utensílios de Bar":
                     )
                 )
 
-                df_materiais = df_materiais[filtro]
+                df_materiais = (
+                    df_materiais[filtro]
+                )
 
+
+            # =================================================
+            # RESULTADO DA PESQUISA
+            # =================================================
 
             if df_materiais.empty:
 
@@ -5786,17 +5812,34 @@ elif menu == "Materiais e Utensílios de Bar":
             else:
 
                 # =================================================
-                # CALCULAR VALOR TOTAL
+                # GARANTIR VALORES NUMÉRICOS
+                # =================================================
+
+                df_materiais["quantidade"] = (
+                    pd.to_numeric(
+                        df_materiais["quantidade"],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                )
+
+                df_materiais["valor_unitario"] = (
+                    pd.to_numeric(
+                        df_materiais["valor_unitario"],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                )
+
+
+                # =================================================
+                # RECALCULAR VALOR TOTAL
                 # =================================================
 
                 df_materiais["valor_total"] = (
                     df_materiais["quantidade"]
-                    .fillna(0)
-                    .astype(float)
                     *
                     df_materiais["valor_unitario"]
-                    .fillna(0)
-                    .astype(float)
                 )
 
 
@@ -5806,13 +5849,11 @@ elif menu == "Materiais e Utensílios de Bar":
 
                 quantidade_total = int(
                     df_materiais["quantidade"]
-                    .fillna(0)
                     .sum()
                 )
 
-                valor_total_estoque = (
+                valor_total_estoque = float(
                     df_materiais["valor_total"]
-                    .fillna(0)
                     .sum()
                 )
 
@@ -5830,10 +5871,12 @@ elif menu == "Materiais e Utensílios de Bar":
 
                     st.metric(
                         "💰 Valor total do estoque",
-                        f"R$ {valor_total_estoque:,.2f}"
-                        .replace(",", "X")
-                        .replace(".", ",")
-                        .replace("X", ".")
+                        (
+                            f"R$ {valor_total_estoque:,.2f}"
+                            .replace(",", "X")
+                            .replace(".", ",")
+                            .replace("X", ".")
+                        )
                     )
 
 
@@ -5841,7 +5884,7 @@ elif menu == "Materiais e Utensílios de Bar":
 
 
                 # =================================================
-                # EDITOR
+                # TABELA
                 # =================================================
 
                 df_editado = st.data_editor(
@@ -5899,8 +5942,9 @@ elif menu == "Materiais e Utensílios de Bar":
                         "valor_unitario":
                             st.column_config.NumberColumn(
                                 "💰 Valor Unitário",
-                                format="R$ %.2f",
-                                min_value=0
+                                min_value=0,
+                                step=0.01,
+                                format="R$ %.2f"
                             ),
 
                         "valor_total":
@@ -5994,7 +6038,7 @@ elif menu == "Materiais e Utensílios de Bar":
 
 
                         st.success(
-                            "✅ Alterações salvas!"
+                            "✅ Alterações salvas com sucesso!"
                         )
 
                         st.rerun()
@@ -6003,21 +6047,31 @@ elif menu == "Materiais e Utensílios de Bar":
                     except Exception as e:
 
                         st.error(
-                            f"Erro ao salvar: {e}"
+                            f"Erro ao salvar alterações: {e}"
                         )
 
 
                 # =================================================
-                # EXCLUIR
+                # EXCLUSÃO
                 # =================================================
 
                 st.divider()
 
+                st.subheader(
+                    "🗑️ Excluir material"
+                )
+
                 item_excluir = st.selectbox(
 
-                    "Selecionar item para excluir",
+                    "Selecione o item",
 
-                    df_materiais["id"].tolist(),
+                    df_materiais[
+                        ["id", "nome"]
+                    ].apply(
+                        lambda x:
+                        f"{x['id']} - {x['nome']}",
+                        axis=1
+                    ).tolist(),
 
                     key="excluir_material_utensilio"
                 )
@@ -6030,15 +6084,22 @@ elif menu == "Materiais e Utensílios de Bar":
 
                     try:
 
+                        id_excluir = int(
+                            item_excluir.split(
+                                " - ",
+                                1
+                            )[0]
+                        )
+
                         supabase.table(
                             "materiais_utensilios_bar"
                         ).delete().eq(
                             "id",
-                            item_excluir
+                            id_excluir
                         ).execute()
 
                         st.success(
-                            "Material/utensílio excluído."
+                            "✅ Material/utensílio excluído."
                         )
 
                         st.rerun()
