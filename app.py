@@ -11502,9 +11502,10 @@ elif menu == "CMV":
 
     st.title("📊 Controle de CMV")
 
-    tab1, tab2 = st.tabs([
+    tab1, tab2, tab3 = st.tabs([
         "📋 Por Evento",
-        "📊 Análise"
+        "📊 Análise",
+        "➕ Adendos"
     ])
 
     # =========================================================
@@ -11524,6 +11525,29 @@ elif menu == "CMV":
         "Gelo",
         "Insumos",
         "Outros"
+    ]
+
+    tipos_adendo = [
+        "Hora Extra",
+        "Venda de Garrafa",
+        "Quebra de Copo/Taça",
+        "Serviço Adicional",
+        "Custo Adicional",
+        "Outros"
+    ]
+
+    status_adendo = [
+        "Pendente",
+        "Pago",
+        "Cancelado"
+    ]
+
+    formas_pagamento = [
+        "Pix",
+        "Dinheiro",
+        "Cartão",
+        "Transferência",
+        "Outro"
     ]
 
     # =========================================================
@@ -11562,11 +11586,10 @@ elif menu == "CMV":
         else:
 
             st.caption(
-                "Registre somente os valores que realmente foram gastos "
-                "para realizar cada evento. O custo previsto do orçamento "
-                "não é alterado."
+                "Registre os custos realmente realizados e utilize "
+                "a aba Adendos para registrar receitas e custos "
+                "adicionais de cada evento."
             )
-
 
             # =====================================================
             # LOOP DOS EVENTOS
@@ -11602,21 +11625,6 @@ elif menu == "CMV":
                     or 0
                 )
 
-
-                # =================================================
-                # CABEÇALHO DO EVENTO
-                # =================================================
-
-                st.markdown(
-                    f"## 🎉 {cliente}"
-                )
-
-                st.caption(
-                    f"📅 Evento: {data_evento} | "
-                    f"ID: {evento_id}"
-                )
-
-
                 # =================================================
                 # BUSCAR CUSTOS REAIS
                 # =================================================
@@ -11644,9 +11652,35 @@ elif menu == "CMV":
 
                     custos = pd.DataFrame()
 
+                # =================================================
+                # BUSCAR ADENDOS
+                # =================================================
+
+                try:
+
+                    aditivos = pd.DataFrame(
+                        supabase.table("aditivos_evento")
+                        .select("*")
+                        .eq(
+                            "evento_id",
+                            evento_id
+                        )
+                        .order("id")
+                        .execute()
+                        .data
+                        or []
+                    )
+
+                except Exception as e:
+
+                    st.error(
+                        f"❌ Erro ao carregar adendos do evento: {e}"
+                    )
+
+                    aditivos = pd.DataFrame()
 
                 # =================================================
-                # CÁLCULOS
+                # CUSTO REAL NORMAL
                 # =================================================
 
                 if not custos.empty:
@@ -11656,33 +11690,91 @@ elif menu == "CMV":
                         errors="coerce"
                     ).fillna(0)
 
-                    total_real = float(
+                    total_custos_normais = float(
                         custos["valor"].sum()
                     )
 
                 else:
 
-                    total_real = 0.0
+                    total_custos_normais = 0.0
 
+                # =================================================
+                # ADENDOS
+                # =================================================
 
-                lucro_real = (
+                if not aditivos.empty:
+
+                    aditivos["valor_cliente"] = pd.to_numeric(
+                        aditivos.get(
+                            "valor_cliente",
+                            0
+                        ),
+                        errors="coerce"
+                    ).fillna(0)
+
+                    aditivos["valor_equipe"] = pd.to_numeric(
+                        aditivos.get(
+                            "valor_equipe",
+                            0
+                        ),
+                        errors="coerce"
+                    ).fillna(0)
+
+                    total_adendos_receita = float(
+                        aditivos["valor_cliente"].sum()
+                    )
+
+                    total_adendos_custo = float(
+                        aditivos["valor_equipe"].sum()
+                    )
+
+                else:
+
+                    total_adendos_receita = 0.0
+                    total_adendos_custo = 0.0
+
+                # =================================================
+                # CONSOLIDAÇÃO REAL
+                # =================================================
+
+                faturamento_real = (
                     valor_venda
-                    - total_real
+                    + total_adendos_receita
                 )
 
+                total_real = (
+                    total_custos_normais
+                    + total_adendos_custo
+                )
+
+                lucro_real = (
+                    faturamento_real
+                    - total_real
+                )
 
                 economia = (
                     custo_previsto
                     - total_real
                 )
 
-
                 cmv_percentual = (
-                    (total_real / valor_venda) * 100
-                    if valor_venda > 0
+                    (total_real / faturamento_real) * 100
+                    if faturamento_real > 0
                     else 0
                 )
 
+                # =================================================
+                # CABEÇALHO DO EVENTO
+                # =================================================
+
+                st.markdown(
+                    f"## 🎉 {cliente}"
+                )
+
+                st.caption(
+                    f"📅 Evento: {data_evento} | "
+                    f"ID: {evento_id}"
+                )
 
                 # =================================================
                 # MÉTRICAS
@@ -11691,8 +11783,8 @@ elif menu == "CMV":
                 col1, col2, col3, col4 = st.columns(4)
 
                 col1.metric(
-                    "💰 Faturamento",
-                    f"R$ {valor_venda:,.2f}"
+                    "💰 Faturamento Real",
+                    f"R$ {faturamento_real:,.2f}"
                 )
 
                 col2.metric(
@@ -11710,7 +11802,6 @@ elif menu == "CMV":
                     f"{cmv_percentual:.2f}%"
                 )
 
-
                 col5, col6 = st.columns(2)
 
                 col5.metric(
@@ -11723,16 +11814,29 @@ elif menu == "CMV":
                     f"R$ {economia:,.2f}",
                     help=(
                         "Diferença entre o custo previsto no orçamento "
-                        "e o custo realmente lançado no CMV."
+                        "e o custo real consolidado do evento."
                     )
                 )
 
+                # =================================================
+                # RESUMO DOS ADENDOS
+                # =================================================
+
+                if not aditivos.empty:
+
+                    st.caption(
+                        f"➕ Adendos: "
+                        f"R$ {total_adendos_receita:,.2f} "
+                        f"em receitas | "
+                        f"R$ {total_adendos_custo:,.2f} "
+                        f"em custos"
+                    )
 
                 # =================================================
                 # STATUS DO CMV
                 # =================================================
 
-                if custos.empty:
+                if total_real == 0:
 
                     st.info(
                         "🟡 Este evento ainda não possui custos reais "
@@ -11757,9 +11861,7 @@ elif menu == "CMV":
                         f"🟢 CMV controlado: {cmv_percentual:.2f}%"
                     )
 
-
                 st.divider()
-
 
                 # =================================================
                 # ➕ LANÇAR CUSTO REAL
@@ -11773,7 +11875,6 @@ elif menu == "CMV":
                     "Informe somente aquilo que realmente foi comprado "
                     "ou gasto para este evento."
                 )
-
 
                 col_a, col_b = st.columns(2)
 
@@ -11791,7 +11892,6 @@ elif menu == "CMV":
                     key=f"cmv_valor_{evento_id}"
                 )
 
-
                 descricao = st.text_input(
                     "Descrição",
                     placeholder=(
@@ -11800,7 +11900,6 @@ elif menu == "CMV":
                     ),
                     key=f"cmv_descricao_{evento_id}"
                 )
-
 
                 if st.button(
                     "💾 Registrar Custo",
@@ -11843,20 +11942,17 @@ elif menu == "CMV":
 
                             }).execute()
 
-
                             st.success(
                                 "✅ Custo real registrado!"
                             )
 
                             st.rerun()
 
-
                         except Exception as e:
 
                             st.error(
                                 f"❌ Erro ao registrar custo: {e}"
                             )
-
 
                 # =================================================
                 # LISTA DOS CUSTOS REAIS
@@ -11865,7 +11961,6 @@ elif menu == "CMV":
                 st.markdown(
                     "### 📋 Custos reais registrados"
                 )
-
 
                 if custos.empty:
 
@@ -11877,31 +11972,16 @@ elif menu == "CMV":
 
                     df_custos_exibir = custos.copy()
 
-
-                    # -------------------------------------------------
-                    # PREPARAÇÃO DA EXIBIÇÃO
-                    # -------------------------------------------------
-
                     colunas_custos = []
 
                     if "id" in df_custos_exibir.columns:
-
-                        colunas_custos.append(
-                            "id"
-                        )
+                        colunas_custos.append("id")
 
                     if "descricao" in df_custos_exibir.columns:
-
-                        colunas_custos.append(
-                            "descricao"
-                        )
+                        colunas_custos.append("descricao")
 
                     if "valor" in df_custos_exibir.columns:
-
-                        colunas_custos.append(
-                            "valor"
-                        )
-
+                        colunas_custos.append("valor")
 
                     df_custos_exibir = (
                         df_custos_exibir[
@@ -11910,36 +11990,27 @@ elif menu == "CMV":
                         .copy()
                     )
 
-
                     df_custos_exibir.rename(
                         columns={
-
                             "id": "ID",
-
                             "descricao": "Descrição",
-
                             "valor": "Valor"
-
                         },
                         inplace=True
                     )
-
 
                     st.dataframe(
                         df_custos_exibir,
                         use_container_width=True,
                         hide_index=True,
                         column_config={
-
                             "Valor":
                                 st.column_config.NumberColumn(
                                     "💰 Valor",
                                     format="R$ %.2f"
                                 )
-
                         }
                     )
-
 
                     # =================================================
                     # EXCLUSÃO DE CUSTO
@@ -11957,7 +12028,6 @@ elif menu == "CMV":
                             else []
                         )
 
-
                         if ids_disponiveis:
 
                             id_excluir = st.selectbox(
@@ -11965,7 +12035,6 @@ elif menu == "CMV":
                                 ids_disponiveis,
                                 key=f"cmv_excluir_id_{evento_id}"
                             )
-
 
                             if st.button(
                                 "❌ Excluir custo selecionado",
@@ -11982,13 +12051,11 @@ elif menu == "CMV":
                                         int(id_excluir)
                                     ).execute()
 
-
                                     st.success(
                                         "✅ Custo excluído."
                                     )
 
                                     st.rerun()
-
 
                                 except Exception as e:
 
@@ -11996,9 +12063,7 @@ elif menu == "CMV":
                                         f"❌ Erro ao excluir custo: {e}"
                                     )
 
-
                 st.divider()
-
 
     # =========================================================
     # 📊 TAB 2 - ANÁLISE
@@ -12012,9 +12077,9 @@ elif menu == "CMV":
 
         st.caption(
             "Comparação entre o custo previsto no orçamento "
-            "e o custo realmente realizado em cada evento."
+            "e o resultado real de cada evento, considerando "
+            "custos e adendos."
         )
-
 
         # =====================================================
         # BUSCAR EVENTOS
@@ -12043,9 +12108,7 @@ elif menu == "CMV":
 
             df_eventos = pd.DataFrame()
 
-
         resumo = []
-
 
         # =====================================================
         # CONSOLIDAR CADA EVENTO
@@ -12055,6 +12118,9 @@ elif menu == "CMV":
 
             evento_id = row["id"]
 
+            # -------------------------------------------------
+            # CUSTOS
+            # -------------------------------------------------
 
             try:
 
@@ -12074,7 +12140,6 @@ elif menu == "CMV":
 
                 custos = pd.DataFrame()
 
-
             if not custos.empty:
 
                 custos["valor"] = pd.to_numeric(
@@ -12082,14 +12147,70 @@ elif menu == "CMV":
                     errors="coerce"
                 ).fillna(0)
 
-                total_real = float(
+                total_custos = float(
                     custos["valor"].sum()
                 )
 
             else:
 
-                total_real = 0.0
+                total_custos = 0.0
 
+            # -------------------------------------------------
+            # ADENDOS
+            # -------------------------------------------------
+
+            try:
+
+                aditivos = pd.DataFrame(
+                    supabase.table("aditivos_evento")
+                    .select("*")
+                    .eq(
+                        "evento_id",
+                        evento_id
+                    )
+                    .execute()
+                    .data
+                    or []
+                )
+
+            except Exception:
+
+                aditivos = pd.DataFrame()
+
+            if not aditivos.empty:
+
+                aditivos["valor_cliente"] = pd.to_numeric(
+                    aditivos.get(
+                        "valor_cliente",
+                        0
+                    ),
+                    errors="coerce"
+                ).fillna(0)
+
+                aditivos["valor_equipe"] = pd.to_numeric(
+                    aditivos.get(
+                        "valor_equipe",
+                        0
+                    ),
+                    errors="coerce"
+                ).fillna(0)
+
+                total_adendos_receita = float(
+                    aditivos["valor_cliente"].sum()
+                )
+
+                total_adendos_custo = float(
+                    aditivos["valor_equipe"].sum()
+                )
+
+            else:
+
+                total_adendos_receita = 0.0
+                total_adendos_custo = 0.0
+
+            # -------------------------------------------------
+            # VALORES DO EVENTO
+            # -------------------------------------------------
 
             valor_venda = float(
                 pd.to_numeric(
@@ -12099,7 +12220,6 @@ elif menu == "CMV":
                 or 0
             )
 
-
             custo_previsto = float(
                 pd.to_numeric(
                     row.get("custo", 0),
@@ -12108,25 +12228,31 @@ elif menu == "CMV":
                 or 0
             )
 
-
-            lucro = (
+            faturamento_real = (
                 valor_venda
-                - total_real
+                + total_adendos_receita
             )
 
+            total_real = (
+                total_custos
+                + total_adendos_custo
+            )
+
+            lucro = (
+                faturamento_real
+                - total_real
+            )
 
             diferenca = (
                 custo_previsto
                 - total_real
             )
 
-
             cmv = (
-                (total_real / valor_venda) * 100
-                if valor_venda > 0
+                (total_real / faturamento_real) * 100
+                if faturamento_real > 0
                 else 0
             )
-
 
             resumo.append({
 
@@ -12142,13 +12268,19 @@ elif menu == "CMV":
                         ""
                     ),
 
-                "Venda":
+                "Venda Original":
                     valor_venda,
+
+                "Adendos":
+                    total_adendos_receita,
+
+                "Faturamento Real":
+                    faturamento_real,
 
                 "Previsto":
                     custo_previsto,
 
-                "Real":
+                "Custo Real":
                     total_real,
 
                 "Diferença":
@@ -12162,14 +12294,11 @@ elif menu == "CMV":
                         cmv,
                         2
                     )
-
             })
-
 
         df_resumo = pd.DataFrame(
             resumo
         )
-
 
         # =====================================================
         # SEM DADOS
@@ -12193,9 +12322,21 @@ elif menu == "CMV":
                 hide_index=True,
                 column_config={
 
-                    "Venda":
+                    "Venda Original":
                         st.column_config.NumberColumn(
-                            "💰 Venda",
+                            "💰 Venda Original",
+                            format="R$ %.2f"
+                        ),
+
+                    "Adendos":
+                        st.column_config.NumberColumn(
+                            "➕ Adendos",
+                            format="R$ %.2f"
+                        ),
+
+                    "Faturamento Real":
+                        st.column_config.NumberColumn(
+                            "💰 Faturamento Real",
                             format="R$ %.2f"
                         ),
 
@@ -12205,7 +12346,7 @@ elif menu == "CMV":
                             format="R$ %.2f"
                         ),
 
-                    "Real":
+                    "Custo Real":
                         st.column_config.NumberColumn(
                             "💸 Custo Real",
                             format="R$ %.2f"
@@ -12228,13 +12369,10 @@ elif menu == "CMV":
                             "📊 CMV",
                             format="%.2f%%"
                         )
-
                 }
             )
 
-
             st.divider()
-
 
             # =================================================
             # ALERTAS
@@ -12244,9 +12382,7 @@ elif menu == "CMV":
                 "### 🚨 Alertas de CMV"
             )
 
-
             alertas = False
-
 
             for _, r in df_resumo.iterrows():
 
@@ -12260,7 +12396,6 @@ elif menu == "CMV":
 
                     alertas = True
 
-
                 elif r["CMV (%)"] > 40:
 
                     st.warning(
@@ -12271,23 +12406,28 @@ elif menu == "CMV":
 
                     alertas = True
 
-
             if not alertas:
 
                 st.success(
                     "🟢 Nenhum evento apresentou CMV acima de 40%."
                 )
 
-
             st.divider()
-
 
             # =================================================
             # MÉTRICAS GERAIS
             # =================================================
 
-            total_venda = float(
-                df_resumo["Venda"].sum()
+            total_venda_original = float(
+                df_resumo["Venda Original"].sum()
+            )
+
+            total_adendos = float(
+                df_resumo["Adendos"].sum()
+            )
+
+            total_faturamento_real = float(
+                df_resumo["Faturamento Real"].sum()
             )
 
             total_previsto = float(
@@ -12295,7 +12435,7 @@ elif menu == "CMV":
             )
 
             total_custo = float(
-                df_resumo["Real"].sum()
+                df_resumo["Custo Real"].sum()
             )
 
             total_diferenca = float(
@@ -12306,69 +12446,711 @@ elif menu == "CMV":
                 df_resumo["Lucro"].sum()
             )
 
-
             cmv_medio = (
-                (total_custo / total_venda) * 100
-                if total_venda > 0
+                (total_custo / total_faturamento_real) * 100
+                if total_faturamento_real > 0
                 else 0
             )
-
 
             st.markdown(
                 "### 📊 Consolidado"
             )
 
-
             c1, c2, c3, c4, c5 = st.columns(5)
 
-
             c1.metric(
-                "💰 Total Faturado",
-                f"R$ {total_venda:,.2f}"
+                "💰 Venda Original",
+                f"R$ {total_venda_original:,.2f}"
             )
-
 
             c2.metric(
-                "📋 Custo Previsto",
-                f"R$ {total_previsto:,.2f}"
+                "➕ Adendos",
+                f"R$ {total_adendos:,.2f}"
             )
 
-
             c3.metric(
+                "💰 Faturamento Real",
+                f"R$ {total_faturamento_real:,.2f}"
+            )
+
+            c4.metric(
                 "💸 Custo Real",
                 f"R$ {total_custo:,.2f}"
             )
-
-
-            c4.metric(
-                "💰 Economia",
-                f"R$ {total_diferenca:,.2f}"
-            )
-
 
             c5.metric(
                 "📈 Lucro Real",
                 f"R$ {total_lucro:,.2f}"
             )
 
-
             st.metric(
                 "📊 CMV Médio",
                 f"{cmv_medio:.2f}%"
             )
-
 
             # =================================================
             # EXPLICAÇÃO
             # =================================================
 
             st.info(
-                "💡 **Como interpretar:** o Custo Previsto é o valor "
-                "calculado originalmente no orçamento. O Custo Real "
-                "é somente aquilo que você efetivamente lançou como "
-                "gasto após o evento. A diferença entre os dois "
-                "representa o valor que não foi gasto naquele evento."
+                "💡 **Como interpretar:** a Venda Original é o "
+                "valor contratado inicialmente. Os Adendos são "
+                "valores adicionais cobrados dos clientes. "
+                "O Faturamento Real é a soma dos dois. "
+                "O Custo Real considera os custos efetivamente "
+                "lançados no CMV e os custos de equipe dos adendos."
             )
+
+    # =========================================================
+    # ➕ TAB 3 - ADENDOS
+    # =========================================================
+
+    with tab3:
+
+        st.markdown(
+            "## ➕ Adendos dos Eventos"
+        )
+
+        st.caption(
+            "Registre aqui tudo que foi acrescentado ao evento "
+            "depois do orçamento original."
+        )
+
+        # =====================================================
+        # BUSCAR EVENTOS PARA O CADASTRO
+        # =====================================================
+
+        try:
+
+            df_eventos_adendos = pd.DataFrame(
+                supabase.table("eventos")
+                .select("*")
+                .in_(
+                    "status",
+                    status_eventos
+                )
+                .order("data")
+                .execute()
+                .data
+                or []
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Erro ao carregar eventos: {e}"
+            )
+
+            df_eventos_adendos = pd.DataFrame()
+
+        if df_eventos_adendos.empty:
+
+            st.info(
+                "Nenhum evento disponível para lançamento de adendos."
+            )
+
+        else:
+
+            # =================================================
+            # CADASTRO
+            # =================================================
+
+            st.markdown(
+                "### 📝 Novo adendo"
+            )
+
+            opcoes_eventos = {}
+
+            for _, evento in df_eventos_adendos.iterrows():
+
+                evento_id = evento["id"]
+
+                cliente_evento = evento.get(
+                    "cliente",
+                    "Cliente"
+                )
+
+                data_evento = evento.get(
+                    "data",
+                    ""
+                )
+
+                opcoes_eventos[
+                    f"{cliente_evento} | {data_evento} | ID {evento_id}"
+                ] = evento_id
+
+            evento_selecionado = st.selectbox(
+                "🎉 Evento",
+                list(opcoes_eventos.keys()),
+                key="cmv_adendo_evento"
+            )
+
+            evento_id_adendo = opcoes_eventos[
+                evento_selecionado
+            ]
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                tipo_adendo = st.selectbox(
+                    "Tipo de adendo",
+                    tipos_adendo,
+                    key="cmv_tipo_adendo"
+                )
+
+            with col2:
+
+                descricao_adendo = st.text_input(
+                    "Descrição",
+                    placeholder=(
+                        "Ex.: 2 horas extras com 1 bartender"
+                    ),
+                    key="cmv_descricao_adendo"
+                )
+
+            st.markdown(
+                "#### 💰 Valores"
+            )
+
+            col3, col4 = st.columns(2)
+
+            with col3:
+
+                valor_cliente_adendo = st.number_input(
+                    "💰 Valor cobrado do cliente",
+                    min_value=0.0,
+                    value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                    help=(
+                        "Valor que será acrescentado ao "
+                        "faturamento do evento."
+                    ),
+                    key="cmv_valor_cliente_adendo"
+                )
+
+            with col4:
+
+                valor_equipe_adendo = st.number_input(
+                    "👥 Custo de equipe / profissional",
+                    min_value=0.0,
+                    value=0.0,
+                    step=10.0,
+                    format="%.2f",
+                    help=(
+                        "Custo real adicional para executar "
+                        "este adendo. Ex.: profissional em hora extra."
+                    ),
+                    key="cmv_valor_equipe_adendo"
+                )
+
+            col5, col6 = st.columns(2)
+
+            with col5:
+
+                status_adendo_selecionado = st.selectbox(
+                    "Status",
+                    status_adendo,
+                    index=1,
+                    key="cmv_status_adendo"
+                )
+
+            with col6:
+
+                forma_pagamento_adendo = st.selectbox(
+                    "Forma de pagamento",
+                    formas_pagamento,
+                    key="cmv_forma_pagamento_adendo"
+                )
+
+            data_pagamento_adendo = st.date_input(
+                "📅 Data do pagamento",
+                value=None,
+                key="cmv_data_pagamento_adendo"
+            )
+
+            if st.button(
+                "💾 Registrar Adendo",
+                key="cmv_registrar_adendo",
+                use_container_width=True
+            ):
+
+                if (
+                    valor_cliente_adendo <= 0
+                    and valor_equipe_adendo <= 0
+                ):
+
+                    st.warning(
+                        "⚠️ Informe um valor cobrado do cliente "
+                        "ou um custo de equipe."
+                    )
+
+                elif not descricao_adendo.strip():
+
+                    st.warning(
+                        "⚠️ Informe uma descrição para o adendo."
+                    )
+
+                else:
+
+                    try:
+
+                        dados_adendo = {
+
+                            "evento_id": int(
+                                evento_id_adendo
+                            ),
+
+                            "evento": (
+                                evento_selecionado
+                                .split(" | ID ")[0]
+                                .rsplit(" | ", 1)[0]
+                            ),
+
+                            "tipo": (
+                                tipo_adendo
+                            ),
+
+                            "descrição": (
+                                descricao_adendo.strip()
+                            ),
+
+                            "valor_cliente": float(
+                                valor_cliente_adendo
+                            ),
+
+                            "valor_equipe": float(
+                                valor_equipe_adendo
+                            ),
+
+                            "status": (
+                                status_adendo_selecionado
+                            ),
+
+                            "forma_pagamento": (
+                                forma_pagamento_adendo
+                            )
+                        }
+
+                        if data_pagamento_adendo:
+
+                            dados_adendo[
+                                "data_pagamento"
+                            ] = (
+                                data_pagamento_adendo
+                                .isoformat()
+                            )
+
+                        supabase.table(
+                            "aditivos_evento"
+                        ).insert(
+                            dados_adendo
+                        ).execute()
+
+                        st.success(
+                            "✅ Adendo registrado com sucesso!"
+                        )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"❌ Erro ao registrar adendo: {e}"
+                        )
+
+            st.divider()
+
+            # =================================================
+            # LISTAGEM DOS ADENDOS
+            # =================================================
+
+            st.markdown(
+                "### 📋 Adendos registrados"
+            )
+
+            try:
+
+                df_adendos = pd.DataFrame(
+                    supabase.table("aditivos_evento")
+                    .select("*")
+                    .order("id", desc=True)
+                    .execute()
+                    .data
+                    or []
+                )
+
+            except Exception as e:
+
+                st.error(
+                    f"❌ Erro ao carregar adendos: {e}"
+                )
+
+                df_adendos = pd.DataFrame()
+
+            if df_adendos.empty:
+
+                st.info(
+                    "Nenhum adendo registrado."
+                )
+
+            else:
+
+                # -------------------------------------------------
+                # FILTRO
+                # -------------------------------------------------
+
+                eventos_filtro = [
+                    "Todos"
+                ]
+
+                if "evento" in df_adendos.columns:
+
+                    eventos_filtro += (
+                        df_adendos["evento"]
+                        .fillna("")
+                        .astype(str)
+                        .unique()
+                        .tolist()
+                    )
+
+                filtro_evento = st.selectbox(
+                    "🔎 Filtrar por evento",
+                    eventos_filtro,
+                    key="cmv_filtro_adendos"
+                )
+
+                if filtro_evento != "Todos":
+
+                    df_adendos = df_adendos[
+                        df_adendos["evento"]
+                        .fillna("")
+                        .astype(str)
+                        == filtro_evento
+                    ]
+
+                if df_adendos.empty:
+
+                    st.info(
+                        "Nenhum adendo encontrado para o filtro selecionado."
+                    )
+
+                else:
+
+                    # -------------------------------------------------
+                    # NORMALIZAÇÃO
+                    # -------------------------------------------------
+
+                    df_adendos["valor_cliente"] = pd.to_numeric(
+                        df_adendos["valor_cliente"],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    df_adendos["valor_equipe"] = pd.to_numeric(
+                        df_adendos["valor_equipe"],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    df_adendos["lucro_adicional"] = (
+                        df_adendos["valor_cliente"]
+                        - df_adendos["valor_equipe"]
+                    )
+
+                    # -------------------------------------------------
+                    # MÉTRICAS
+                    # -------------------------------------------------
+
+                    total_receita_adendos = float(
+                        df_adendos["valor_cliente"].sum()
+                    )
+
+                    total_custo_adendos = float(
+                        df_adendos["valor_equipe"].sum()
+                    )
+
+                    total_lucro_adendos = float(
+                        df_adendos["lucro_adicional"].sum()
+                    )
+
+                    c1, c2, c3 = st.columns(3)
+
+                    c1.metric(
+                        "💰 Receita dos Adendos",
+                        f"R$ {total_receita_adendos:,.2f}"
+                    )
+
+                    c2.metric(
+                        "👥 Custo de Equipe",
+                        f"R$ {total_custo_adendos:,.2f}"
+                    )
+
+                    c3.metric(
+                        "📈 Lucro dos Adendos",
+                        f"R$ {total_lucro_adendos:,.2f}"
+                    )
+
+                    st.divider()
+
+                    # -------------------------------------------------
+                    # EDIÇÃO
+                    # -------------------------------------------------
+
+                    st.markdown(
+                        "### ✏️ Alterar valores / informações"
+                    )
+
+                    colunas_edicao = [
+                        "id",
+                        "evento",
+                        "tipo",
+                        "descrição",
+                        "valor_cliente",
+                        "valor_equipe",
+                        "status",
+                        "forma_pagamento",
+                        "data_pagamento"
+                    ]
+
+                    colunas_edicao = [
+                        coluna
+                        for coluna in colunas_edicao
+                        if coluna in df_adendos.columns
+                    ]
+
+                    df_edicao = df_adendos[
+                        colunas_edicao
+                    ].copy()
+
+                    df_edicao = st.data_editor(
+                        df_edicao,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+
+                            "id":
+                                st.column_config.NumberColumn(
+                                    "ID",
+                                    disabled=True
+                                ),
+
+                            "evento":
+                                st.column_config.TextColumn(
+                                    "Evento",
+                                    disabled=True
+                                ),
+
+                            "tipo":
+                                st.column_config.SelectboxColumn(
+                                    "Tipo",
+                                    options=tipos_adendo
+                                ),
+
+                            "descrição":
+                                st.column_config.TextColumn(
+                                    "Descrição"
+                                ),
+
+                            "valor_cliente":
+                                st.column_config.NumberColumn(
+                                    "💰 Valor Cliente",
+                                    min_value=0,
+                                    step=10.0,
+                                    format="R$ %.2f"
+                                ),
+
+                            "valor_equipe":
+                                st.column_config.NumberColumn(
+                                    "👥 Valor Equipe",
+                                    min_value=0,
+                                    step=10.0,
+                                    format="R$ %.2f"
+                                ),
+
+                            "status":
+                                st.column_config.SelectboxColumn(
+                                    "Status",
+                                    options=status_adendo
+                                ),
+
+                            "forma_pagamento":
+                                st.column_config.SelectboxColumn(
+                                    "Forma Pagamento",
+                                    options=formas_pagamento
+                                ),
+
+                            "data_pagamento":
+                                st.column_config.DatetimeColumn(
+                                    "Data Pagamento"
+                                )
+                        }
+                    )
+
+                    if st.button(
+                        "💾 Salvar alterações dos adendos",
+                        key="cmv_salvar_adendos",
+                        use_container_width=True
+                    ):
+
+                        try:
+
+                            for _, adendo in df_edicao.iterrows():
+
+                                id_adendo = int(
+                                    adendo["id"]
+                                )
+
+                                valor_cliente = float(
+                                    pd.to_numeric(
+                                        adendo.get(
+                                            "valor_cliente",
+                                            0
+                                        ),
+                                        errors="coerce"
+                                    )
+                                    or 0
+                                )
+
+                                valor_equipe = float(
+                                    pd.to_numeric(
+                                        adendo.get(
+                                            "valor_equipe",
+                                            0
+                                        ),
+                                        errors="coerce"
+                                    )
+                                    or 0
+                                )
+
+                                dados_update = {
+
+                                    "tipo": str(
+                                        adendo.get(
+                                            "tipo",
+                                            ""
+                                        )
+                                    ).strip(),
+
+                                    "descrição": str(
+                                        adendo.get(
+                                            "descrição",
+                                            ""
+                                        )
+                                    ).strip(),
+
+                                    "valor_cliente":
+                                        valor_cliente,
+
+                                    "valor_equipe":
+                                        valor_equipe,
+
+                                    "status": str(
+                                        adendo.get(
+                                            "status",
+                                            ""
+                                        )
+                                    ).strip(),
+
+                                    "forma_pagamento": str(
+                                        adendo.get(
+                                            "forma_pagamento",
+                                            ""
+                                        )
+                                    ).strip()
+                                }
+
+                                data_pagamento = (
+                                    adendo.get(
+                                        "data_pagamento"
+                                    )
+                                )
+
+                                if pd.notna(
+                                    data_pagamento
+                                ):
+
+                                    dados_update[
+                                        "data_pagamento"
+                                    ] = (
+                                        pd.Timestamp(
+                                            data_pagamento
+                                        )
+                                        .isoformat()
+                                    )
+
+                                supabase.table(
+                                    "aditivos_evento"
+                                ).update(
+                                    dados_update
+                                ).eq(
+                                    "id",
+                                    id_adendo
+                                ).execute()
+
+                            st.success(
+                                "✅ Alterações dos adendos salvas!"
+                            )
+
+                            st.rerun()
+
+                        except Exception as e:
+
+                            st.error(
+                                f"❌ Erro ao salvar alterações: {e}"
+                            )
+
+                    # -------------------------------------------------
+                    # EXCLUSÃO
+                    # -------------------------------------------------
+
+                    st.divider()
+
+                    with st.expander(
+                        "🗑️ Excluir adendo"
+                    ):
+
+                        ids_adendos = (
+                            df_adendos["id"]
+                            .dropna()
+                            .tolist()
+                        )
+
+                        if ids_adendos:
+
+                            id_adendo_excluir = st.selectbox(
+                                "Selecione o adendo pelo ID",
+                                ids_adendos,
+                                key="cmv_excluir_adendo_id"
+                            )
+
+                            if st.button(
+                                "❌ Excluir adendo selecionado",
+                                key="cmv_excluir_adendo",
+                                type="secondary"
+                            ):
+
+                                try:
+
+                                    supabase.table(
+                                        "aditivos_evento"
+                                    ).delete().eq(
+                                        "id",
+                                        int(
+                                            id_adendo_excluir
+                                        )
+                                    ).execute()
+
+                                    st.success(
+                                        "✅ Adendo excluído."
+                                    )
+
+                                    st.rerun()
+
+                                except Exception as e:
+
+                                    st.error(
+                                        f"❌ Erro ao excluir adendo: {e}"
+                                    )
 
 elif menu == "Financeiro":
 
