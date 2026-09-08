@@ -12588,7 +12588,7 @@ elif menu == "CMV":
                 supabase
                 .table("aditivos_evento")
                 .select("*")
-                .order("criado_em", desc=True)
+                .order("id", desc=True)
                 .execute()
             )
 
