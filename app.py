@@ -12302,1253 +12302,1253 @@ elif menu == "CMV":
             )
 
     # ============================================================
-# TAB 3 — ADENDOS
-# ============================================================
-
-with tab3:
-
-    st.subheader("➕ Adendos dos Eventos")
-
-    st.caption(
-        "Registre valores adicionais cobrados do cliente, "
-        "como horas extras, vendas adicionais, quebras e "
-        "serviços extras, além dos custos adicionais da equipe."
-    )
-
-    # ========================================================
-    # CADASTRAR NOVO ADENDO
-    # ========================================================
-
-    with st.expander(
-        "➕ Cadastrar novo adendo",
-        expanded=False
-    ):
-
+    # TAB 3 — ADENDOS
+    # ============================================================
+    
+    with tab3:
+    
+        st.subheader("➕ Adendos dos Eventos")
+    
+        st.caption(
+            "Registre valores adicionais cobrados do cliente, "
+            "como horas extras, vendas adicionais, quebras e "
+            "serviços extras, além dos custos adicionais da equipe."
+        )
+    
+        # ========================================================
+        # CADASTRAR NOVO ADENDO
+        # ========================================================
+    
+        with st.expander(
+            "➕ Cadastrar novo adendo",
+            expanded=False
+        ):
+    
+            try:
+    
+                # ====================================================
+                # BUSCAR EVENTOS
+                # ====================================================
+    
+                resposta_eventos_adendo = (
+                    supabase
+                    .table("eventos")
+                    .select("id, cliente, data")
+                    .in_("status", status_eventos)
+                    .order("data", desc=True)
+                    .execute()
+                )
+    
+                df_eventos_adendo = pd.DataFrame(
+                    resposta_eventos_adendo.data
+                    if resposta_eventos_adendo.data
+                    else []
+                )
+    
+    
+                if df_eventos_adendo.empty:
+    
+                    st.info(
+                        "Nenhum evento disponível para cadastrar adendo."
+                    )
+    
+                else:
+    
+                    # =================================================
+                    # MONTAR LISTA DE EVENTOS
+                    # =================================================
+    
+                    opcoes_eventos = {}
+    
+                    for _, ev in df_eventos_adendo.iterrows():
+    
+                        ev_id = int(
+                            ev.get("id")
+                        )
+    
+                        ev_cliente = str(
+                            ev.get(
+                                "cliente",
+                                "Evento sem cliente"
+                            )
+                        )
+    
+                        ev_data = ev.get("data")
+    
+    
+                        # ---------------------------------------------
+                        # FORMATAR DATA
+                        # ---------------------------------------------
+    
+                        if pd.notna(ev_data):
+    
+                            try:
+    
+                                ev_data_formatada = (
+                                    pd.to_datetime(
+                                        ev_data
+                                    ).strftime(
+                                        "%d/%m/%Y"
+                                    )
+                                )
+    
+                            except Exception:
+    
+                                ev_data_formatada = str(
+                                    ev_data
+                                )
+    
+                        else:
+    
+                            ev_data_formatada = "-"
+    
+    
+                        texto_evento = (
+                            f"{ev_cliente} | "
+                            f"{ev_data_formatada} | "
+                            f"ID {ev_id}"
+                        )
+    
+    
+                        opcoes_eventos[
+                            texto_evento
+                        ] = {
+    
+                            "id": ev_id,
+    
+                            "cliente": ev_cliente
+    
+                        }
+    
+    
+                    # =================================================
+                    # FORMULÁRIO
+                    # =================================================
+    
+                    with st.form(
+                        "form_cadastro_adendo",
+                        clear_on_submit=True
+                    ):
+    
+                        # ---------------------------------------------
+                        # EVENTO
+                        # ---------------------------------------------
+    
+                        evento_selecionado = st.selectbox(
+                            "Evento",
+                            list(
+                                opcoes_eventos.keys()
+                            )
+                        )
+    
+    
+                        # ---------------------------------------------
+                        # TIPO / STATUS
+                        # ---------------------------------------------
+    
+                        col1, col2 = st.columns(2)
+    
+    
+                        with col1:
+    
+                            tipo_adendo = st.selectbox(
+                                "Tipo de Adendo",
+                                [
+                                    "Hora Extra",
+                                    "Venda de Garrafa",
+                                    "Quebra de Copo/Taça",
+                                    "Serviço Adicional",
+                                    "Custo Adicional",
+                                    "Outros"
+                                ]
+                            )
+    
+    
+                        with col2:
+    
+                            status_adendo = st.selectbox(
+                                "Status",
+                                [
+                                    "Pendente",
+                                    "Pago",
+                                    "Cancelado"
+                                ]
+                            )
+    
+    
+                        # ---------------------------------------------
+                        # DESCRIÇÃO
+                        # ---------------------------------------------
+    
+                        descricao_adendo = st.text_input(
+                            "Descrição",
+                            placeholder=(
+                                "Ex.: 2 horas extras "
+                                "de atendimento"
+                            )
+                        )
+    
+    
+                        # ---------------------------------------------
+                        # VALORES
+                        # ---------------------------------------------
+    
+                        col3, col4 = st.columns(2)
+    
+    
+                        with col3:
+    
+                            valor_cliente_adendo = (
+                                st.number_input(
+                                    "💰 Valor cobrado do cliente",
+                                    min_value=0.0,
+                                    step=0.01,
+                                    format="%.2f"
+                                )
+                            )
+    
+    
+                        with col4:
+    
+                            valor_equipe_adendo = (
+                                st.number_input(
+                                    "👷 Custo adicional da equipe",
+                                    min_value=0.0,
+                                    step=0.01,
+                                    format="%.2f"
+                                )
+                            )
+    
+    
+                        # ---------------------------------------------
+                        # PAGAMENTO
+                        # ---------------------------------------------
+    
+                        col5, col6 = st.columns(2)
+    
+    
+                        with col5:
+    
+                            forma_pagamento = (
+                                st.selectbox(
+                                    "Forma de Pagamento",
+                                    [
+                                        "Pix",
+                                        "Dinheiro",
+                                        "Cartão",
+                                        "Transferência",
+                                        "Outro"
+                                    ]
+                                )
+                            )
+    
+    
+                        with col6:
+    
+                            data_pagamento = (
+                                st.date_input(
+                                    "📅 Data do Pagamento",
+                                    value=None
+                                )
+                            )
+    
+    
+                        # ---------------------------------------------
+                        # BOTÃO
+                        # ---------------------------------------------
+    
+                        salvar_adendo = (
+                            st.form_submit_button(
+                                "💾 Salvar Adendo",
+                                use_container_width=True
+                            )
+                        )
+    
+    
+                    # =================================================
+                    # PROCESSAR CADASTRO
+                    # =================================================
+    
+                    if salvar_adendo:
+    
+                        # ---------------------------------------------
+                        # VALIDAÇÃO
+                        # ---------------------------------------------
+    
+                        if (
+                            valor_cliente_adendo <= 0
+                            and
+                            valor_equipe_adendo <= 0
+                        ):
+    
+                            st.warning(
+                                "⚠️ Informe pelo menos um valor: "
+                                "valor cobrado do cliente ou "
+                                "custo da equipe."
+                            )
+    
+    
+                        elif not descricao_adendo.strip():
+    
+                            st.warning(
+                                "⚠️ Informe uma descrição "
+                                "para o adendo."
+                            )
+    
+    
+                        else:
+    
+                            try:
+    
+                                # =====================================
+                                # EVENTO SELECIONADO
+                                # =====================================
+    
+                                dados_evento_selecionado = (
+                                    opcoes_eventos[
+                                        evento_selecionado
+                                    ]
+                                )
+    
+    
+                                # =====================================
+                                # DATA PAGAMENTO
+                                # =====================================
+    
+                                data_pagamento_db = None
+    
+    
+                                if data_pagamento is not None:
+    
+                                    data_pagamento_db = (
+                                        data_pagamento.isoformat()
+                                    )
+    
+    
+                                # =====================================
+                                # DADOS PARA INSERÇÃO
+                                # =====================================
+    
+                                dados_adendo = {
+    
+                                    "evento_id":
+                                        int(
+                                            dados_evento_selecionado[
+                                                "id"
+                                            ]
+                                        ),
+    
+                                    "evento":
+                                        str(
+                                            dados_evento_selecionado[
+                                                "cliente"
+                                            ]
+                                        ),
+    
+                                    "tipo":
+                                        str(
+                                            tipo_adendo
+                                        ),
+    
+                                    "descrição":
+                                        descricao_adendo
+                                        .strip(),
+    
+                                    "valor_cliente":
+                                        float(
+                                            valor_cliente_adendo
+                                        ),
+    
+                                    "valor_equipe":
+                                        float(
+                                            valor_equipe_adendo
+                                        ),
+    
+                                    "status":
+                                        str(
+                                            status_adendo
+                                        ),
+    
+                                    "forma_pagamento":
+                                        str(
+                                            forma_pagamento
+                                        ),
+    
+                                    "data_pagamento":
+                                        data_pagamento_db
+    
+                                }
+    
+    
+                                # =====================================
+                                # INSERT
+                                # =====================================
+    
+                                resposta_insert = (
+                                    supabase
+                                    .table(
+                                        "aditivos_evento"
+                                    )
+                                    .insert(
+                                        dados_adendo
+                                    )
+                                    .execute()
+                                )
+    
+    
+                                # =====================================
+                                # CONFIRMAÇÃO
+                                # =====================================
+    
+                                st.success(
+                                    "✅ Adendo cadastrado com sucesso!"
+                                )
+    
+                                st.rerun()
+    
+    
+                            except Exception as erro_insert:
+    
+                                st.error(
+                                    "❌ Erro ao salvar o adendo: "
+                                    f"{erro_insert}"
+                                )
+    
+    
+            except Exception as e:
+    
+                st.error(
+                    f"❌ Erro ao carregar eventos para adendo: {e}"
+                )
+    
+    
+        # ========================================================
+        # FILTRO E LISTA DOS ADENDOS
+        # ========================================================
+    
+        st.markdown("---")
+    
+    
         try:
-
+    
             # ====================================================
-            # BUSCAR EVENTOS
+            # CARREGAR ADENDOS
             # ====================================================
-
-            resposta_eventos_adendo = (
+    
+            resposta_adendos = (
                 supabase
-                .table("eventos")
-                .select("id, cliente, data")
-                .in_("status", status_eventos)
-                .order("data", desc=True)
+                .table("aditivos_evento")
+                .select("*")
+                .order("id", desc=True)
                 .execute()
             )
-
-            df_eventos_adendo = pd.DataFrame(
-                resposta_eventos_adendo.data
-                if resposta_eventos_adendo.data
+    
+    
+            df_adendos_edicao = pd.DataFrame(
+                resposta_adendos.data
+                if resposta_adendos.data
                 else []
             )
-
-
-            if df_eventos_adendo.empty:
-
+    
+    
+            # ====================================================
+            # SEM ADENDOS
+            # ====================================================
+    
+            if df_adendos_edicao.empty:
+    
                 st.info(
-                    "Nenhum evento disponível para cadastrar adendo."
+                    "Nenhum adendo cadastrado."
                 )
-
+    
+    
             else:
-
+    
                 # =================================================
-                # MONTAR LISTA DE EVENTOS
+                # FILTRO POR EVENTO
                 # =================================================
-
-                opcoes_eventos = {}
-
-                for _, ev in df_eventos_adendo.iterrows():
-
-                    ev_id = int(
-                        ev.get("id")
-                    )
-
-                    ev_cliente = str(
-                        ev.get(
-                            "cliente",
-                            "Evento sem cliente"
-                        )
-                    )
-
-                    ev_data = ev.get("data")
-
-
-                    # ---------------------------------------------
-                    # FORMATAR DATA
-                    # ---------------------------------------------
-
-                    if pd.notna(ev_data):
-
-                        try:
-
-                            ev_data_formatada = (
-                                pd.to_datetime(
-                                    ev_data
-                                ).strftime(
-                                    "%d/%m/%Y"
-                                )
-                            )
-
-                        except Exception:
-
-                            ev_data_formatada = str(
-                                ev_data
-                            )
-
-                    else:
-
-                        ev_data_formatada = "-"
-
-
-                    texto_evento = (
-                        f"{ev_cliente} | "
-                        f"{ev_data_formatada} | "
-                        f"ID {ev_id}"
-                    )
-
-
-                    opcoes_eventos[
-                        texto_evento
-                    ] = {
-
-                        "id": ev_id,
-
-                        "cliente": ev_cliente
-
-                    }
-
-
-                # =================================================
-                # FORMULÁRIO
-                # =================================================
-
-                with st.form(
-                    "form_cadastro_adendo",
-                    clear_on_submit=True
+    
+                eventos_filtro = [
+                    "Todos"
+                ]
+    
+    
+                if (
+                    "evento"
+                    in df_adendos_edicao.columns
                 ):
-
-                    # ---------------------------------------------
-                    # EVENTO
-                    # ---------------------------------------------
-
-                    evento_selecionado = st.selectbox(
-                        "Evento",
-                        list(
-                            opcoes_eventos.keys()
-                        )
-                    )
-
-
-                    # ---------------------------------------------
-                    # TIPO / STATUS
-                    # ---------------------------------------------
-
-                    col1, col2 = st.columns(2)
-
-
-                    with col1:
-
-                        tipo_adendo = st.selectbox(
-                            "Tipo de Adendo",
-                            [
-                                "Hora Extra",
-                                "Venda de Garrafa",
-                                "Quebra de Copo/Taça",
-                                "Serviço Adicional",
-                                "Custo Adicional",
-                                "Outros"
-                            ]
-                        )
-
-
-                    with col2:
-
-                        status_adendo = st.selectbox(
-                            "Status",
-                            [
-                                "Pendente",
-                                "Pago",
-                                "Cancelado"
-                            ]
-                        )
-
-
-                    # ---------------------------------------------
-                    # DESCRIÇÃO
-                    # ---------------------------------------------
-
-                    descricao_adendo = st.text_input(
-                        "Descrição",
-                        placeholder=(
-                            "Ex.: 2 horas extras "
-                            "de atendimento"
-                        )
-                    )
-
-
-                    # ---------------------------------------------
-                    # VALORES
-                    # ---------------------------------------------
-
-                    col3, col4 = st.columns(2)
-
-
-                    with col3:
-
-                        valor_cliente_adendo = (
-                            st.number_input(
-                                "💰 Valor cobrado do cliente",
-                                min_value=0.0,
-                                step=0.01,
-                                format="%.2f"
-                            )
-                        )
-
-
-                    with col4:
-
-                        valor_equipe_adendo = (
-                            st.number_input(
-                                "👷 Custo adicional da equipe",
-                                min_value=0.0,
-                                step=0.01,
-                                format="%.2f"
-                            )
-                        )
-
-
-                    # ---------------------------------------------
-                    # PAGAMENTO
-                    # ---------------------------------------------
-
-                    col5, col6 = st.columns(2)
-
-
-                    with col5:
-
-                        forma_pagamento = (
-                            st.selectbox(
-                                "Forma de Pagamento",
-                                [
-                                    "Pix",
-                                    "Dinheiro",
-                                    "Cartão",
-                                    "Transferência",
-                                    "Outro"
-                                ]
-                            )
-                        )
-
-
-                    with col6:
-
-                        data_pagamento = (
-                            st.date_input(
-                                "📅 Data do Pagamento",
-                                value=None
-                            )
-                        )
-
-
-                    # ---------------------------------------------
-                    # BOTÃO
-                    # ---------------------------------------------
-
-                    salvar_adendo = (
-                        st.form_submit_button(
-                            "💾 Salvar Adendo",
-                            use_container_width=True
-                        )
-                    )
-
-
-                # =================================================
-                # PROCESSAR CADASTRO
-                # =================================================
-
-                if salvar_adendo:
-
-                    # ---------------------------------------------
-                    # VALIDAÇÃO
-                    # ---------------------------------------------
-
-                    if (
-                        valor_cliente_adendo <= 0
-                        and
-                        valor_equipe_adendo <= 0
-                    ):
-
-                        st.warning(
-                            "⚠️ Informe pelo menos um valor: "
-                            "valor cobrado do cliente ou "
-                            "custo da equipe."
-                        )
-
-
-                    elif not descricao_adendo.strip():
-
-                        st.warning(
-                            "⚠️ Informe uma descrição "
-                            "para o adendo."
-                        )
-
-
-                    else:
-
-                        try:
-
-                            # =====================================
-                            # EVENTO SELECIONADO
-                            # =====================================
-
-                            dados_evento_selecionado = (
-                                opcoes_eventos[
-                                    evento_selecionado
-                                ]
-                            )
-
-
-                            # =====================================
-                            # DATA PAGAMENTO
-                            # =====================================
-
-                            data_pagamento_db = None
-
-
-                            if data_pagamento is not None:
-
-                                data_pagamento_db = (
-                                    data_pagamento.isoformat()
-                                )
-
-
-                            # =====================================
-                            # DADOS PARA INSERÇÃO
-                            # =====================================
-
-                            dados_adendo = {
-
-                                "evento_id":
-                                    int(
-                                        dados_evento_selecionado[
-                                            "id"
-                                        ]
-                                    ),
-
-                                "evento":
-                                    str(
-                                        dados_evento_selecionado[
-                                            "cliente"
-                                        ]
-                                    ),
-
-                                "tipo":
-                                    str(
-                                        tipo_adendo
-                                    ),
-
-                                "descrição":
-                                    descricao_adendo
-                                    .strip(),
-
-                                "valor_cliente":
-                                    float(
-                                        valor_cliente_adendo
-                                    ),
-
-                                "valor_equipe":
-                                    float(
-                                        valor_equipe_adendo
-                                    ),
-
-                                "status":
-                                    str(
-                                        status_adendo
-                                    ),
-
-                                "forma_pagamento":
-                                    str(
-                                        forma_pagamento
-                                    ),
-
-                                "data_pagamento":
-                                    data_pagamento_db
-
-                            }
-
-
-                            # =====================================
-                            # INSERT
-                            # =====================================
-
-                            resposta_insert = (
-                                supabase
-                                .table(
-                                    "aditivos_evento"
-                                )
-                                .insert(
-                                    dados_adendo
-                                )
-                                .execute()
-                            )
-
-
-                            # =====================================
-                            # CONFIRMAÇÃO
-                            # =====================================
-
-                            st.success(
-                                "✅ Adendo cadastrado com sucesso!"
-                            )
-
-                            st.rerun()
-
-
-                        except Exception as erro_insert:
-
-                            st.error(
-                                "❌ Erro ao salvar o adendo: "
-                                f"{erro_insert}"
-                            )
-
-
-        except Exception as e:
-
-            st.error(
-                f"❌ Erro ao carregar eventos para adendo: {e}"
-            )
-
-
-    # ========================================================
-    # FILTRO E LISTA DOS ADENDOS
-    # ========================================================
-
-    st.markdown("---")
-
-
-    try:
-
-        # ====================================================
-        # CARREGAR ADENDOS
-        # ====================================================
-
-        resposta_adendos = (
-            supabase
-            .table("aditivos_evento")
-            .select("*")
-            .order("id", desc=True)
-            .execute()
-        )
-
-
-        df_adendos_edicao = pd.DataFrame(
-            resposta_adendos.data
-            if resposta_adendos.data
-            else []
-        )
-
-
-        # ====================================================
-        # SEM ADENDOS
-        # ====================================================
-
-        if df_adendos_edicao.empty:
-
-            st.info(
-                "Nenhum adendo cadastrado."
-            )
-
-
-        else:
-
-            # =================================================
-            # FILTRO POR EVENTO
-            # =================================================
-
-            eventos_filtro = [
-                "Todos"
-            ]
-
-
-            if (
-                "evento"
-                in df_adendos_edicao.columns
-            ):
-
-                valores_eventos = (
-                    df_adendos_edicao[
-                        "evento"
-                    ]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                    .tolist()
-                )
-
-
-                eventos_filtro.extend(
-                    sorted(
-                        valores_eventos
-                    )
-                )
-
-
-            filtro_evento = st.selectbox(
-                "🔎 Filtrar por evento",
-                eventos_filtro,
-                key="cmv_filtro_adendo"
-            )
-
-
-            # =================================================
-            # APLICAR FILTRO
-            # =================================================
-
-            if (
-                filtro_evento != "Todos"
-                and
-                "evento"
-                in df_adendos_edicao.columns
-            ):
-
-                df_edicao = (
-                    df_adendos_edicao[
+    
+                    valores_eventos = (
                         df_adendos_edicao[
                             "evento"
                         ]
+                        .dropna()
                         .astype(str)
-                        ==
-                        filtro_evento
+                        .unique()
+                        .tolist()
+                    )
+    
+    
+                    eventos_filtro.extend(
+                        sorted(
+                            valores_eventos
+                        )
+                    )
+    
+    
+                filtro_evento = st.selectbox(
+                    "🔎 Filtrar por evento",
+                    eventos_filtro,
+                    key="cmv_filtro_adendo"
+                )
+    
+    
+                # =================================================
+                # APLICAR FILTRO
+                # =================================================
+    
+                if (
+                    filtro_evento != "Todos"
+                    and
+                    "evento"
+                    in df_adendos_edicao.columns
+                ):
+    
+                    df_edicao = (
+                        df_adendos_edicao[
+                            df_adendos_edicao[
+                                "evento"
+                            ]
+                            .astype(str)
+                            ==
+                            filtro_evento
+                        ]
+                        .copy()
+                    )
+    
+                else:
+    
+                    df_edicao = (
+                        df_adendos_edicao.copy()
+                    )
+    
+    
+                # =================================================
+                # NORMALIZAR DATA
+                # =================================================
+    
+                if (
+                    "data_pagamento"
+                    in df_edicao.columns
+                ):
+    
+                    df_edicao[
+                        "data_pagamento"
+                    ] = pd.to_datetime(
+    
+                        df_edicao[
+                            "data_pagamento"
+                        ],
+    
+                        errors="coerce",
+    
+                        utc=True
+    
+                    )
+    
+    
+                    df_edicao[
+                        "data_pagamento"
+                    ] = (
+    
+                        df_edicao[
+                            "data_pagamento"
+                        ]
+                        .dt
+                        .tz_localize(None)
+    
+                    )
+    
+    
+                # =================================================
+                # NORMALIZAR VALORES
+                # =================================================
+    
+                for coluna in [
+    
+                    "valor_cliente",
+    
+                    "valor_equipe"
+    
+                ]:
+    
+                    if (
+                        coluna
+                        in df_edicao.columns
+                    ):
+    
+                        df_edicao[
+                            coluna
+                        ] = pd.to_numeric(
+    
+                            df_edicao[
+                                coluna
+                            ],
+    
+                            errors="coerce"
+    
+                        ).fillna(0.0)
+    
+    
+                # =================================================
+                # NORMALIZAR TEXTOS
+                # =================================================
+    
+                for coluna in [
+    
+                    "tipo",
+    
+                    "descrição",
+    
+                    "status",
+    
+                    "forma_pagamento"
+    
+                ]:
+    
+                    if (
+                        coluna
+                        in df_edicao.columns
+                    ):
+    
+                        df_edicao[
+                            coluna
+                        ] = (
+    
+                            df_edicao[
+                                coluna
+                            ]
+                            .fillna("")
+                            .astype(str)
+    
+                        )
+    
+    
+                # =================================================
+                # COLUNAS
+                # =================================================
+    
+                colunas_editor = [
+    
+                    "id",
+    
+                    "evento",
+    
+                    "tipo",
+    
+                    "descrição",
+    
+                    "valor_cliente",
+    
+                    "valor_equipe",
+    
+                    "status",
+    
+                    "forma_pagamento",
+    
+                    "data_pagamento"
+    
+                ]
+    
+    
+                colunas_editor = [
+    
+                    coluna
+    
+                    for coluna
+                    in colunas_editor
+    
+                    if coluna
+                    in df_edicao.columns
+    
+                ]
+    
+    
+                df_edicao = (
+    
+                    df_edicao[
+                        colunas_editor
                     ]
                     .copy()
+    
                 )
-
-            else:
-
-                df_edicao = (
-                    df_adendos_edicao.copy()
+    
+    
+                # =================================================
+                # CONFIGURAÇÃO EDITOR
+                # =================================================
+    
+                config_editor = {
+    
+    
+                    "id":
+    
+                        st.column_config.NumberColumn(
+                            "ID",
+                            disabled=True
+                        ),
+    
+    
+                    "evento":
+    
+                        st.column_config.TextColumn(
+                            "Evento",
+                            disabled=True
+                        ),
+    
+    
+                    "tipo":
+    
+                        st.column_config.TextColumn(
+                            "Tipo"
+                        ),
+    
+    
+                    "descrição":
+    
+                        st.column_config.TextColumn(
+                            "Descrição"
+                        ),
+    
+    
+                    "valor_cliente":
+    
+                        st.column_config.NumberColumn(
+                            "💰 Cliente",
+                            min_value=0.0,
+                            step=0.01,
+                            format="R$ %.2f"
+                        ),
+    
+    
+                    "valor_equipe":
+    
+                        st.column_config.NumberColumn(
+                            "👷 Equipe",
+                            min_value=0.0,
+                            step=0.01,
+                            format="R$ %.2f"
+                        ),
+    
+    
+                    "status":
+    
+                        st.column_config.TextColumn(
+                            "Status"
+                        ),
+    
+    
+                    "forma_pagamento":
+    
+                        st.column_config.TextColumn(
+                            "Pagamento"
+                        ),
+    
+    
+                    "data_pagamento":
+    
+                        st.column_config.DatetimeColumn(
+                            "📅 Data Pagamento",
+                            format="DD/MM/YYYY HH:mm"
+                        )
+    
+                }
+    
+    
+                # =================================================
+                # EDITOR
+                # =================================================
+    
+                df_editado = st.data_editor(
+    
+                    df_edicao,
+    
+                    use_container_width=True,
+    
+                    hide_index=True,
+    
+                    num_rows="fixed",
+    
+                    column_config=config_editor,
+    
+                    key="editor_adendos_cmv"
+    
                 )
-
-
-            # =================================================
-            # NORMALIZAR DATA
-            # =================================================
-
-            if (
-                "data_pagamento"
-                in df_edicao.columns
-            ):
-
-                df_edicao[
-                    "data_pagamento"
-                ] = pd.to_datetime(
-
-                    df_edicao[
-                        "data_pagamento"
-                    ],
-
-                    errors="coerce",
-
-                    utc=True
-
-                )
-
-
-                df_edicao[
-                    "data_pagamento"
-                ] = (
-
-                    df_edicao[
-                        "data_pagamento"
-                    ]
-                    .dt
-                    .tz_localize(None)
-
-                )
-
-
-            # =================================================
-            # NORMALIZAR VALORES
-            # =================================================
-
-            for coluna in [
-
-                "valor_cliente",
-
-                "valor_equipe"
-
-            ]:
-
-                if (
-                    coluna
-                    in df_edicao.columns
-                ):
-
-                    df_edicao[
-                        coluna
-                    ] = pd.to_numeric(
-
-                        df_edicao[
-                            coluna
-                        ],
-
-                        errors="coerce"
-
-                    ).fillna(0.0)
-
-
-            # =================================================
-            # NORMALIZAR TEXTOS
-            # =================================================
-
-            for coluna in [
-
-                "tipo",
-
-                "descrição",
-
-                "status",
-
-                "forma_pagamento"
-
-            ]:
-
-                if (
-                    coluna
-                    in df_edicao.columns
-                ):
-
-                    df_edicao[
-                        coluna
-                    ] = (
-
-                        df_edicao[
-                            coluna
-                        ]
-                        .fillna("")
-                        .astype(str)
-
-                    )
-
-
-            # =================================================
-            # COLUNAS
-            # =================================================
-
-            colunas_editor = [
-
-                "id",
-
-                "evento",
-
-                "tipo",
-
-                "descrição",
-
-                "valor_cliente",
-
-                "valor_equipe",
-
-                "status",
-
-                "forma_pagamento",
-
-                "data_pagamento"
-
-            ]
-
-
-            colunas_editor = [
-
-                coluna
-
-                for coluna
-                in colunas_editor
-
-                if coluna
-                in df_edicao.columns
-
-            ]
-
-
-            df_edicao = (
-
-                df_edicao[
-                    colunas_editor
-                ]
-                .copy()
-
-            )
-
-
-            # =================================================
-            # CONFIGURAÇÃO EDITOR
-            # =================================================
-
-            config_editor = {
-
-
-                "id":
-
-                    st.column_config.NumberColumn(
-                        "ID",
-                        disabled=True
-                    ),
-
-
-                "evento":
-
-                    st.column_config.TextColumn(
-                        "Evento",
-                        disabled=True
-                    ),
-
-
-                "tipo":
-
-                    st.column_config.TextColumn(
-                        "Tipo"
-                    ),
-
-
-                "descrição":
-
-                    st.column_config.TextColumn(
-                        "Descrição"
-                    ),
-
-
-                "valor_cliente":
-
-                    st.column_config.NumberColumn(
-                        "💰 Cliente",
-                        min_value=0.0,
-                        step=0.01,
-                        format="R$ %.2f"
-                    ),
-
-
-                "valor_equipe":
-
-                    st.column_config.NumberColumn(
-                        "👷 Equipe",
-                        min_value=0.0,
-                        step=0.01,
-                        format="R$ %.2f"
-                    ),
-
-
-                "status":
-
-                    st.column_config.TextColumn(
-                        "Status"
-                    ),
-
-
-                "forma_pagamento":
-
-                    st.column_config.TextColumn(
-                        "Pagamento"
-                    ),
-
-
-                "data_pagamento":
-
-                    st.column_config.DatetimeColumn(
-                        "📅 Data Pagamento",
-                        format="DD/MM/YYYY HH:mm"
-                    )
-
-            }
-
-
-            # =================================================
-            # EDITOR
-            # =================================================
-
-            df_editado = st.data_editor(
-
-                df_edicao,
-
-                use_container_width=True,
-
-                hide_index=True,
-
-                num_rows="fixed",
-
-                column_config=config_editor,
-
-                key="editor_adendos_cmv"
-
-            )
-
-
-            # =================================================
-            # BOTÕES
-            # =================================================
-
-            col_salvar, col_excluir = st.columns(2)
-
-
-            # =================================================
-            # SALVAR ALTERAÇÕES
-            # =================================================
-
-            with col_salvar:
-
-                if st.button(
-                    "💾 Salvar alterações",
-                    key="cmv_salvar_edicao"
-                ):
-
-                    try:
-
-                        for _, linha in (
-                            df_editado.iterrows()
-                        ):
-
-                            adendo_id = (
-                                linha.get("id")
-                            )
-
-
-                            if pd.isna(
-                                adendo_id
+    
+    
+                # =================================================
+                # BOTÕES
+                # =================================================
+    
+                col_salvar, col_excluir = st.columns(2)
+    
+    
+                # =================================================
+                # SALVAR ALTERAÇÕES
+                # =================================================
+    
+                with col_salvar:
+    
+                    if st.button(
+                        "💾 Salvar alterações",
+                        key="cmv_salvar_edicao"
+                    ):
+    
+                        try:
+    
+                            for _, linha in (
+                                df_editado.iterrows()
                             ):
-
-                                continue
-
-
-                            dados_update = {}
-
-
-                            # =====================================
-                            # TIPO
-                            # =====================================
-
-                            if (
-                                "tipo"
-                                in linha.index
-                            ):
-
-                                dados_update[
+    
+                                adendo_id = (
+                                    linha.get("id")
+                                )
+    
+    
+                                if pd.isna(
+                                    adendo_id
+                                ):
+    
+                                    continue
+    
+    
+                                dados_update = {}
+    
+    
+                                # =====================================
+                                # TIPO
+                                # =====================================
+    
+                                if (
                                     "tipo"
-                                ] = str(
-                                    linha[
-                                        "tipo"
-                                    ]
-                                ).strip()
-
-
-                            # =====================================
-                            # DESCRIÇÃO
-                            # =====================================
-
-                            if (
-                                "descrição"
-                                in linha.index
-                            ):
-
-                                dados_update[
-                                    "descrição"
-                                ] = str(
-                                    linha[
-                                        "descrição"
-                                    ]
-                                ).strip()
-
-
-                            # =====================================
-                            # VALOR CLIENTE
-                            # =====================================
-
-                            if (
-                                "valor_cliente"
-                                in linha.index
-                            ):
-
-                                valor_cliente = (
-                                    pd.to_numeric(
-
-                                        linha[
-                                            "valor_cliente"
-                                        ],
-
-                                        errors="coerce"
-
-                                    )
-                                )
-
-
-                                if pd.isna(
-                                    valor_cliente
+                                    in linha.index
                                 ):
-
-                                    valor_cliente = 0.0
-
-
-                                dados_update[
-                                    "valor_cliente"
-                                ] = float(
-                                    valor_cliente
-                                )
-
-
-                            # =====================================
-                            # VALOR EQUIPE
-                            # =====================================
-
-                            if (
-                                "valor_equipe"
-                                in linha.index
-                            ):
-
-                                valor_equipe = (
-                                    pd.to_numeric(
-
-                                        linha[
-                                            "valor_equipe"
-                                        ],
-
-                                        errors="coerce"
-
-                                    )
-                                )
-
-
-                                if pd.isna(
-                                    valor_equipe
-                                ):
-
-                                    valor_equipe = 0.0
-
-
-                                dados_update[
-                                    "valor_equipe"
-                                ] = float(
-                                    valor_equipe
-                                )
-
-
-                            # =====================================
-                            # STATUS
-                            # =====================================
-
-                            if (
-                                "status"
-                                in linha.index
-                            ):
-
-                                dados_update[
-                                    "status"
-                                ] = str(
-                                    linha[
-                                        "status"
-                                    ]
-                                ).strip()
-
-
-                            # =====================================
-                            # FORMA DE PAGAMENTO
-                            # =====================================
-
-                            if (
-                                "forma_pagamento"
-                                in linha.index
-                            ):
-
-                                dados_update[
-                                    "forma_pagamento"
-                                ] = str(
-                                    linha[
-                                        "forma_pagamento"
-                                    ]
-                                ).strip()
-
-
-                            # =====================================
-                            # DATA PAGAMENTO
-                            # =====================================
-
-                            if (
-                                "data_pagamento"
-                                in linha.index
-                            ):
-
-                                data_valor = (
-                                    linha[
-                                        "data_pagamento"
-                                    ]
-                                )
-
-
-                                if pd.isna(
-                                    data_valor
-                                ):
-
+    
                                     dados_update[
-                                        "data_pagamento"
-                                    ] = None
-
-
-                                else:
-
-                                    data_timestamp = (
-                                        pd.to_datetime(
-
-                                            data_valor,
-
+                                        "tipo"
+                                    ] = str(
+                                        linha[
+                                            "tipo"
+                                        ]
+                                    ).strip()
+    
+    
+                                # =====================================
+                                # DESCRIÇÃO
+                                # =====================================
+    
+                                if (
+                                    "descrição"
+                                    in linha.index
+                                ):
+    
+                                    dados_update[
+                                        "descrição"
+                                    ] = str(
+                                        linha[
+                                            "descrição"
+                                        ]
+                                    ).strip()
+    
+    
+                                # =====================================
+                                # VALOR CLIENTE
+                                # =====================================
+    
+                                if (
+                                    "valor_cliente"
+                                    in linha.index
+                                ):
+    
+                                    valor_cliente = (
+                                        pd.to_numeric(
+    
+                                            linha[
+                                                "valor_cliente"
+                                            ],
+    
                                             errors="coerce"
-
+    
                                         )
                                     )
-
-
+    
+    
                                     if pd.isna(
-                                        data_timestamp
+                                        valor_cliente
                                     ):
-
+    
+                                        valor_cliente = 0.0
+    
+    
+                                    dados_update[
+                                        "valor_cliente"
+                                    ] = float(
+                                        valor_cliente
+                                    )
+    
+    
+                                # =====================================
+                                # VALOR EQUIPE
+                                # =====================================
+    
+                                if (
+                                    "valor_equipe"
+                                    in linha.index
+                                ):
+    
+                                    valor_equipe = (
+                                        pd.to_numeric(
+    
+                                            linha[
+                                                "valor_equipe"
+                                            ],
+    
+                                            errors="coerce"
+    
+                                        )
+                                    )
+    
+    
+                                    if pd.isna(
+                                        valor_equipe
+                                    ):
+    
+                                        valor_equipe = 0.0
+    
+    
+                                    dados_update[
+                                        "valor_equipe"
+                                    ] = float(
+                                        valor_equipe
+                                    )
+    
+    
+                                # =====================================
+                                # STATUS
+                                # =====================================
+    
+                                if (
+                                    "status"
+                                    in linha.index
+                                ):
+    
+                                    dados_update[
+                                        "status"
+                                    ] = str(
+                                        linha[
+                                            "status"
+                                        ]
+                                    ).strip()
+    
+    
+                                # =====================================
+                                # FORMA DE PAGAMENTO
+                                # =====================================
+    
+                                if (
+                                    "forma_pagamento"
+                                    in linha.index
+                                ):
+    
+                                    dados_update[
+                                        "forma_pagamento"
+                                    ] = str(
+                                        linha[
+                                            "forma_pagamento"
+                                        ]
+                                    ).strip()
+    
+    
+                                # =====================================
+                                # DATA PAGAMENTO
+                                # =====================================
+    
+                                if (
+                                    "data_pagamento"
+                                    in linha.index
+                                ):
+    
+                                    data_valor = (
+                                        linha[
+                                            "data_pagamento"
+                                        ]
+                                    )
+    
+    
+                                    if pd.isna(
+                                        data_valor
+                                    ):
+    
                                         dados_update[
                                             "data_pagamento"
                                         ] = None
-
-
+    
+    
                                     else:
-
-                                        dados_update[
-                                            "data_pagamento"
-                                        ] = (
-                                            data_timestamp
-                                            .isoformat()
+    
+                                        data_timestamp = (
+                                            pd.to_datetime(
+    
+                                                data_valor,
+    
+                                                errors="coerce"
+    
+                                            )
                                         )
-
-
-                            # =====================================
-                            # UPDATE
-                            # =====================================
-
-                            if dados_update:
-
+    
+    
+                                        if pd.isna(
+                                            data_timestamp
+                                        ):
+    
+                                            dados_update[
+                                                "data_pagamento"
+                                            ] = None
+    
+    
+                                        else:
+    
+                                            dados_update[
+                                                "data_pagamento"
+                                            ] = (
+                                                data_timestamp
+                                                .isoformat()
+                                            )
+    
+    
+                                # =====================================
+                                # UPDATE
+                                # =====================================
+    
+                                if dados_update:
+    
+                                    supabase.table(
+                                        "aditivos_evento"
+                                    ).update(
+    
+                                        dados_update
+    
+                                    ).eq(
+    
+                                        "id",
+    
+                                        int(
+                                            adendo_id
+                                        )
+    
+                                    ).execute()
+    
+    
+                            st.success(
+                                "✅ Alterações salvas com sucesso!"
+                            )
+    
+                            st.rerun()
+    
+    
+                        except Exception as erro_update:
+    
+                            st.error(
+                                "❌ Erro ao salvar alterações: "
+                                f"{erro_update}"
+                            )
+    
+    
+                # =================================================
+                # EXCLUIR
+                # =================================================
+    
+                with col_excluir:
+    
+                    ids_adendos = (
+    
+                        df_edicao[
+                            "id"
+                        ]
+                        .dropna()
+                        .astype(int)
+                        .tolist()
+    
+                        if (
+                            "id"
+                            in df_edicao.columns
+                        )
+    
+                        else []
+    
+                    )
+    
+    
+                    if ids_adendos:
+    
+                        id_excluir = st.selectbox(
+    
+                            "Selecionar adendo para excluir",
+    
+                            ids_adendos,
+    
+                            key="cmv_id_excluir"
+    
+                        )
+    
+    
+                        if st.button(
+    
+                            "🗑️ Excluir adendo selecionado",
+    
+                            key="cmv_excluir_adendo"
+    
+                        ):
+    
+                            try:
+    
                                 supabase.table(
                                     "aditivos_evento"
-                                ).update(
-
-                                    dados_update
-
-                                ).eq(
-
+                                ).delete().eq(
+    
                                     "id",
-
+    
                                     int(
-                                        adendo_id
+                                        id_excluir
                                     )
-
+    
                                 ).execute()
-
-
-                        st.success(
-                            "✅ Alterações salvas com sucesso!"
-                        )
-
-                        st.rerun()
-
-
-                    except Exception as erro_update:
-
-                        st.error(
-                            "❌ Erro ao salvar alterações: "
-                            f"{erro_update}"
-                        )
-
-
-            # =================================================
-            # EXCLUIR
-            # =================================================
-
-            with col_excluir:
-
-                ids_adendos = (
-
-                    df_edicao[
-                        "id"
-                    ]
-                    .dropna()
-                    .astype(int)
-                    .tolist()
-
-                    if (
-                        "id"
-                        in df_edicao.columns
-                    )
-
-                    else []
-
-                )
-
-
-                if ids_adendos:
-
-                    id_excluir = st.selectbox(
-
-                        "Selecionar adendo para excluir",
-
-                        ids_adendos,
-
-                        key="cmv_id_excluir"
-
-                    )
-
-
-                    if st.button(
-
-                        "🗑️ Excluir adendo selecionado",
-
-                        key="cmv_excluir_adendo"
-
-                    ):
-
-                        try:
-
-                            supabase.table(
-                                "aditivos_evento"
-                            ).delete().eq(
-
-                                "id",
-
-                                int(
-                                    id_excluir
+    
+    
+                                st.success(
+                                    "✅ Adendo excluído com sucesso!"
                                 )
-
-                            ).execute()
-
-
-                            st.success(
-                                "✅ Adendo excluído com sucesso!"
+    
+                                st.rerun()
+    
+    
+                            except Exception as erro_delete:
+    
+                                st.error(
+                                    "❌ Erro ao excluir adendo: "
+                                    f"{erro_delete}"
+                                )
+    
+    
+                # =================================================
+                # RESUMO
+                # =================================================
+    
+                st.markdown("---")
+    
+                st.markdown(
+                    "### 📊 Resumo dos Adendos"
+                )
+    
+    
+                total_cliente_adendos = (
+    
+                    pd.to_numeric(
+    
+                        df_edicao.get(
+    
+                            "valor_cliente",
+    
+                            pd.Series(
+                                dtype=float
                             )
-
-                            st.rerun()
-
-
-                        except Exception as erro_delete:
-
-                            st.error(
-                                "❌ Erro ao excluir adendo: "
-                                f"{erro_delete}"
+    
+                        ),
+    
+                        errors="coerce"
+    
+                    )
+                    .fillna(0)
+                    .sum()
+    
+                )
+    
+    
+                total_equipe_adendos = (
+    
+                    pd.to_numeric(
+    
+                        df_edicao.get(
+    
+                            "valor_equipe",
+    
+                            pd.Series(
+                                dtype=float
                             )
-
-
-            # =================================================
-            # RESUMO
-            # =================================================
-
-            st.markdown("---")
-
-            st.markdown(
-                "### 📊 Resumo dos Adendos"
+    
+                        ),
+    
+                        errors="coerce"
+    
+                    )
+                    .fillna(0)
+                    .sum()
+    
+                )
+    
+    
+                resultado_adendos = (
+    
+                    total_cliente_adendos
+    
+                    -
+    
+                    total_equipe_adendos
+    
+                )
+    
+    
+                c1, c2, c3 = st.columns(3)
+    
+    
+                with c1:
+    
+                    st.metric(
+    
+                        "💰 Receita dos Adendos",
+    
+                        f"R$ {total_cliente_adendos:,.2f}"
+    
+                    )
+    
+    
+                with c2:
+    
+                    st.metric(
+    
+                        "👷 Custo de Equipe",
+    
+                        f"R$ {total_equipe_adendos:,.2f}"
+    
+                    )
+    
+    
+                with c3:
+    
+                    st.metric(
+    
+                        "💎 Resultado dos Adendos",
+    
+                        f"R$ {resultado_adendos:,.2f}"
+    
+                    )
+    
+    
+        except Exception as e:
+    
+            st.error(
+                f"❌ Erro ao carregar os adendos: {e}"
             )
-
-
-            total_cliente_adendos = (
-
-                pd.to_numeric(
-
-                    df_edicao.get(
-
-                        "valor_cliente",
-
-                        pd.Series(
-                            dtype=float
-                        )
-
-                    ),
-
-                    errors="coerce"
-
-                )
-                .fillna(0)
-                .sum()
-
-            )
-
-
-            total_equipe_adendos = (
-
-                pd.to_numeric(
-
-                    df_edicao.get(
-
-                        "valor_equipe",
-
-                        pd.Series(
-                            dtype=float
-                        )
-
-                    ),
-
-                    errors="coerce"
-
-                )
-                .fillna(0)
-                .sum()
-
-            )
-
-
-            resultado_adendos = (
-
-                total_cliente_adendos
-
-                -
-
-                total_equipe_adendos
-
-            )
-
-
-            c1, c2, c3 = st.columns(3)
-
-
-            with c1:
-
-                st.metric(
-
-                    "💰 Receita dos Adendos",
-
-                    f"R$ {total_cliente_adendos:,.2f}"
-
-                )
-
-
-            with c2:
-
-                st.metric(
-
-                    "👷 Custo de Equipe",
-
-                    f"R$ {total_equipe_adendos:,.2f}"
-
-                )
-
-
-            with c3:
-
-                st.metric(
-
-                    "💎 Resultado dos Adendos",
-
-                    f"R$ {resultado_adendos:,.2f}"
-
-                )
-
-
-    except Exception as e:
-
-        st.error(
-            f"❌ Erro ao carregar os adendos: {e}"
-        )
             
 elif menu == "Financeiro":
 
