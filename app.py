@@ -12345,7 +12345,6 @@ elif menu == "CMV":
                     else []
                 )
     
-    
                 if df_eventos_adendo.empty:
     
                     st.info(
@@ -12375,7 +12374,6 @@ elif menu == "CMV":
     
                         ev_data = ev.get("data")
     
-    
                         # ---------------------------------------------
                         # FORMATAR DATA
                         # ---------------------------------------------
@@ -12402,13 +12400,11 @@ elif menu == "CMV":
     
                             ev_data_formatada = "-"
     
-    
                         texto_evento = (
                             f"{ev_cliente} | "
                             f"{ev_data_formatada} | "
                             f"ID {ev_id}"
                         )
-    
     
                         opcoes_eventos[
                             texto_evento
@@ -12419,7 +12415,6 @@ elif menu == "CMV":
                             "cliente": ev_cliente
     
                         }
-    
     
                     # =================================================
                     # FORMULÁRIO
@@ -12441,13 +12436,11 @@ elif menu == "CMV":
                             )
                         )
     
-    
                         # ---------------------------------------------
                         # TIPO / STATUS
                         # ---------------------------------------------
     
                         col1, col2 = st.columns(2)
-    
     
                         with col1:
     
@@ -12463,7 +12456,6 @@ elif menu == "CMV":
                                 ]
                             )
     
-    
                         with col2:
     
                             status_adendo = st.selectbox(
@@ -12474,7 +12466,6 @@ elif menu == "CMV":
                                     "Cancelado"
                                 ]
                             )
-    
     
                         # ---------------------------------------------
                         # DESCRIÇÃO
@@ -12488,13 +12479,11 @@ elif menu == "CMV":
                             )
                         )
     
-    
                         # ---------------------------------------------
                         # VALORES
                         # ---------------------------------------------
     
                         col3, col4 = st.columns(2)
-    
     
                         with col3:
     
@@ -12507,7 +12496,6 @@ elif menu == "CMV":
                                 )
                             )
     
-    
                         with col4:
     
                             valor_equipe_adendo = (
@@ -12519,13 +12507,11 @@ elif menu == "CMV":
                                 )
                             )
     
-    
                         # ---------------------------------------------
                         # PAGAMENTO
                         # ---------------------------------------------
     
                         col5, col6 = st.columns(2)
-    
     
                         with col5:
     
@@ -12542,7 +12528,6 @@ elif menu == "CMV":
                                 )
                             )
     
-    
                         with col6:
     
                             data_pagamento = (
@@ -12551,7 +12536,6 @@ elif menu == "CMV":
                                     value=None
                                 )
                             )
-    
     
                         # ---------------------------------------------
                         # BOTÃO
@@ -12563,7 +12547,6 @@ elif menu == "CMV":
                                 use_container_width=True
                             )
                         )
-    
     
                     # =================================================
                     # PROCESSAR CADASTRO
@@ -12587,14 +12570,12 @@ elif menu == "CMV":
                                 "custo da equipe."
                             )
     
-    
                         elif not descricao_adendo.strip():
     
                             st.warning(
                                 "⚠️ Informe uma descrição "
                                 "para o adendo."
                             )
-    
     
                         else:
     
@@ -12610,20 +12591,17 @@ elif menu == "CMV":
                                     ]
                                 )
     
-    
                                 # =====================================
                                 # DATA PAGAMENTO
                                 # =====================================
     
                                 data_pagamento_db = None
     
-    
                                 if data_pagamento is not None:
     
                                     data_pagamento_db = (
                                         data_pagamento.isoformat()
                                     )
-    
     
                                 # =====================================
                                 # DADOS PARA INSERÇÃO
@@ -12650,7 +12628,9 @@ elif menu == "CMV":
                                             tipo_adendo
                                         ),
     
-                                    "descrição":
+                                    # IMPORTANTE:
+                                    # nome exato da coluna no Supabase
+                                    "descricao":
                                         descricao_adendo
                                         .strip(),
     
@@ -12679,7 +12659,6 @@ elif menu == "CMV":
     
                                 }
     
-    
                                 # =====================================
                                 # INSERT
                                 # =====================================
@@ -12695,7 +12674,6 @@ elif menu == "CMV":
                                     .execute()
                                 )
     
-    
                                 # =====================================
                                 # CONFIRMAÇÃO
                                 # =====================================
@@ -12706,14 +12684,12 @@ elif menu == "CMV":
     
                                 st.rerun()
     
-    
                             except Exception as erro_insert:
     
                                 st.error(
                                     "❌ Erro ao salvar o adendo: "
                                     f"{erro_insert}"
                                 )
-    
     
             except Exception as e:
     
@@ -12727,7 +12703,6 @@ elif menu == "CMV":
         # ========================================================
     
         st.markdown("---")
-    
     
         try:
     
@@ -12743,13 +12718,11 @@ elif menu == "CMV":
                 .execute()
             )
     
-    
             df_adendos_edicao = pd.DataFrame(
                 resposta_adendos.data
                 if resposta_adendos.data
                 else []
             )
-    
     
             # ====================================================
             # SEM ADENDOS
@@ -12761,7 +12734,6 @@ elif menu == "CMV":
                     "Nenhum adendo cadastrado."
                 )
     
-    
             else:
     
                 # =================================================
@@ -12771,7 +12743,6 @@ elif menu == "CMV":
                 eventos_filtro = [
                     "Todos"
                 ]
-    
     
                 if (
                     "evento"
@@ -12788,20 +12759,17 @@ elif menu == "CMV":
                         .tolist()
                     )
     
-    
                     eventos_filtro.extend(
                         sorted(
                             valores_eventos
                         )
                     )
     
-    
                 filtro_evento = st.selectbox(
                     "🔎 Filtrar por evento",
                     eventos_filtro,
                     key="cmv_filtro_adendo"
                 )
-    
     
                 # =================================================
                 # APLICAR FILTRO
@@ -12832,7 +12800,6 @@ elif menu == "CMV":
                         df_adendos_edicao.copy()
                     )
     
-    
                 # =================================================
                 # NORMALIZAR DATA
                 # =================================================
@@ -12856,7 +12823,6 @@ elif menu == "CMV":
     
                     )
     
-    
                     df_edicao[
                         "data_pagamento"
                     ] = (
@@ -12868,7 +12834,6 @@ elif menu == "CMV":
                         .tz_localize(None)
     
                     )
-    
     
                 # =================================================
                 # NORMALIZAR VALORES
@@ -12899,7 +12864,6 @@ elif menu == "CMV":
     
                         ).fillna(0.0)
     
-    
                 # =================================================
                 # NORMALIZAR TEXTOS
                 # =================================================
@@ -12908,7 +12872,7 @@ elif menu == "CMV":
     
                     "tipo",
     
-                    "descrição",
+                    "descricao",
     
                     "status",
     
@@ -12933,7 +12897,6 @@ elif menu == "CMV":
     
                         )
     
-    
                 # =================================================
                 # COLUNAS
                 # =================================================
@@ -12946,7 +12909,7 @@ elif menu == "CMV":
     
                     "tipo",
     
-                    "descrição",
+                    "descricao",
     
                     "valor_cliente",
     
@@ -12960,7 +12923,6 @@ elif menu == "CMV":
     
                 ]
     
-    
                 colunas_editor = [
     
                     coluna
@@ -12973,7 +12935,6 @@ elif menu == "CMV":
     
                 ]
     
-    
                 df_edicao = (
     
                     df_edicao[
@@ -12983,13 +12944,11 @@ elif menu == "CMV":
     
                 )
     
-    
                 # =================================================
                 # CONFIGURAÇÃO EDITOR
                 # =================================================
     
                 config_editor = {
-    
     
                     "id":
     
@@ -12998,7 +12957,6 @@ elif menu == "CMV":
                             disabled=True
                         ),
     
-    
                     "evento":
     
                         st.column_config.TextColumn(
@@ -13006,20 +12964,17 @@ elif menu == "CMV":
                             disabled=True
                         ),
     
-    
                     "tipo":
     
                         st.column_config.TextColumn(
                             "Tipo"
                         ),
     
-    
-                    "descrição":
+                    "descricao":
     
                         st.column_config.TextColumn(
                             "Descrição"
                         ),
-    
     
                     "valor_cliente":
     
@@ -13030,7 +12985,6 @@ elif menu == "CMV":
                             format="R$ %.2f"
                         ),
     
-    
                     "valor_equipe":
     
                         st.column_config.NumberColumn(
@@ -13040,20 +12994,17 @@ elif menu == "CMV":
                             format="R$ %.2f"
                         ),
     
-    
                     "status":
     
                         st.column_config.TextColumn(
                             "Status"
                         ),
     
-    
                     "forma_pagamento":
     
                         st.column_config.TextColumn(
                             "Pagamento"
                         ),
-    
     
                     "data_pagamento":
     
@@ -13063,7 +13014,6 @@ elif menu == "CMV":
                         )
     
                 }
-    
     
                 # =================================================
                 # EDITOR
@@ -13085,13 +13035,11 @@ elif menu == "CMV":
     
                 )
     
-    
                 # =================================================
                 # BOTÕES
                 # =================================================
     
                 col_salvar, col_excluir = st.columns(2)
-    
     
                 # =================================================
                 # SALVAR ALTERAÇÕES
@@ -13114,16 +13062,13 @@ elif menu == "CMV":
                                     linha.get("id")
                                 )
     
-    
                                 if pd.isna(
                                     adendo_id
                                 ):
     
                                     continue
     
-    
                                 dados_update = {}
-    
     
                                 # =====================================
                                 # TIPO
@@ -13142,24 +13087,22 @@ elif menu == "CMV":
                                         ]
                                     ).strip()
     
-    
                                 # =====================================
                                 # DESCRIÇÃO
                                 # =====================================
     
                                 if (
-                                    "descrição"
+                                    "descricao"
                                     in linha.index
                                 ):
     
                                     dados_update[
-                                        "descrição"
+                                        "descricao"
                                     ] = str(
                                         linha[
-                                            "descrição"
+                                            "descricao"
                                         ]
                                     ).strip()
-    
     
                                 # =====================================
                                 # VALOR CLIENTE
@@ -13182,20 +13125,17 @@ elif menu == "CMV":
                                         )
                                     )
     
-    
                                     if pd.isna(
                                         valor_cliente
                                     ):
     
                                         valor_cliente = 0.0
     
-    
                                     dados_update[
                                         "valor_cliente"
                                     ] = float(
                                         valor_cliente
                                     )
-    
     
                                 # =====================================
                                 # VALOR EQUIPE
@@ -13218,20 +13158,17 @@ elif menu == "CMV":
                                         )
                                     )
     
-    
                                     if pd.isna(
                                         valor_equipe
                                     ):
     
                                         valor_equipe = 0.0
     
-    
                                     dados_update[
                                         "valor_equipe"
                                     ] = float(
                                         valor_equipe
                                     )
-    
     
                                 # =====================================
                                 # STATUS
@@ -13250,7 +13187,6 @@ elif menu == "CMV":
                                         ]
                                     ).strip()
     
-    
                                 # =====================================
                                 # FORMA DE PAGAMENTO
                                 # =====================================
@@ -13268,7 +13204,6 @@ elif menu == "CMV":
                                         ]
                                     ).strip()
     
-    
                                 # =====================================
                                 # DATA PAGAMENTO
                                 # =====================================
@@ -13284,7 +13219,6 @@ elif menu == "CMV":
                                         ]
                                     )
     
-    
                                     if pd.isna(
                                         data_valor
                                     ):
@@ -13292,7 +13226,6 @@ elif menu == "CMV":
                                         dados_update[
                                             "data_pagamento"
                                         ] = None
-    
     
                                     else:
     
@@ -13306,7 +13239,6 @@ elif menu == "CMV":
                                             )
                                         )
     
-    
                                         if pd.isna(
                                             data_timestamp
                                         ):
@@ -13314,7 +13246,6 @@ elif menu == "CMV":
                                             dados_update[
                                                 "data_pagamento"
                                             ] = None
-    
     
                                         else:
     
@@ -13324,7 +13255,6 @@ elif menu == "CMV":
                                                 data_timestamp
                                                 .isoformat()
                                             )
-    
     
                                 # =====================================
                                 # UPDATE
@@ -13348,13 +13278,11 @@ elif menu == "CMV":
     
                                     ).execute()
     
-    
                             st.success(
                                 "✅ Alterações salvas com sucesso!"
                             )
     
                             st.rerun()
-    
     
                         except Exception as erro_update:
     
@@ -13362,7 +13290,6 @@ elif menu == "CMV":
                                 "❌ Erro ao salvar alterações: "
                                 f"{erro_update}"
                             )
-    
     
                 # =================================================
                 # EXCLUIR
@@ -13388,7 +13315,6 @@ elif menu == "CMV":
     
                     )
     
-    
                     if ids_adendos:
     
                         id_excluir = st.selectbox(
@@ -13400,7 +13326,6 @@ elif menu == "CMV":
                             key="cmv_id_excluir"
     
                         )
-    
     
                         if st.button(
     
@@ -13424,13 +13349,11 @@ elif menu == "CMV":
     
                                 ).execute()
     
-    
                                 st.success(
                                     "✅ Adendo excluído com sucesso!"
                                 )
     
                                 st.rerun()
-    
     
                             except Exception as erro_delete:
     
@@ -13438,7 +13361,6 @@ elif menu == "CMV":
                                     "❌ Erro ao excluir adendo: "
                                     f"{erro_delete}"
                                 )
-    
     
                 # =================================================
                 # RESUMO
@@ -13449,7 +13371,6 @@ elif menu == "CMV":
                 st.markdown(
                     "### 📊 Resumo dos Adendos"
                 )
-    
     
                 total_cliente_adendos = (
     
@@ -13473,7 +13394,6 @@ elif menu == "CMV":
     
                 )
     
-    
                 total_equipe_adendos = (
     
                     pd.to_numeric(
@@ -13492,10 +13412,10 @@ elif menu == "CMV":
     
                     )
                     .fillna(0)
+    
                     .sum()
     
                 )
-    
     
                 resultado_adendos = (
     
@@ -13507,9 +13427,7 @@ elif menu == "CMV":
     
                 )
     
-    
                 c1, c2, c3 = st.columns(3)
-    
     
                 with c1:
     
@@ -13521,7 +13439,6 @@ elif menu == "CMV":
     
                     )
     
-    
                 with c2:
     
                     st.metric(
@@ -13532,7 +13449,6 @@ elif menu == "CMV":
     
                     )
     
-    
                 with c3:
     
                     st.metric(
@@ -13542,7 +13458,6 @@ elif menu == "CMV":
                         f"R$ {resultado_adendos:,.2f}"
     
                     )
-    
     
         except Exception as e:
     
