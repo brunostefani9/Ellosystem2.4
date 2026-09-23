@@ -6113,1118 +6113,1133 @@ elif menu == "Materiais e Utensílios de Bar":
 
 elif menu == "Receitas":
 
+    import unicodedata
+
     st.title("🍸 Receitas")
 
     # =========================================================
-    # CARREGAMENTO DAS BASES
+    # BASES
     # =========================================================
-
     df_receitas = carregar_tabela("receitas")
     df_bebidas = carregar_tabela("precos_bebidas")
     df_insumos = carregar_tabela("precos_insumos")
     df_artesanais = carregar_tabela("precos_artesanais")
 
     # =========================================================
-    # IDENTIFICA A COLUNA DO NOME DO DRINK
+    # COLUNA DO DRINK
     # =========================================================
-    # Sua tabela atual aparece com a coluna "bebida".
-    # O código antigo utilizava "drink".
-    # Aqui aceitamos os dois para evitar quebra.
-
     if not df_receitas.empty:
-
         if "drink" in df_receitas.columns:
             COLUNA_DRINK = "drink"
-
         elif "bebida" in df_receitas.columns:
             COLUNA_DRINK = "bebida"
-
         else:
             st.error(
-                "A tabela 'receitas' precisa ter a coluna "
-                "'bebida' ou 'drink'."
+                "A tabela 'receitas' precisa possuir a coluna 'drink' ou 'bebida'."
             )
             st.stop()
-
     else:
-
-        # Pela estrutura atual do seu Supabase
         COLUNA_DRINK = "bebida"
+
+    # =========================================================
+    # VALIDAÇÃO DA MIGRAÇÃO
+    # =========================================================
+    colunas_novas = ["categoria", "tipo_base"]
+
+    # Com a tabela vazia, o DataFrame não informa o schema do Supabase.
+    # Nesse caso deixamos o INSERT validar a estrutura depois da migração.
+    colunas_faltantes = (
+        [
+            c for c in colunas_novas
+            if c not in df_receitas.columns
+        ]
+        if not df_receitas.empty
+        else []
+    )
+
+    if colunas_faltantes:
+        st.warning(
+            "⚠️ A tabela `receitas` ainda não possui todas as colunas da "
+            "padronização nova: "
+            + ", ".join(colunas_faltantes)
+            + ". Execute primeiro o SQL de migração que acompanha este código."
+        )
+
+    # =========================================================
+    # FUNÇÕES AUXILIARES
+    # =========================================================
+    CATEGORIAS_RECEITA = [
+        "Bebida",
+        "Fruta / Insumo",
+        "Artesanal",
+        "Gelo",
+    ]
+
+    UNIDADES_RECEITA = [
+        "ml",
+        "g",
+        "un",
+        "gota",
+        "fatia",
+        "guarnição",
+    ]
+
+    def chave_texto(valor):
+        """Normalização apenas para comparação."""
+        texto = str(valor or "").strip().lower()
+        texto = unicodedata.normalize("NFKD", texto)
+        texto = "".join(
+            c for c in texto
+            if not unicodedata.combining(c)
+        )
+        return " ".join(texto.split())
+
+    def numero_seguro(valor, padrao=0.0):
+        try:
+            if pd.isna(valor):
+                return float(padrao)
+            return float(valor)
+        except (TypeError, ValueError):
+            return float(padrao)
+
+    def valores_unicos(df, coluna):
+        if df is None or df.empty or coluna not in df.columns:
+            return []
+
+        valores = []
+        vistos = set()
+
+        for valor in df[coluna].dropna().astype(str):
+            valor_limpo = valor.strip()
+            chave = chave_texto(valor_limpo)
+
+            if valor_limpo and chave not in vistos:
+                valores.append(valor_limpo)
+                vistos.add(chave)
+
+        return sorted(valores, key=lambda x: chave_texto(x))
+
+    def tabela_da_categoria(categoria):
+        if categoria == "Bebida":
+            return df_bebidas, "precos_bebidas"
+        if categoria == "Fruta / Insumo":
+            return df_insumos, "precos_insumos"
+        if categoria == "Artesanal":
+            return df_artesanais, "precos_artesanais"
+        if categoria == "Gelo":
+            return df_insumos, "precos_insumos"
+        return pd.DataFrame(), None
+
+    def obter_bases_categoria(categoria):
+        """
+        Opções sempre geradas a partir do banco.
+        Não existe lista fixa de marcas, tipos ou tamanhos.
+        """
+        df_base, _ = tabela_da_categoria(categoria)
+
+        if df_base.empty:
+            return []
+
+        if categoria == "Gelo":
+            candidatos = []
+
+            if "nome" in df_base.columns:
+                for valor in df_base["nome"].dropna().astype(str):
+                    if "gelo" in chave_texto(valor):
+                        candidatos.append(valor.strip())
+
+            if "tipo" in df_base.columns:
+                for _, linha in df_base.iterrows():
+                    tipo = str(linha.get("tipo", "") or "").strip()
+                    nome = str(linha.get("nome", "") or "").strip()
+                    if "gelo" in chave_texto(tipo):
+                        candidatos.append(tipo or nome)
+
+            return sorted(
+                list({x for x in candidatos if str(x).strip()}),
+                key=lambda x: chave_texto(x),
+            )
+
+        if categoria in ["Bebida", "Artesanal"]:
+            tipos = valores_unicos(df_base, "tipo")
+            nomes_sem_tipo = []
+
+            if "nome" in df_base.columns:
+                for _, linha in df_base.iterrows():
+                    tipo = str(linha.get("tipo", "") or "").strip()
+                    nome = str(linha.get("nome", "") or "").strip()
+                    if nome and not tipo:
+                        nomes_sem_tipo.append(nome)
+
+            bases = tipos + nomes_sem_tipo
+            return sorted(
+                list({x for x in bases if str(x).strip()}),
+                key=lambda x: chave_texto(x),
+            )
+
+        return valores_unicos(df_base, "nome")
+
+    def localizar_opcoes_base(categoria, tipo_base):
+        """
+        Ex.: base Gin -> todas as marcas/tamanhos cujo tipo seja Gin.
+        """
+        df_base, _ = tabela_da_categoria(categoria)
+
+        if df_base.empty or not str(tipo_base or "").strip():
+            return pd.DataFrame()
+
+        chave_base = chave_texto(tipo_base)
+        mascara = pd.Series(False, index=df_base.index)
+
+        if "tipo" in df_base.columns:
+            mascara = mascara | (
+                df_base["tipo"]
+                .fillna("")
+                .astype(str)
+                .apply(chave_texto)
+                == chave_base
+            )
+
+        if "nome" in df_base.columns:
+            mascara = mascara | (
+                df_base["nome"]
+                .fillna("")
+                .astype(str)
+                .apply(chave_texto)
+                == chave_base
+            )
+
+        return df_base[mascara].copy()
+
+    def custo_base_unitario(categoria, tipo_base):
+        """
+        Custo por unidade-base sem escolher marca fixa.
+        Se houver várias marcas/tamanhos, retorna mínimo, média e máximo.
+        """
+        opcoes = localizar_opcoes_base(categoria, tipo_base)
+
+        if opcoes.empty:
+            return {
+                "encontrado": False,
+                "quantidade_opcoes": 0,
+                "unidade_base": None,
+                "min": None,
+                "medio": None,
+                "max": None,
+            }
+
+        custos = []
+
+        for _, linha in opcoes.iterrows():
+            preco = numero_seguro(linha.get("preco", 0))
+
+            if preco < 0:
+                continue
+
+            if categoria in ["Bebida", "Artesanal"]:
+                volume = numero_seguro(linha.get("quantidade", 0))
+                if volume > 0:
+                    custos.append(preco / volume)
+
+            elif categoria in ["Fruta / Insumo", "Gelo"]:
+                # Em precos_insumos o preço é por KG.
+                custos.append(preco / 1000)
+
+        unidade_base = (
+            "ml" if categoria in ["Bebida", "Artesanal"] else "g"
+        )
+
+        if not custos:
+            return {
+                "encontrado": True,
+                "quantidade_opcoes": len(opcoes),
+                "unidade_base": unidade_base,
+                "min": None,
+                "medio": None,
+                "max": None,
+            }
+
+        return {
+            "encontrado": True,
+            "quantidade_opcoes": len(opcoes),
+            "unidade_base": unidade_base,
+            "min": min(custos),
+            "medio": sum(custos) / len(custos),
+            "max": max(custos),
+        }
+
+    def calcular_custo_referencia(categoria, tipo_base, quantidade, unidade):
+        """
+        Custo médio de referência de UM drink.
+        A marca/embalagem real continua sendo escolhida no orçamento.
+        """
+        custo_base = custo_base_unitario(categoria, tipo_base)
+
+        if not custo_base["encontrado"] or custo_base["medio"] is None:
+            return None, custo_base
+
+        if str(unidade) != custo_base["unidade_base"]:
+            # Não inventa conversão de fatia/un/gota para g ou ml.
+            return None, custo_base
+
+        return (
+            numero_seguro(quantidade) * custo_base["medio"],
+            custo_base,
+        )
+
+    def sugerir_vinculo_antigo(ingrediente):
+        """
+        Sugestão conservadora: somente correspondência EXATA por nome ou tipo.
+        Nada de similaridade automática.
+        """
+        chave = chave_texto(ingrediente)
+        candidatos = []
+
+        if not df_bebidas.empty:
+            for _, linha in df_bebidas.iterrows():
+                nome = str(linha.get("nome", "") or "").strip()
+                tipo = str(linha.get("tipo", "") or "").strip()
+                if chave and (
+                    chave_texto(nome) == chave
+                    or chave_texto(tipo) == chave
+                ):
+                    candidatos.append(("Bebida", tipo or nome))
+
+        if not df_insumos.empty:
+            for _, linha in df_insumos.iterrows():
+                nome = str(linha.get("nome", "") or "").strip()
+                tipo = str(linha.get("tipo", "") or "").strip()
+
+                tipo_util = tipo and chave_texto(tipo) != "fruta"
+
+                if chave and (
+                    chave_texto(nome) == chave
+                    or (tipo_util and chave_texto(tipo) == chave)
+                ):
+                    categoria = (
+                        "Gelo"
+                        if "gelo" in chave_texto(nome)
+                        or "gelo" in chave_texto(tipo)
+                        else "Fruta / Insumo"
+                    )
+                    base = nome if categoria == "Fruta / Insumo" else (tipo or nome)
+                    candidatos.append((categoria, base))
+
+        if not df_artesanais.empty:
+            for _, linha in df_artesanais.iterrows():
+                nome = str(linha.get("nome", "") or "").strip()
+                tipo = str(linha.get("tipo", "") or "").strip()
+                if chave and (
+                    chave_texto(nome) == chave
+                    or chave_texto(tipo) == chave
+                ):
+                    candidatos.append(("Artesanal", tipo or nome))
+
+        unicos = []
+        vistos = set()
+
+        for categoria, base in candidatos:
+            k = (chave_texto(categoria), chave_texto(base))
+            if k not in vistos:
+                unicos.append((categoria, base))
+                vistos.add(k)
+
+        if len(unicos) == 1:
+            return {
+                "status": "sugerido",
+                "categoria": unicos[0][0],
+                "tipo_base": unicos[0][1],
+            }
+
+        if len(unicos) > 1:
+            return {
+                "status": "ambiguo",
+                "categoria": None,
+                "tipo_base": None,
+                "candidatos": unicos,
+            }
+
+        return {
+            "status": "nao_encontrado",
+            "categoria": None,
+            "tipo_base": None,
+        }
+
+    def unidade_padrao_categoria(categoria):
+        if categoria in ["Bebida", "Artesanal"]:
+            return "ml"
+        if categoria in ["Fruta / Insumo", "Gelo"]:
+            return "g"
+        return "un"
+
+    def limpar_cadastro_receita():
+        st.session_state["ingredientes_temp_v3"] = []
+        st.session_state["drink_nome_v3"] = ""
+        st.session_state["tipo_copo_temp_v3"] = "Alto"
+        st.session_state["modelo_copo_temp_v3"] = ""
+
+        for chave in [
+            "campo_nome_drink_v3",
+            "modelo_copo_cadastro_v3",
+        ]:
+            if chave in st.session_state:
+                del st.session_state[chave]
 
     # =========================================================
     # ESTADOS
     # =========================================================
-
-    if "ingredientes_temp" not in st.session_state:
-        st.session_state["ingredientes_temp"] = []
-
-    if "drink_nome" not in st.session_state:
-        st.session_state["drink_nome"] = ""
-
-    if "tipo_copo_temp" not in st.session_state:
-        st.session_state["tipo_copo_temp"] = "Alto"
-
-    if "modelo_copo_temp" not in st.session_state:
-        st.session_state["modelo_copo_temp"] = ""
-
-    # =========================================================
-    # FUNÇÃO - BUSCAR TODOS OS INGREDIENTES
-    # =========================================================
-
-    def montar_lista_ingredientes():
-
-        nomes = []
-
-        if not df_bebidas.empty and "nome" in df_bebidas.columns:
-
-            nomes.extend(
-                df_bebidas["nome"]
-                .dropna()
-                .astype(str)
-                .tolist()
-            )
-
-        if not df_insumos.empty and "nome" in df_insumos.columns:
-
-            nomes.extend(
-                df_insumos["nome"]
-                .dropna()
-                .astype(str)
-                .tolist()
-            )
-
-        if not df_artesanais.empty and "nome" in df_artesanais.columns:
-
-            nomes.extend(
-                df_artesanais["nome"]
-                .dropna()
-                .astype(str)
-                .tolist()
-            )
-
-        return sorted(
-            list(
-                set(
-                    normalizar_nome(x)
-                    for x in nomes
-                    if str(x).strip()
-                )
-            )
-        )
-
-    ingredientes_disponiveis = montar_lista_ingredientes()
-
-    # =========================================================
-    # FUNÇÃO - CALCULAR CUSTO REAL DO INGREDIENTE
-    # =========================================================
-
-    def calcular_custo_item(
-        ingrediente,
-        quantidade,
-        unidade
-    ):
-
-        ingrediente_normalizado = normalizar_nome(
-            ingrediente
-        ).lower().strip()
-
-        quantidade = float(quantidade)
-
-        # -----------------------------------------------------
-        # BEBIDAS
-        # -----------------------------------------------------
-
-        if not df_bebidas.empty:
-
-            item = df_bebidas[
-                df_bebidas["nome"]
-                .astype(str)
-                .str.lower()
-                .str.strip()
-                == ingrediente_normalizado
-            ]
-
-            if not item.empty:
-
-                linha = item.iloc[0]
-
-                volume_total = float(
-                    linha["quantidade"]
-                )
-
-                preco_total = float(
-                    linha["preco"]
-                )
-
-                if volume_total <= 0:
-                    return 0.0
-
-                # Bebidas são cadastradas em ml
-                # Exemplo:
-                # 750 ml = R$ 69,90
-                # receita usa 50 ml
-                #
-                # 50 / 750 * 69,90
-
-                if unidade == "ml":
-
-                    return (
-                        quantidade
-                        / volume_total
-                        * preco_total
-                    )
-
-                return 0.0
-
-        # -----------------------------------------------------
-        # INSUMOS / FRUTAS
-        # -----------------------------------------------------
-
-        if not df_insumos.empty:
-
-            item = df_insumos[
-                df_insumos["nome"]
-                .astype(str)
-                .str.lower()
-                .str.strip()
-                == ingrediente_normalizado
-            ]
-
-            if not item.empty:
-
-                linha = item.iloc[0]
-
-                preco_kg = float(
-                    linha["preco"]
-                )
-
-                # Frutas são cadastradas por KG
-                # Receita utiliza GRAMAS
-
-                if unidade == "g":
-
-                    return (
-                        quantidade
-                        / 1000
-                        * preco_kg
-                    )
-
-                return 0.0
-
-        # -----------------------------------------------------
-        # ARTESANAIS
-        # -----------------------------------------------------
-
-        if not df_artesanais.empty:
-
-            item = df_artesanais[
-                df_artesanais["nome"]
-                .astype(str)
-                .str.lower()
-                .str.strip()
-                == ingrediente_normalizado
-            ]
-
-            if not item.empty:
-
-                linha = item.iloc[0]
-
-                volume_total = float(
-                    linha["quantidade"]
-                )
-
-                preco_total = float(
-                    linha["preco"]
-                )
-
-                if volume_total <= 0:
-                    return 0.0
-
-                if unidade == "ml":
-
-                    return (
-                        quantidade
-                        / volume_total
-                        * preco_total
-                    )
-
-                return 0.0
-
-        # -----------------------------------------------------
-        # ITEM NÃO ENCONTRADO
-        # -----------------------------------------------------
-
-        return 0.0
-
-    # =========================================================
-    # FUNÇÃO - CUSTO TOTAL DO DRINK
-    # =========================================================
-
-    def calcular_custo_drink_atual(
-        nome_drink,
-        tabela_receitas
-    ):
-
-        if tabela_receitas.empty:
-            return 0.0
-
-        receita = tabela_receitas[
-            tabela_receitas[COLUNA_DRINK]
-            .astype(str)
-            .str.strip()
-            == str(nome_drink).strip()
-        ]
-
-        custo_total = 0.0
-
-        for _, row in receita.iterrows():
-
-            ingrediente = str(
-                row["ingrediente"]
-            )
-
-            quantidade = float(
-                row["quantidade"]
-            )
-
-            unidade = str(
-                row["unidade"]
-            )
-
-            custo_total += calcular_custo_item(
-                ingrediente,
-                quantidade,
-                unidade
-            )
-
-        return round(custo_total, 2)
+    if "ingredientes_temp_v3" not in st.session_state:
+        st.session_state["ingredientes_temp_v3"] = []
+    if "drink_nome_v3" not in st.session_state:
+        st.session_state["drink_nome_v3"] = ""
+    if "tipo_copo_temp_v3" not in st.session_state:
+        st.session_state["tipo_copo_temp_v3"] = "Alto"
+    if "modelo_copo_temp_v3" not in st.session_state:
+        st.session_state["modelo_copo_temp_v3"] = ""
 
     # =========================================================
     # ABAS
     # =========================================================
-
-    aba_cadastro, aba_lista = st.tabs(
-        [
-            "Cadastro de Drinks",
-            "Lista de Drinks"
-        ]
-    )
+    aba_cadastro, aba_lista, aba_revisao = st.tabs([
+        "➕ Cadastro",
+        "📋 Drinks Cadastrados",
+        "🔎 Revisão das Receitas",
+    ])
 
     # =========================================================
-    # CADASTRO
+    # ABA 1 — CADASTRO
     # =========================================================
-
     with aba_cadastro:
-
         st.subheader("🍸 Cadastro de Drink")
+        st.caption(
+            "A receita define a BASE do ingrediente. Marca e tamanho da "
+            "embalagem continuam sendo escolhidos dinamicamente no orçamento."
+        )
 
         drink = st.text_input(
             "Nome do drink",
-            value=st.session_state["drink_nome"],
-            key="campo_nome_drink"
+            value=st.session_state["drink_nome_v3"],
+            key="campo_nome_drink_v3",
         )
-
-        # -----------------------------------------------------
-        # COPOS
-        # -----------------------------------------------------
 
         st.markdown("### 🥂 Copo / Taça")
 
+        tipos_copo = [
+            "Alto", "Baixo", "Taça", "Coupé", "Martini", "Caneca", "Outro"
+        ]
+
         col1, col2 = st.columns(2)
 
         with col1:
-
             tipo_copo = st.selectbox(
                 "Tipo de copo",
-                [
-                    "Alto",
-                    "Baixo",
-                    "Taça",
-                    "Coupé",
-                    "Martini",
-                    "Caneca",
-                    "Outro"
-                ],
-                index=[
-                    "Alto",
-                    "Baixo",
-                    "Taça",
-                    "Coupé",
-                    "Martini",
-                    "Caneca",
-                    "Outro"
-                ].index(
-                    st.session_state["tipo_copo_temp"]
-                )
-                if st.session_state["tipo_copo_temp"]
-                in [
-                    "Alto",
-                    "Baixo",
-                    "Taça",
-                    "Coupé",
-                    "Martini",
-                    "Caneca",
-                    "Outro"
-                ]
-                else 0,
-                key="tipo_copo_cadastro"
+                tipos_copo,
+                index=(
+                    tipos_copo.index(st.session_state["tipo_copo_temp_v3"])
+                    if st.session_state["tipo_copo_temp_v3"] in tipos_copo
+                    else 0
+                ),
+                key="tipo_copo_cadastro_v3",
             )
 
         with col2:
-
             modelo_copo = st.text_input(
                 "Modelo do copo / taça",
-                value=st.session_state[
-                    "modelo_copo_temp"
-                ],
+                value=st.session_state["modelo_copo_temp_v3"],
                 placeholder="Ex.: Long Drink 350 ml",
-                key="modelo_copo_cadastro"
+                key="modelo_copo_cadastro_v3",
             )
 
-        # -----------------------------------------------------
-        # INGREDIENTES
-        # -----------------------------------------------------
-
+        st.divider()
         st.markdown("### 🧪 Componentes do Drink")
 
-        if ingredientes_disponiveis:
-
-            col1, col2, col3, col4 = st.columns(
-                [4, 2, 2, 1]
+        c1, c2 = st.columns(2)
+        with c1:
+            categoria_nova = st.selectbox(
+                "Categoria",
+                CATEGORIAS_RECEITA,
+                key="nova_categoria_receita_v3",
             )
 
-            with col1:
+        bases_disponiveis = obter_bases_categoria(categoria_nova)
 
-                ingrediente = st.selectbox(
-                    "Ingrediente",
-                    ingredientes_disponiveis,
-                    key="novo_ingrediente"
+        with c2:
+            if bases_disponiveis:
+                tipo_base_novo = st.selectbox(
+                    "Base do ingrediente",
+                    bases_disponiveis,
+                    key="novo_tipo_base_receita_v3",
+                )
+            else:
+                tipo_base_novo = ""
+                st.selectbox(
+                    "Base do ingrediente",
+                    ["Nenhum cadastro disponível"],
+                    disabled=True,
+                    key="novo_tipo_base_vazio_v3",
                 )
 
-            with col2:
+        if not bases_disponiveis:
+            st.warning(
+                f"Não há base disponível para **{categoria_nova}**. "
+                "Cadastre primeiro o item na Precificação."
+            )
 
-                quantidade = st.number_input(
-                    "Quantidade",
-                    min_value=0.0,
-                    step=1.0,
-                    format="%.2f",
-                    key="nova_quantidade"
-                )
+        unidade_sugerida = unidade_padrao_categoria(categoria_nova)
+        c3, c4, c5 = st.columns([2, 2, 1])
 
-            with col3:
+        with c3:
+            quantidade_nova = st.number_input(
+                "Quantidade por drink",
+                min_value=0.0,
+                step=1.0,
+                format="%.2f",
+                key="nova_quantidade_receita_v3",
+            )
 
-                unidade = st.selectbox(
-                    "Unidade",
-                    [
-                        "ml",
-                        "g",
-                        "un",
-                        "gota",
-                        "fatia",
-                        "guarnição"
-                    ],
-                    key="nova_unidade"
-                )
+        with c4:
+            indice_unidade = (
+                UNIDADES_RECEITA.index(unidade_sugerida)
+                if unidade_sugerida in UNIDADES_RECEITA
+                else 0
+            )
+            unidade_nova = st.selectbox(
+                "Unidade",
+                UNIDADES_RECEITA,
+                index=indice_unidade,
+                key=(
+                    "nova_unidade_receita_v3_"
+                    + chave_texto(categoria_nova)
+                    .replace(" ", "_")
+                    .replace("/", "_")
+                ),
+            )
 
-            with col4:
+        with c5:
+            adicionar = st.button(
+                "➕ Adicionar",
+                use_container_width=True,
+                key="add_ingrediente_receita_v3",
+            )
 
-                adicionar = st.button(
-                    "➕ Adicionar",
-                    use_container_width=True
-                )
+        if tipo_base_novo:
+            custo_previa, info_custo = calcular_custo_referencia(
+                categoria_nova,
+                tipo_base_novo,
+                quantidade_nova,
+                unidade_nova,
+            )
 
-            if adicionar:
-
-                if not drink.strip():
-
-                    st.warning(
-                        "Informe o nome do drink."
+            if info_custo["encontrado"]:
+                if custo_previa is not None:
+                    st.caption(
+                        f"💰 Custo médio de referência deste componente: "
+                        f"**R$ {custo_previa:,.4f}** "
+                        f"({info_custo['quantidade_opcoes']} opção(ões) de preço)"
                     )
-
-                elif quantidade <= 0:
-
-                    st.warning(
-                        "A quantidade deve ser maior que zero."
-                    )
-
                 else:
+                    st.caption(
+                        "ℹ️ O item está cadastrado, mas não existe conversão "
+                        f"automática de **{unidade_nova}** para "
+                        f"**{info_custo['unidade_base']}**. Para custo exato, "
+                        "prefira ml para líquidos e g para itens por KG."
+                    )
 
-                    st.session_state[
-                        "drink_nome"
-                    ] = drink.strip()
+        if adicionar:
+            if not drink.strip():
+                st.warning("Informe primeiro o nome do drink.")
+            elif not tipo_base_novo:
+                st.warning("Selecione uma base de ingrediente.")
+            elif quantidade_nova <= 0:
+                st.warning("A quantidade deve ser maior que zero.")
+            else:
+                st.session_state["drink_nome_v3"] = drink.strip()
+                st.session_state["tipo_copo_temp_v3"] = tipo_copo
+                st.session_state["modelo_copo_temp_v3"] = modelo_copo.strip()
 
-                    st.session_state[
-                        "tipo_copo_temp"
-                    ] = tipo_copo
+                chave_nova = (
+                    chave_texto(categoria_nova),
+                    chave_texto(tipo_base_novo),
+                    unidade_nova,
+                )
 
-                    st.session_state[
-                        "modelo_copo_temp"
-                    ] = modelo_copo.strip()
+                duplicado = False
+                for item in st.session_state["ingredientes_temp_v3"]:
+                    chave_item = (
+                        chave_texto(item.get("categoria")),
+                        chave_texto(item.get("tipo_base")),
+                        str(item.get("unidade", "")),
+                    )
+                    if chave_item == chave_nova:
+                        duplicado = True
+                        break
 
-                    st.session_state[
-                        "ingredientes_temp"
-                    ].append({
-
-                        "ingrediente": normalizar_nome(
-                            ingrediente
-                        ),
-
-                        "quantidade": quantidade,
-
-                        "unidade": unidade
-
+                if duplicado:
+                    st.warning(
+                        "Esse componente já foi adicionado à receita. "
+                        "Remova e adicione novamente com a quantidade correta."
+                    )
+                else:
+                    st.session_state["ingredientes_temp_v3"].append({
+                        "ingrediente": str(tipo_base_novo).strip(),
+                        "categoria": categoria_nova,
+                        "tipo_base": str(tipo_base_novo).strip(),
+                        "quantidade": float(quantidade_nova),
+                        "unidade": unidade_nova,
                     })
-
                     st.rerun()
 
-        else:
+        temp = st.session_state["ingredientes_temp_v3"]
 
-            st.warning(
-                "Nenhum produto foi encontrado nas "
-                "tabelas de bebidas, insumos ou artesanais."
-            )
+        if temp:
+            st.markdown("### 📋 Componentes da receita")
 
-        # =====================================================
-        # INGREDIENTES ADICIONADOS
-        # =====================================================
+            linhas_preview = []
+            custo_total_preview = 0.0
+            custo_incompleto = False
 
-        if st.session_state["ingredientes_temp"]:
-
-            st.markdown(
-                "### 📋 Componentes cadastrados"
-            )
-
-            tabela = pd.DataFrame(
-                st.session_state[
-                    "ingredientes_temp"
-                ]
-            )
-
-            st.dataframe(
-                tabela,
-                use_container_width=True,
-                hide_index=True
-            )
-
-            # -------------------------------------------------
-            # CUSTO PRELIMINAR
-            # -------------------------------------------------
-
-            custo_atual = 0.0
-
-            for item in st.session_state[
-                "ingredientes_temp"
-            ]:
-
-                custo_atual += calcular_custo_item(
-                    item["ingrediente"],
+            for posicao, item in enumerate(temp):
+                custo_item, custo_info = calcular_custo_referencia(
+                    item["categoria"],
+                    item["tipo_base"],
                     item["quantidade"],
-                    item["unidade"]
+                    item["unidade"],
                 )
 
-            st.metric(
-                "Custo estimado do drink",
-                f"R$ {custo_atual:.2f}"
+                if custo_item is None:
+                    custo_incompleto = True
+                else:
+                    custo_total_preview += custo_item
+
+                linhas_preview.append({
+                    "#": posicao + 1,
+                    "Categoria": item["categoria"],
+                    "Base": item["tipo_base"],
+                    "Quantidade": item["quantidade"],
+                    "Unidade": item["unidade"],
+                    "Opções preço": custo_info["quantidade_opcoes"],
+                    "Custo ref.": custo_item,
+                })
+
+            st.dataframe(
+                pd.DataFrame(linhas_preview),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Custo ref.": st.column_config.NumberColumn(
+                        "Custo ref.", format="R$ %.4f"
+                    )
+                },
             )
 
-        # =====================================================
-        # SALVAR / CANCELAR
-        # =====================================================
+            st.metric(
+                "💰 Custo estimado do drink",
+                f"R$ {custo_total_preview:,.2f}",
+                help=(
+                    "Custo médio de referência das opções de marca/embalagem "
+                    "cadastradas. A marca real será escolhida no orçamento."
+                ),
+            )
 
-        col1, col2 = st.columns(2)
+            if custo_incompleto:
+                st.warning(
+                    "Algum componente não possui conversão de custo automática. "
+                    "A soma considera apenas os componentes calculáveis."
+                )
 
-        with col1:
+            col_rem1, col_rem2 = st.columns([3, 1])
+            with col_rem1:
+                remover_pos = st.selectbox(
+                    "Remover componente",
+                    list(range(1, len(temp) + 1)),
+                    format_func=lambda x: f"{x} - {temp[x-1]['tipo_base']}",
+                    key="remover_comp_receita_v3",
+                )
+            with col_rem2:
+                if st.button(
+                    "🗑️ Remover",
+                    use_container_width=True,
+                    key="remover_comp_btn_v3",
+                ):
+                    temp.pop(remover_pos - 1)
+                    st.rerun()
 
+        col_salvar, col_limpar = st.columns(2)
+
+        with col_salvar:
             if st.button(
                 "💾 Salvar Drink",
-                use_container_width=True
+                use_container_width=True,
+                key="salvar_drink_v3",
             ):
+                nome_final = (st.session_state["drink_nome_v3"] or drink).strip()
 
-                nome_final = (
-                    st.session_state["drink_nome"]
-                    or drink
-                ).strip()
-
-                if not nome_final:
-
+                if colunas_faltantes:
                     st.error(
-                        "Informe o nome do drink."
+                        "Execute primeiro o SQL de migração da tabela `receitas` "
+                        "para criar `categoria` e `tipo_base`."
                     )
-
-                elif not st.session_state[
-                    "ingredientes_temp"
-                ]:
-
-                    st.error(
-                        "Adicione pelo menos um ingrediente."
-                    )
-
+                elif not nome_final:
+                    st.error("Informe o nome do drink.")
+                elif not temp:
+                    st.error("Adicione pelo menos um componente.")
                 elif not modelo_copo.strip():
-
-                    st.error(
-                        "Informe o modelo do copo / taça."
-                    )
-
+                    st.error("Informe o modelo do copo / taça.")
                 else:
-
                     try:
-
-                        # -------------------------------------
-                        # REMOVE RECEITA ANTIGA
-                        # -------------------------------------
-
-                        supabase.table(
-                            "receitas"
-                        ).delete().eq(
-                            COLUNA_DRINK,
-                            nome_final
+                        supabase.table("receitas").delete().eq(
+                            COLUNA_DRINK, nome_final
                         ).execute()
 
-                        # -------------------------------------
-                        # INSERE NOVA RECEITA
-                        # -------------------------------------
-
-                        for item in st.session_state[
-                            "ingredientes_temp"
-                        ]:
-
-                            dados = {
-
+                        for item in temp:
+                            supabase.table("receitas").insert({
                                 COLUNA_DRINK: nome_final,
+                                "ingrediente": item["tipo_base"],
+                                "categoria": item["categoria"],
+                                "tipo_base": item["tipo_base"],
+                                "quantidade": float(item["quantidade"]),
+                                "unidade": item["unidade"],
+                                "tipo_copo": tipo_copo,
+                                "modelo_copo": modelo_copo.strip(),
+                            }).execute()
 
-                                "ingrediente":
-                                    item["ingrediente"],
-
-                                "quantidade":
-                                    item["quantidade"],
-
-                                "unidade":
-                                    item["unidade"],
-
-                                "tipo_copo":
-                                    tipo_copo,
-
-                                "modelo_copo":
-                                    modelo_copo.strip()
-                            }
-
-                            supabase.table(
-                                "receitas"
-                            ).insert(
-                                dados
-                            ).execute()
-
-                        st.success(
-                            "Drink salvo com sucesso!"
-                        )
-
-                        # -------------------------------------
-                        # LIMPA FORMULÁRIO
-                        # -------------------------------------
-
-                        st.session_state[
-                            "ingredientes_temp"
-                        ] = []
-
-                        st.session_state[
-                            "drink_nome"
-                        ] = ""
-
-                        st.session_state[
-                            "tipo_copo_temp"
-                        ] = "Alto"
-
-                        st.session_state[
-                            "modelo_copo_temp"
-                        ] = ""
-
+                        st.success("✅ Drink salvo e padronizado com sucesso!")
+                        limpar_cadastro_receita()
                         st.rerun()
-
                     except Exception as e:
+                        st.error(f"Erro ao salvar drink: {e}")
 
-                        st.error(
-                            f"Erro ao salvar drink: {e}"
-                        )
-
-        with col2:
-
+        with col_limpar:
             if st.button(
                 "❌ Limpar",
-                use_container_width=True
+                use_container_width=True,
+                key="limpar_drink_v3",
             ):
-
-                st.session_state[
-                    "ingredientes_temp"
-                ] = []
-
-                st.session_state[
-                    "drink_nome"
-                ] = ""
-
-                st.session_state[
-                    "tipo_copo_temp"
-                ] = "Alto"
-
-                st.session_state[
-                    "modelo_copo_temp"
-                ] = ""
-
+                limpar_cadastro_receita()
                 st.rerun()
 
     # =========================================================
-    # LISTA DE DRINKS
+    # ABA 2 — DRINKS CADASTRADOS
     # =========================================================
-
     with aba_lista:
-
         if df_receitas.empty:
-
-            st.info(
-                "Nenhum drink cadastrado."
-            )
-
+            st.info("Nenhum drink cadastrado.")
         else:
-
             drinks = sorted(
-                df_receitas[
-                    COLUNA_DRINK
-                ]
+                df_receitas[COLUNA_DRINK]
                 .dropna()
                 .astype(str)
-                .unique()
+                .unique(),
+                key=lambda x: chave_texto(x),
             )
 
-            for drink_nome in drinks:
+            filtro_drink = st.text_input(
+                "🔎 Pesquisar drink",
+                key="busca_drink_receitas_v3",
+            )
 
-                receita = df_receitas[
-                    df_receitas[
-                        COLUNA_DRINK
-                    ].astype(str)
-                    == drink_nome
+            if filtro_drink:
+                drinks = [
+                    d for d in drinks
+                    if chave_texto(filtro_drink) in chave_texto(d)
                 ]
 
-                custo_total = (
-                    calcular_custo_drink_atual(
-                        drink_nome,
-                        df_receitas
-                    )
-                )
-
-                # ---------------------------------------------
-                # INFORMAÇÕES DO COPO
-                # ---------------------------------------------
+            for drink_nome in drinks:
+                receita = df_receitas[
+                    df_receitas[COLUNA_DRINK].astype(str) == str(drink_nome)
+                ].copy()
 
                 tipo_copo_lista = ""
-
                 modelo_copo_lista = ""
 
                 if "tipo_copo" in receita.columns:
-
-                    valores = (
-                        receita["tipo_copo"]
-                        .dropna()
-                        .astype(str)
-                        .unique()
-                    )
-
+                    valores = receita["tipo_copo"].dropna().astype(str).unique()
                     if len(valores) > 0:
                         tipo_copo_lista = valores[0]
 
                 if "modelo_copo" in receita.columns:
-
-                    valores = (
-                        receita["modelo_copo"]
-                        .dropna()
-                        .astype(str)
-                        .unique()
-                    )
-
+                    valores = receita["modelo_copo"].dropna().astype(str).unique()
                     if len(valores) > 0:
                         modelo_copo_lista = valores[0]
 
-                # ---------------------------------------------
-                # LAYOUT
-                # ---------------------------------------------
+                with st.expander(f"🍸 {drink_nome}", expanded=False):
+                    cab1, cab2, cab3 = st.columns([4, 2, 1])
 
-                col1, col2, col3, col4 = st.columns(
-                    [6, 2, 1, 1]
-                )
+                    with cab1:
+                        if tipo_copo_lista:
+                            st.write(f"🥂 **Copo:** {tipo_copo_lista}")
+                        if modelo_copo_lista:
+                            st.write(f"📌 **Modelo:** {modelo_copo_lista}")
 
-                with col1:
-
-                    st.markdown(
-                        f"### 🍸 {drink_nome}"
-                    )
-
-                    if tipo_copo_lista:
-
-                        st.write(
-                            f"🥂 **Copo:** "
-                            f"{tipo_copo_lista}"
-                        )
-
-                    if modelo_copo_lista:
-
-                        st.write(
-                            f"📌 **Modelo:** "
-                            f"{modelo_copo_lista}"
-                        )
+                    custo_drink = 0.0
+                    custo_incompleto = False
+                    dados_componentes = []
 
                     for _, row in receita.iterrows():
+                        ingrediente = str(row.get("ingrediente", "") or "").strip()
+                        categoria = str(row.get("categoria", "") or "").strip()
+                        tipo_base = str(row.get("tipo_base", "") or "").strip()
+                        quantidade = numero_seguro(row.get("quantidade", 0))
+                        unidade = str(row.get("unidade", "") or "").strip()
 
-                        ingrediente = str(
-                            row["ingrediente"]
+                        categoria_exibida = categoria
+                        base_exibida = tipo_base
+
+                        if not categoria or not tipo_base:
+                            sugestao = sugerir_vinculo_antigo(ingrediente)
+                            if sugestao["status"] == "sugerido":
+                                categoria_exibida = "⚠️ " + sugestao["categoria"]
+                                base_exibida = sugestao["tipo_base"]
+                            else:
+                                categoria_exibida = "⚠️ Não revisado"
+                                base_exibida = ingrediente
+
+                        custo_item = None
+                        custo_info = {"quantidade_opcoes": 0}
+
+                        if categoria and tipo_base:
+                            custo_item, custo_info = calcular_custo_referencia(
+                                categoria,
+                                tipo_base,
+                                quantidade,
+                                unidade,
+                            )
+
+                        if custo_item is None:
+                            custo_incompleto = True
+                        else:
+                            custo_drink += custo_item
+
+                        dados_componentes.append({
+                            "Ingrediente": ingrediente,
+                            "Categoria": categoria_exibida,
+                            "Base": base_exibida,
+                            "Quantidade": quantidade,
+                            "Unidade": unidade,
+                            "Opções": custo_info.get("quantidade_opcoes", 0),
+                            "Custo ref.": custo_item,
+                        })
+
+                    with cab2:
+                        st.metric(
+                            "Custo unitário estimado",
+                            f"R$ {custo_drink:,.2f}",
+                            help="Custo médio de referência para produzir 1 drink.",
                         )
 
-                        quantidade = float(
-                            row["quantidade"]
-                        )
+                    with cab3:
+                        if st.button(
+                            "🗑️ Excluir",
+                            key=f"excluir_receita_v3_{drink_nome}",
+                            use_container_width=True,
+                        ):
+                            supabase.table("receitas").delete().eq(
+                                COLUNA_DRINK, drink_nome
+                            ).execute()
+                            st.rerun()
 
-                        unidade = str(
-                            row["unidade"]
-                        )
-
-                        st.write(
-                            f"• {ingrediente} - "
-                            f"{quantidade:g} {unidade}"
-                        )
-
-                with col2:
-
-                    st.metric(
-                        "Custo",
-                        f"R$ {custo_total:.2f}"
+                    st.dataframe(
+                        pd.DataFrame(dados_componentes),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Custo ref.": st.column_config.NumberColumn(
+                                "Custo ref.", format="R$ %.4f"
+                            )
+                        },
                     )
 
-                with col3:
+                    if custo_incompleto:
+                        st.caption(
+                            "⚠️ O custo unitário está parcial: há componente não "
+                            "revisado ou unidade sem conversão automática."
+                        )
 
-                    if st.button(
-                        "✏️",
-                        key=f"editar_{drink_nome}"
+    # =========================================================
+    # ABA 3 — REVISÃO / PENTE-FINO
+    # =========================================================
+    with aba_revisao:
+        st.subheader("🔎 Revisão das Receitas")
+        st.caption(
+            "Padronize receitas antigas sem escolher marca ou tamanho. "
+            "A revisão vincula cada componente somente à família/base correta."
+        )
+
+        if df_receitas.empty:
+            st.info("Nenhuma receita cadastrada.")
+        elif colunas_faltantes:
+            st.error("Execute primeiro o SQL de migração para habilitar a revisão.")
+        else:
+            drinks_revisao = sorted(
+                df_receitas[COLUNA_DRINK]
+                .dropna()
+                .astype(str)
+                .unique(),
+                key=lambda x: chave_texto(x),
+            )
+
+            drink_revisao = st.selectbox(
+                "Escolha o drink para revisar",
+                drinks_revisao,
+                key="drink_revisao_v3",
+            )
+
+            receita_rev = df_receitas[
+                df_receitas[COLUNA_DRINK].astype(str) == str(drink_revisao)
+            ].copy()
+
+            if "id" not in receita_rev.columns:
+                st.error(
+                    "A tabela `receitas` precisa possuir uma coluna `id` "
+                    "para salvar a revisão linha a linha."
+                )
+            else:
+                revisoes = []
+
+                for posicao, (_, linha) in enumerate(receita_rev.iterrows()):
+                    item_id = linha.get("id")
+                    ingrediente_atual = str(
+                        linha.get("ingrediente", "") or ""
+                    ).strip()
+                    categoria_atual = str(
+                        linha.get("categoria", "") or ""
+                    ).strip()
+                    tipo_base_atual = str(
+                        linha.get("tipo_base", "") or ""
+                    ).strip()
+                    quantidade_atual = numero_seguro(
+                        linha.get("quantidade", 0)
+                    )
+                    unidade_atual = str(
+                        linha.get("unidade", "") or ""
+                    ).strip()
+
+                    sugestao = sugerir_vinculo_antigo(ingrediente_atual)
+
+                    if (
+                        not categoria_atual
+                        and sugestao["status"] == "sugerido"
                     ):
+                        categoria_padrao = sugestao["categoria"]
+                    elif categoria_atual in CATEGORIAS_RECEITA:
+                        categoria_padrao = categoria_atual
+                    else:
+                        categoria_padrao = CATEGORIAS_RECEITA[0]
 
-                        st.session_state[
-                            "editar_receita"
-                        ] = drink_nome
+                    with st.container(border=True):
+                        st.markdown(f"#### {ingrediente_atual or 'Ingrediente sem nome'}")
 
-                        st.rerun()
+                        if sugestao["status"] == "sugerido" and not categoria_atual:
+                            st.caption(
+                                "💡 Correspondência exata encontrada. Confirme antes de salvar."
+                            )
+                        elif sugestao["status"] == "ambiguo":
+                            st.warning(
+                                "Há mais de uma correspondência exata possível. "
+                                "Escolha manualmente."
+                            )
+                        elif sugestao["status"] == "nao_encontrado" and not categoria_atual:
+                            st.warning(
+                                "Não foi encontrada correspondência exata. Selecione manualmente."
+                            )
 
-                with col4:
+                        col_a, col_b = st.columns(2)
 
-                    if st.button(
-                        "🗑️",
-                        key=f"excluir_{drink_nome}"
-                    ):
+                        with col_a:
+                            categoria_escolhida = st.selectbox(
+                                "Categoria",
+                                CATEGORIAS_RECEITA,
+                                index=CATEGORIAS_RECEITA.index(categoria_padrao),
+                                key=f"rev_cat_{drink_revisao}_{item_id}_{posicao}",
+                            )
 
-                        supabase.table(
-                            "receitas"
-                        ).delete().eq(
-                            COLUNA_DRINK,
-                            drink_nome
-                        ).execute()
+                        bases_rev = obter_bases_categoria(categoria_escolhida)
+                        base_sugerida = tipo_base_atual
 
-                        st.rerun()
+                        if (
+                            not base_sugerida
+                            and sugestao["status"] == "sugerido"
+                            and sugestao["categoria"] == categoria_escolhida
+                        ):
+                            base_sugerida = sugestao["tipo_base"]
+
+                        if base_sugerida and base_sugerida not in bases_rev:
+                            bases_rev = [base_sugerida] + bases_rev
+
+                        with col_b:
+                            if bases_rev:
+                                indice_base = 0
+                                for i, base in enumerate(bases_rev):
+                                    if chave_texto(base) == chave_texto(base_sugerida):
+                                        indice_base = i
+                                        break
+
+                                base_escolhida = st.selectbox(
+                                    "Base do ingrediente",
+                                    bases_rev,
+                                    index=indice_base,
+                                    key=(
+                                        f"rev_base_{drink_revisao}_{item_id}_{posicao}_"
+                                        + chave_texto(categoria_escolhida)
+                                        .replace(" ", "_")
+                                        .replace("/", "_")
+                                    ),
+                                )
+                            else:
+                                base_escolhida = ""
+                                st.selectbox(
+                                    "Base do ingrediente",
+                                    ["Nenhum cadastro disponível"],
+                                    disabled=True,
+                                    key=f"rev_base_vazia_{drink_revisao}_{item_id}_{posicao}",
+                                )
+
+                        col_q, col_u = st.columns(2)
+
+                        with col_q:
+                            quantidade_escolhida = st.number_input(
+                                "Quantidade por drink",
+                                min_value=0.0,
+                                value=float(quantidade_atual),
+                                step=1.0,
+                                format="%.2f",
+                                key=f"rev_qtd_{drink_revisao}_{item_id}_{posicao}",
+                            )
+
+                        with col_u:
+                            unidade_inicial = (
+                                unidade_atual
+                                if unidade_atual in UNIDADES_RECEITA
+                                else unidade_padrao_categoria(categoria_escolhida)
+                            )
+                            unidade_escolhida = st.selectbox(
+                                "Unidade",
+                                UNIDADES_RECEITA,
+                                index=UNIDADES_RECEITA.index(unidade_inicial),
+                                key=f"rev_un_{drink_revisao}_{item_id}_{posicao}",
+                            )
+
+                        custo_rev = None
+                        custo_info_rev = None
+
+                        if base_escolhida:
+                            custo_rev, custo_info_rev = calcular_custo_referencia(
+                                categoria_escolhida,
+                                base_escolhida,
+                                quantidade_escolhida,
+                                unidade_escolhida,
+                            )
+
+                        if custo_rev is not None:
+                            st.success(
+                                f"✅ Vinculado | custo médio por drink: R$ {custo_rev:,.4f}"
+                            )
+                        elif (
+                            base_escolhida
+                            and custo_info_rev
+                            and custo_info_rev["encontrado"]
+                        ):
+                            st.info(
+                                "ℹ️ Vínculo encontrado, mas a unidade da receita "
+                                "não possui conversão automática de custo. "
+                                f"Base de preço: {custo_info_rev['unidade_base']}."
+                            )
+                        elif base_escolhida:
+                            st.error(
+                                "❌ A base escolhida não possui preço válido cadastrado."
+                            )
+
+                        revisoes.append({
+                            "id": item_id,
+                            "ingrediente": base_escolhida,
+                            "categoria": categoria_escolhida,
+                            "tipo_base": base_escolhida,
+                            "quantidade": float(quantidade_escolhida),
+                            "unidade": unidade_escolhida,
+                        })
 
                 st.divider()
 
-    # =========================================================
-    # EDIÇÃO
-    # =========================================================
-
-    if "editar_receita" in st.session_state:
-
-        drink_editando = st.session_state[
-            "editar_receita"
-        ]
-
-        st.markdown("---")
-
-        st.subheader(
-            f"✏️ Editando: {drink_editando}"
-        )
-
-        receita_edicao = df_receitas[
-            df_receitas[
-                COLUNA_DRINK
-            ].astype(str)
-            == str(drink_editando)
-        ].copy()
-
-        # =====================================================
-        # DADOS DO COPO
-        # =====================================================
-
-        tipo_copo_atual = ""
-
-        modelo_copo_atual = ""
-
-        if "tipo_copo" in receita_edicao.columns:
-
-            valores = (
-                receita_edicao["tipo_copo"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-
-            if len(valores) > 0:
-                tipo_copo_atual = valores[0]
-
-        if "modelo_copo" in receita_edicao.columns:
-
-            valores = (
-                receita_edicao["modelo_copo"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-
-            if len(valores) > 0:
-                modelo_copo_atual = valores[0]
-
-        # =====================================================
-        # COPOS
-        # =====================================================
-
-        col1, col2 = st.columns(2)
-
-        tipos_copo_edicao = [
-            "Alto",
-            "Baixo",
-            "Taça",
-            "Coupé",
-            "Martini",
-            "Caneca",
-            "Outro"
-        ]
-
-        with col1:
-
-            tipo_copo_editado = st.selectbox(
-                "Tipo de copo",
-                tipos_copo_edicao,
-                index=(
-                    tipos_copo_edicao.index(
-                        tipo_copo_atual
-                    )
-                    if tipo_copo_atual
-                    in tipos_copo_edicao
-                    else 0
-                ),
-                key="tipo_copo_edicao"
-            )
-
-        with col2:
-
-            modelo_copo_editado = st.text_input(
-                "Modelo do copo / taça",
-                value=modelo_copo_atual,
-                key="modelo_copo_edicao"
-            )
-
-        # =====================================================
-        # INGREDIENTES
-        # =====================================================
-
-        receita_para_editar = receita_edicao[
-            [
-                "ingrediente",
-                "quantidade",
-                "unidade"
-            ]
-        ].reset_index(drop=True)
-
-        editado = st.data_editor(
-
-            receita_para_editar,
-
-            use_container_width=True,
-
-            num_rows="dynamic",
-
-            hide_index=True,
-
-            column_config={
-
-                "ingrediente":
-                    st.column_config.TextColumn(
-                        "Ingrediente"
-                    ),
-
-                "quantidade":
-                    st.column_config.NumberColumn(
-                        "Quantidade",
-                        min_value=0.0
-                    ),
-
-                "unidade":
-                    st.column_config.SelectboxColumn(
-                        "Unidade",
-                        options=[
-                            "ml",
-                            "g",
-                            "un",
-                            "gota",
-                            "fatia",
-                            "guarnição"
-                        ]
-                    )
-            },
-
-            key="editor_receita"
-
-        )
-
-        # =====================================================
-        # CUSTO DA EDIÇÃO
-        # =====================================================
-
-        custo_edicao = 0.0
-
-        for _, linha in editado.iterrows():
-
-            ingrediente = str(
-                linha["ingrediente"]
-            ).strip()
-
-            if not ingrediente:
-                continue
-
-            try:
-
-                quantidade = float(
-                    linha["quantidade"]
-                )
-
-            except:
-
-                quantidade = 0
-
-            unidade = str(
-                linha["unidade"]
-            )
-
-            custo_edicao += calcular_custo_item(
-                ingrediente,
-                quantidade,
-                unidade
-            )
-
-        st.metric(
-            "Custo do drink",
-            f"R$ {custo_edicao:.2f}"
-        )
-
-        # =====================================================
-        # SALVAR E CANCELAR
-        # =====================================================
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            if st.button(
-                "💾 Salvar alterações",
-                use_container_width=True
-            ):
-
-                if not modelo_copo_editado.strip():
-
-                    st.error(
-                        "Informe o modelo do copo / taça."
-                    )
-
-                else:
-
-                    try:
-
-                        # -------------------------------------
-                        # REMOVE RECEITA ANTIGA
-                        # -------------------------------------
-
-                        supabase.table(
-                            "receitas"
-                        ).delete().eq(
-                            COLUNA_DRINK,
-                            drink_editando
-                        ).execute()
-
-                        # -------------------------------------
-                        # REGRAVA RECEITA
-                        # -------------------------------------
-
-                        for _, linha in editado.iterrows():
-
-                            ingrediente = str(
-                                linha["ingrediente"]
-                            ).strip()
-
-                            if not ingrediente:
-                                continue
-
-                            quantidade = float(
-                                linha["quantidade"]
-                            )
-
-                            if quantidade <= 0:
-                                continue
-
-                            supabase.table(
-                                "receitas"
-                            ).insert({
-
-                                COLUNA_DRINK:
-                                    drink_editando,
-
-                                "ingrediente":
-                                    normalizar_nome(
-                                        ingrediente
-                                    ),
-
-                                "quantidade":
-                                    quantidade,
-
-                                "unidade":
-                                    str(
-                                        linha["unidade"]
-                                    ),
-
-                                "tipo_copo":
-                                    tipo_copo_editado,
-
-                                "modelo_copo":
-                                    modelo_copo_editado.strip()
-
-                            }).execute()
-
-                        del st.session_state[
-                            "editar_receita"
-                        ]
-
-                        st.success(
-                            "Receita atualizada com sucesso!"
-                        )
-
-                        st.rerun()
-
-                    except Exception as e:
-
+                if st.button(
+                    "💾 Salvar revisão deste drink",
+                    use_container_width=True,
+                    key="salvar_revisao_receita_v3",
+                ):
+                    problemas = [
+                        r for r in revisoes
+                        if not str(r["tipo_base"]).strip() or r["quantidade"] <= 0
+                    ]
+
+                    if problemas:
                         st.error(
-                            f"Erro ao atualizar receita: {e}"
+                            "Existem componentes sem base definida ou com quantidade inválida."
                         )
+                    else:
+                        try:
+                            for revisao in revisoes:
+                                supabase.table("receitas").update({
+                                    # Também padroniza o nome para manter compatibilidade
+                                    # com o orçamento atual durante a transição.
+                                    "ingrediente": revisao["tipo_base"],
+                                    "categoria": revisao["categoria"],
+                                    "tipo_base": revisao["tipo_base"],
+                                    "quantidade": revisao["quantidade"],
+                                    "unidade": revisao["unidade"],
+                                }).eq("id", int(revisao["id"])).execute()
 
-        with col2:
+                            st.success("✅ Receita revisada e padronizada!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao salvar revisão: {e}")
 
-            if st.button(
-                "❌ Cancelar",
-                use_container_width=True
-            ):
+                st.divider()
+                st.markdown("### 📊 Status geral das receitas")
 
-                del st.session_state[
-                    "editar_receita"
-                ]
+                status_receitas = []
 
-                st.rerun()
+                for nome_drink in drinks_revisao:
+                    rec = df_receitas[
+                        df_receitas[COLUNA_DRINK].astype(str) == str(nome_drink)
+                    ]
+
+                    total_itens = len(rec)
+                    revisados = 0
+                    custo_calculavel = 0
+
+                    for _, linha in rec.iterrows():
+                        categoria = str(linha.get("categoria", "") or "").strip()
+                        base = str(linha.get("tipo_base", "") or "").strip()
+                        quantidade = numero_seguro(linha.get("quantidade", 0))
+                        unidade = str(linha.get("unidade", "") or "").strip()
+
+                        if categoria and base:
+                            revisados += 1
+                            custo, _ = calcular_custo_referencia(
+                                categoria,
+                                base,
+                                quantidade,
+                                unidade,
+                            )
+                            if custo is not None:
+                                custo_calculavel += 1
+
+                    status_receitas.append({
+                        "Drink": nome_drink,
+                        "Componentes": total_itens,
+                        "Revisados": revisados,
+                        "Com custo": custo_calculavel,
+                        "Status": (
+                            "✅ Validada"
+                            if total_itens > 0 and revisados == total_itens
+                            else "⚠️ Revisar"
+                        ),
+                    })
+
+                st.dataframe(
+                    pd.DataFrame(status_receitas),
+                    use_container_width=True,
+                    hide_index=True,
+                )
                 
 elif menu == "Orçamentos":
     
