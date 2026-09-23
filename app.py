@@ -6260,7 +6260,12 @@ elif menu == "Receitas":
                 key=lambda x: chave_texto(x),
             )
 
-        if categoria in ["Bebida", "Artesanal"]:
+        if categoria == "Bebida":
+            # A receita fica vinculada SOMENTE ao TIPO da bebida.
+            # Nome/marca e tamanho de embalagem nunca entram como base da receita.
+            return valores_unicos(df_base, "tipo")
+
+        if categoria == "Artesanal":
             tipos = valores_unicos(df_base, "tipo")
             nomes_sem_tipo = []
 
@@ -6290,6 +6295,21 @@ elif menu == "Receitas":
 
         chave_base = chave_texto(tipo_base)
         mascara = pd.Series(False, index=df_base.index)
+
+        if categoria == "Bebida":
+            # Para bebidas, o vínculo é exclusivamente pelo TIPO.
+            # A marca/nome será escolhida apenas no orçamento.
+            if "tipo" not in df_base.columns:
+                return pd.DataFrame()
+
+            mascara = (
+                df_base["tipo"]
+                .fillna("")
+                .astype(str)
+                .apply(chave_texto)
+                == chave_base
+            )
+            return df_base[mascara].copy()
 
         if "tipo" in df_base.columns:
             mascara = mascara | (
@@ -6399,11 +6419,15 @@ elif menu == "Receitas":
             for _, linha in df_bebidas.iterrows():
                 nome = str(linha.get("nome", "") or "").strip()
                 tipo = str(linha.get("tipo", "") or "").strip()
-                if chave and (
+
+                # Mesmo que a receita antiga tenha o NOME/MARCA,
+                # a sugestão sempre converte para o TIPO da bebida.
+                # Se o cadastro não possui tipo, não criamos vínculo automático.
+                if tipo and chave and (
                     chave_texto(nome) == chave
                     or chave_texto(tipo) == chave
                 ):
-                    candidatos.append(("Bebida", tipo or nome))
+                    candidatos.append(("Bebida", tipo))
 
         if not df_insumos.empty:
             for _, linha in df_insumos.iterrows():
@@ -6512,8 +6536,9 @@ elif menu == "Receitas":
     with aba_cadastro:
         st.subheader("🍸 Cadastro de Drink")
         st.caption(
-            "A receita define a BASE do ingrediente. Marca e tamanho da "
-            "embalagem continuam sendo escolhidos dinamicamente no orçamento."
+            "A receita define somente a BASE/TIPO do ingrediente. Para bebidas, "
+            "marca e tamanho da embalagem nunca ficam presos à receita e serão "
+            "escolhidos apenas no orçamento."
         )
 
         drink = st.text_input(
@@ -6580,10 +6605,17 @@ elif menu == "Receitas":
                 )
 
         if not bases_disponiveis:
-            st.warning(
-                f"Não há base disponível para **{categoria_nova}**. "
-                "Cadastre primeiro o item na Precificação."
-            )
+            if categoria_nova == "Bebida":
+                st.warning(
+                    "Não há **Tipos de bebida** disponíveis. Na Precificação, "
+                    "preencha o campo **Tipo do item** (ex.: Gin, Vodka, Rum). "
+                    "Marca e tamanho não são usados como base da receita."
+                )
+            else:
+                st.warning(
+                    f"Não há base disponível para **{categoria_nova}**. "
+                    "Cadastre primeiro o item na Precificação."
+                )
 
         unidade_sugerida = unidade_padrao_categoria(categoria_nova)
         c3, c4, c5 = st.columns([2, 2, 1])
@@ -6962,7 +6994,8 @@ elif menu == "Receitas":
         st.subheader("🔎 Revisão das Receitas")
         st.caption(
             "Padronize receitas antigas sem escolher marca ou tamanho. "
-            "A revisão vincula cada componente somente à família/base correta."
+            "Para bebidas, a revisão vincula cada componente somente ao TIPO "
+            "cadastrado na Precificação."
         )
 
         if df_receitas.empty:
@@ -7057,13 +7090,35 @@ elif menu == "Receitas":
                         base_sugerida = tipo_base_atual
 
                         if (
-                            not base_sugerida
-                            and sugestao["status"] == "sugerido"
+                            sugestao["status"] == "sugerido"
                             and sugestao["categoria"] == categoria_escolhida
                         ):
-                            base_sugerida = sugestao["tipo_base"]
+                            # Para bebidas antigas que guardavam marca/nome,
+                            # preferimos sempre a sugestão convertida para o TIPO.
+                            if (
+                                categoria_escolhida == "Bebida"
+                                and not any(
+                                    chave_texto(base) == chave_texto(base_sugerida)
+                                    for base in bases_rev
+                                )
+                            ):
+                                base_sugerida = sugestao["tipo_base"]
+                            elif not base_sugerida:
+                                base_sugerida = sugestao["tipo_base"]
 
-                        if base_sugerida and base_sugerida not in bases_rev:
+                        if categoria_escolhida == "Bebida":
+                            # Nunca injeta marca/nome antigo como opção de base.
+                            # Se não for um TIPO existente na Precificação,
+                            # o usuário precisa escolher um tipo válido.
+                            if not any(
+                                chave_texto(base) == chave_texto(base_sugerida)
+                                for base in bases_rev
+                            ):
+                                base_sugerida = ""
+                        elif base_sugerida and not any(
+                            chave_texto(base) == chave_texto(base_sugerida)
+                            for base in bases_rev
+                        ):
                             bases_rev = [base_sugerida] + bases_rev
 
                         with col_b:
@@ -7240,6 +7295,7 @@ elif menu == "Receitas":
                     use_container_width=True,
                     hide_index=True,
                 )
+
                 
 elif menu == "Orçamentos":
     
