@@ -6399,12 +6399,14 @@ elif menu == "Receitas":
 
     def calcular_custo_referencia(categoria, tipo_base, quantidade, unidade):
         """
-        Custo médio de referência de UM drink.
-        A marca/embalagem real continua sendo escolhida no orçamento.
+        Custo MÍNIMO de referência de UM drink.
+        Para cada base, utiliza a opção cadastrada com menor custo proporcional.
+        A receita continua vinculada somente ao tipo/base; marca e embalagem
+        permanecem livres para simulação e para escolha posterior no orçamento.
         """
         custo_base = custo_base_unitario(categoria, tipo_base)
 
-        if not custo_base["encontrado"] or custo_base["medio"] is None:
+        if not custo_base["encontrado"] or custo_base["min"] is None:
             return None, custo_base
 
         if str(unidade) != custo_base["unidade_base"]:
@@ -6412,9 +6414,63 @@ elif menu == "Receitas":
             return None, custo_base
 
         return (
-            numero_seguro(quantidade) * custo_base["medio"],
+            numero_seguro(quantidade) * custo_base["min"],
             custo_base,
         )
+
+    def custo_componente_por_opcao(categoria, linha_opcao, quantidade, unidade):
+        """Calcula o custo do componente usando uma linha específica da precificação."""
+        quantidade = numero_seguro(quantidade)
+        preco = numero_seguro(linha_opcao.get("preco", 0))
+
+        if categoria in ["Bebida", "Artesanal"]:
+            if str(unidade) != "ml":
+                return None
+            volume = numero_seguro(linha_opcao.get("quantidade", 0))
+            if volume <= 0:
+                return None
+            return quantidade * (preco / volume)
+
+        if categoria in ["Fruta / Insumo", "Gelo"]:
+            if str(unidade) != "g":
+                return None
+            return quantidade * (preco / 1000)
+
+        return None
+
+    def faixa_custo_drink(receita):
+        """Retorna custo mínimo, médio e máximo do drink sem fixar marcas."""
+        totais = {"min": 0.0, "medio": 0.0, "max": 0.0}
+        completo = True
+
+        for _, row in receita.iterrows():
+            categoria = texto_seguro(row.get("categoria", ""))
+            tipo_base = texto_seguro(row.get("tipo_base", ""))
+            quantidade = numero_seguro(row.get("quantidade", 0))
+            unidade = texto_seguro(row.get("unidade", ""))
+
+            if not categoria or not tipo_base:
+                completo = False
+                continue
+
+            info = custo_base_unitario(categoria, tipo_base)
+
+            if (
+                not info.get("encontrado")
+                or info.get("min") is None
+                or info.get("medio") is None
+                or info.get("max") is None
+                or unidade != info.get("unidade_base")
+            ):
+                completo = False
+                continue
+
+            totais["min"] += quantidade * info["min"]
+            totais["medio"] += quantidade * info["medio"]
+            totais["max"] += quantidade * info["max"]
+
+        totais["completo"] = completo
+        return totais
 
     def sugerir_vinculo_antigo(ingrediente):
         """
@@ -6763,8 +6819,8 @@ elif menu == "Receitas":
             if info_custo["encontrado"]:
                 if custo_previa is not None:
                     st.caption(
-                        f"💰 Custo médio de referência deste componente: "
-                        f"**R$ {custo_previa:,.4f}** "
+                        f"💰 Custo mínimo de referência deste componente: "
+                        f"**R$ {custo_previa:,.2f}** "
                         f"({info_custo['quantidade_opcoes']} opção(ões) de preço)"
                     )
                 else:
@@ -7063,9 +7119,9 @@ elif menu == "Receitas":
             k2.metric("✅ Validados", total_validados)
             k3.metric("⚠️ Pendentes", total_pendentes)
             k4.metric(
-                "💰 Custo médio ref.",
+                "💰 Custo base médio",
                 f"R$ {custo_medio:,.2f}",
-                help="Média somente das receitas com custo de referência completo.",
+                help="Média dos custos mínimos das receitas com referência completa.",
             )
 
             st.divider()
@@ -7078,7 +7134,7 @@ elif menu == "Receitas":
             with f1:
                 filtro_drink = st.text_input(
                     "🔎 Pesquisar drink",
-                    key="busca_drink_receitas_v8",
+                    key="busca_drink_receitas_v9",
                     placeholder="Digite parte do nome do drink...",
                 )
 
@@ -7086,7 +7142,7 @@ elif menu == "Receitas":
                 filtro_status = st.selectbox(
                     "Status",
                     ["Todos", "✅ Validados", "⚠️ Pendentes"],
-                    key="filtro_status_receitas_v8",
+                    key="filtro_status_receitas_v9",
                 )
 
             drinks = drinks_todos.copy()
@@ -7176,13 +7232,13 @@ elif menu == "Receitas":
                         st.metric(
                             "Custo unitário estimado",
                             f"R$ {custo_drink:,.2f}",
-                            help="Custo médio de referência para produzir 1 drink.",
+                            help="Custo mínimo de referência para produzir 1 drink, usando a opção proporcionalmente mais barata de cada base.",
                         )
 
                     with acao1:
                         if st.button(
                             "✏️ Editar",
-                            key=f"editar_receita_v8_{drink_nome}",
+                            key=f"editar_receita_v9_{drink_nome}",
                             use_container_width=True,
                         ):
                             iniciar_edicao_receita(drink_nome)
@@ -7191,7 +7247,7 @@ elif menu == "Receitas":
                     with acao2:
                         if st.button(
                             "🗑️ Excluir",
-                            key=f"excluir_receita_v8_{drink_nome}",
+                            key=f"excluir_receita_v9_{drink_nome}",
                             use_container_width=True,
                         ):
                             supabase.table("receitas").delete().eq(
@@ -7243,6 +7299,148 @@ elif menu == "Receitas":
                             "⚠️ Custo parcial: existe componente pendente ou unidade "
                             "sem conversão automática."
                         )
+
+                    # -------------------------------------------------
+                    # SIMULADOR DE MARCAS / VARIAÇÃO DE CUSTO
+                    # -------------------------------------------------
+                    bebidas_receita = []
+                    for posicao_sim, (_, linha_sim) in enumerate(receita.iterrows()):
+                        categoria_sim = texto_seguro(linha_sim.get("categoria", ""))
+                        base_sim = texto_seguro(linha_sim.get("tipo_base", ""))
+                        if categoria_sim == "Bebida" and base_sim:
+                            bebidas_receita.append((posicao_sim, linha_sim))
+
+                    if bebidas_receita and not vinculo_pendente:
+                        with st.expander("🎚️ Simular marcas e comparar custo", expanded=False):
+                            st.caption(
+                                "A receita continua presa somente ao TIPO/BASE. "
+                                "As marcas abaixo servem apenas para simular o custo unitário."
+                            )
+
+                            faixa = faixa_custo_drink(receita)
+                            custo_simulado = 0.0
+                            simulacao_completa = True
+                            linhas_simulacao = []
+
+                            for posicao_sim, (_, linha_sim) in enumerate(receita.iterrows()):
+                                categoria_sim = texto_seguro(linha_sim.get("categoria", ""))
+                                base_sim = texto_seguro(linha_sim.get("tipo_base", ""))
+                                qtd_sim = numero_seguro(linha_sim.get("quantidade", 0))
+                                unidade_sim = texto_seguro(linha_sim.get("unidade", ""))
+
+                                if not categoria_sim or not base_sim:
+                                    simulacao_completa = False
+                                    continue
+
+                                if categoria_sim != "Bebida":
+                                    custo_outro, _ = calcular_custo_referencia(
+                                        categoria_sim, base_sim, qtd_sim, unidade_sim
+                                    )
+                                    if custo_outro is None:
+                                        simulacao_completa = False
+                                    else:
+                                        custo_simulado += custo_outro
+                                    continue
+
+                                opcoes_sim = localizar_opcoes_base("Bebida", base_sim).copy()
+
+                                registros_validos = []
+                                for idx_opcao, linha_opcao in opcoes_sim.iterrows():
+                                    custo_opcao = custo_componente_por_opcao(
+                                        "Bebida", linha_opcao, qtd_sim, unidade_sim
+                                    )
+                                    if custo_opcao is None:
+                                        continue
+
+                                    nome_opcao = texto_seguro(linha_opcao.get("nome", "")) or base_sim
+                                    embalagem = numero_seguro(linha_opcao.get("quantidade", 0))
+                                    preco_opcao = numero_seguro(linha_opcao.get("preco", 0))
+                                    registro_id = linha_opcao.get("id", idx_opcao)
+
+                                    rotulo = (
+                                        f"{nome_opcao} | {embalagem:g} ml | "
+                                        f"R$ {preco_opcao:,.2f} | no drink: R$ {custo_opcao:,.2f}"
+                                    )
+
+                                    registros_validos.append({
+                                        "id": registro_id,
+                                        "nome": nome_opcao,
+                                        "embalagem": embalagem,
+                                        "preco": preco_opcao,
+                                        "custo": custo_opcao,
+                                        "rotulo": rotulo,
+                                    })
+
+                                registros_validos = sorted(
+                                    registros_validos,
+                                    key=lambda x: (x["custo"], chave_texto(x["nome"])),
+                                )
+
+                                if not registros_validos:
+                                    simulacao_completa = False
+                                    st.warning(
+                                        f"Sem opção de preço válida para **{base_sim}**."
+                                    )
+                                    continue
+
+                                opcoes_rotulo = [r["rotulo"] for r in registros_validos]
+                                escolha_rotulo = st.selectbox(
+                                    f"{base_sim} — {qtd_sim:g} {unidade_sim}",
+                                    opcoes_rotulo,
+                                    index=0,
+                                    key=(
+                                        f"sim_marca_v9_{chave_texto(drink_nome)}_"
+                                        f"{posicao_sim}_{chave_texto(base_sim)}"
+                                    ),
+                                )
+                                escolhido = next(
+                                    r for r in registros_validos
+                                    if r["rotulo"] == escolha_rotulo
+                                )
+
+                                custo_simulado += escolhido["custo"]
+                                linhas_simulacao.append({
+                                    "Base": base_sim,
+                                    "Marca escolhida": escolhido["nome"],
+                                    "Embalagem (ml)": escolhido["embalagem"],
+                                    "Preço": escolhido["preco"],
+                                    "Custo no drink": escolhido["custo"],
+                                })
+
+                            s1, s2, s3, s4 = st.columns(4)
+                            s1.metric("💚 Mínimo", f"R$ {faixa['min']:,.2f}")
+                            s2.metric("🎯 Simulado", f"R$ {custo_simulado:,.2f}")
+                            s3.metric("📊 Médio", f"R$ {faixa['medio']:,.2f}")
+                            s4.metric("🔺 Máximo", f"R$ {faixa['max']:,.2f}")
+
+                            if faixa["min"] > 0:
+                                variacao_sim = custo_simulado - faixa["min"]
+                                percentual_sim = (variacao_sim / faixa["min"]) * 100
+                                st.caption(
+                                    f"Variação da seleção contra o menor custo: "
+                                    f"R$ {variacao_sim:,.2f} ({percentual_sim:+.1f}%)."
+                                )
+
+                            if linhas_simulacao:
+                                st.dataframe(
+                                    pd.DataFrame(linhas_simulacao),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    column_config={
+                                        "Preço": st.column_config.NumberColumn(
+                                            "Preço", format="R$ %.2f"
+                                        ),
+                                        "Custo no drink": st.column_config.NumberColumn(
+                                            "Custo no drink", format="R$ %.2f"
+                                        ),
+                                    },
+                                )
+
+                            if not simulacao_completa:
+                                st.caption(
+                                    "⚠️ A simulação está parcial porque algum componente "
+                                    "não possui preço/conversão válida."
+                                )
 
             # =====================================================
             # EDITOR DO DRINK SELECIONADO
@@ -7439,7 +7637,7 @@ elif menu == "Receitas":
                             else:
                                 custo_total_edicao += custo_item_ed
                                 st.caption(
-                                    f"💰 Custo de referência: R$ {custo_item_ed:,.4f} "
+                                    f"💰 Custo de referência: R$ {custo_item_ed:,.2f} "
                                     f"| {info_item_ed.get('quantidade_opcoes', 0)} opção(ões)"
                                 )
                         else:
@@ -8195,8 +8393,8 @@ elif menu == "Receitas":
 
                         if custo_rev is not None:
                             st.success(
-                                f"✅ Vínculo escolhido | custo médio por drink: "
-                                f"R$ {custo_rev:,.4f}"
+                                f"✅ Vínculo escolhido | custo mínimo por drink: "
+                                f"R$ {custo_rev:,.2f}"
                             )
                         elif (
                             base_escolhida
