@@ -6955,7 +6955,7 @@ elif menu == "Receitas":
         if df_receitas.empty:
             st.info("Nenhum drink cadastrado.")
         else:
-            drinks = sorted(
+            drinks_todos = sorted(
                 df_receitas[COLUNA_DRINK]
                 .dropna()
                 .astype(str)
@@ -6963,10 +6963,133 @@ elif menu == "Receitas":
                 key=lambda x: chave_texto(x),
             )
 
-            filtro_drink = st.text_input(
-                "🔎 Pesquisar drink",
-                key="busca_drink_receitas_v3",
+            # -----------------------------------------------------
+            # FUNÇÃO VISUAL — RESUMO DO DRINK
+            # -----------------------------------------------------
+            def montar_resumo_visual_drink(drink_nome):
+                receita = df_receitas[
+                    df_receitas[COLUNA_DRINK].astype(str) == str(drink_nome)
+                ].copy()
+
+                custo_drink = 0.0
+                custo_incompleto = False
+                vinculo_pendente = False
+                dados_componentes = []
+
+                for _, row in receita.iterrows():
+                    ingrediente = texto_seguro(row.get("ingrediente", ""))
+                    categoria = texto_seguro(row.get("categoria", ""))
+                    tipo_base = texto_seguro(row.get("tipo_base", ""))
+                    quantidade = numero_seguro(row.get("quantidade", 0))
+                    unidade = texto_seguro(row.get("unidade", ""))
+
+                    categoria_exibida = categoria
+                    base_exibida = tipo_base
+
+                    if not categoria or not tipo_base:
+                        vinculo_pendente = True
+                        sugestao = sugerir_vinculo_antigo(ingrediente)
+                        if sugestao["status"] == "sugerido":
+                            categoria_exibida = "⚠️ " + sugestao["categoria"]
+                            base_exibida = sugestao["tipo_base"]
+                        else:
+                            categoria_exibida = "⚠️ Pendente"
+                            base_exibida = "Pendente"
+
+                    custo_item = None
+                    custo_info = {"quantidade_opcoes": 0}
+
+                    if categoria and tipo_base:
+                        custo_item, custo_info = calcular_custo_referencia(
+                            categoria,
+                            tipo_base,
+                            quantidade,
+                            unidade,
+                        )
+
+                    if custo_item is None:
+                        custo_incompleto = True
+                    else:
+                        custo_drink += custo_item
+
+                    dados_componentes.append({
+                        "Ingrediente": ingrediente,
+                        "Categoria": categoria_exibida,
+                        "Base": base_exibida,
+                        "Quantidade": quantidade,
+                        "Unidade": unidade,
+                        "Opções": int(custo_info.get("quantidade_opcoes", 0) or 0),
+                        "Custo ref.": custo_item,
+                    })
+
+                return {
+                    "receita": receita,
+                    "custo": custo_drink,
+                    "custo_incompleto": custo_incompleto,
+                    "vinculo_pendente": vinculo_pendente,
+                    "componentes": dados_componentes,
+                }
+
+            resumos_drinks = {
+                drink_nome: montar_resumo_visual_drink(drink_nome)
+                for drink_nome in drinks_todos
+            }
+
+            total_drinks_cadastrados = len(drinks_todos)
+            total_validados = sum(
+                1 for dados in resumos_drinks.values()
+                if not dados["vinculo_pendente"]
             )
+            total_pendentes = total_drinks_cadastrados - total_validados
+
+            custos_completos = [
+                dados["custo"]
+                for dados in resumos_drinks.values()
+                if not dados["custo_incompleto"]
+            ]
+
+            custo_medio = (
+                sum(custos_completos) / len(custos_completos)
+                if custos_completos else 0.0
+            )
+
+            # -----------------------------------------------------
+            # RESUMO DA BASE
+            # -----------------------------------------------------
+            st.markdown("### 📊 Visão geral das receitas")
+
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("🍸 Drinks", total_drinks_cadastrados)
+            k2.metric("✅ Validados", total_validados)
+            k3.metric("⚠️ Pendentes", total_pendentes)
+            k4.metric(
+                "💰 Custo médio ref.",
+                f"R$ {custo_medio:,.2f}",
+                help="Média somente das receitas com custo de referência completo.",
+            )
+
+            st.divider()
+
+            # -----------------------------------------------------
+            # BUSCA E FILTRO
+            # -----------------------------------------------------
+            f1, f2 = st.columns([3, 1])
+
+            with f1:
+                filtro_drink = st.text_input(
+                    "🔎 Pesquisar drink",
+                    key="busca_drink_receitas_v8",
+                    placeholder="Digite parte do nome do drink...",
+                )
+
+            with f2:
+                filtro_status = st.selectbox(
+                    "Status",
+                    ["Todos", "✅ Validados", "⚠️ Pendentes"],
+                    key="filtro_status_receitas_v8",
+                )
+
+            drinks = drinks_todos.copy()
 
             if filtro_drink:
                 drinks = [
@@ -6974,10 +7097,44 @@ elif menu == "Receitas":
                     if chave_texto(filtro_drink) in chave_texto(d)
                 ]
 
+            if filtro_status == "✅ Validados":
+                drinks = [
+                    d for d in drinks
+                    if not resumos_drinks[d]["vinculo_pendente"]
+                ]
+            elif filtro_status == "⚠️ Pendentes":
+                drinks = [
+                    d for d in drinks
+                    if resumos_drinks[d]["vinculo_pendente"]
+                ]
+
+            st.caption(
+                f"Exibindo **{len(drinks)}** de **{total_drinks_cadastrados}** drinks cadastrados."
+            )
+
+            # -----------------------------------------------------
+            # LISTA COMPACTA / EXPANSÍVEL
+            # -----------------------------------------------------
             for drink_nome in drinks:
-                receita = df_receitas[
-                    df_receitas[COLUNA_DRINK].astype(str) == str(drink_nome)
-                ].copy()
+                dados_resumo = resumos_drinks[drink_nome]
+                receita = dados_resumo["receita"]
+                custo_drink = dados_resumo["custo"]
+                custo_incompleto = dados_resumo["custo_incompleto"]
+                vinculo_pendente = dados_resumo["vinculo_pendente"]
+                dados_componentes = dados_resumo["componentes"]
+
+                status_icone = "⚠️" if vinculo_pendente else "✅"
+                qtd_componentes = len(dados_componentes)
+
+                if custo_incompleto:
+                    custo_label = f"R$ {custo_drink:,.2f} parcial"
+                else:
+                    custo_label = f"R$ {custo_drink:,.2f}"
+
+                titulo_expander = (
+                    f"{status_icone} 🍸 {drink_nome}  ·  "
+                    f"{qtd_componentes} componentes  ·  {custo_label}"
+                )
 
                 tipo_copo_lista = ""
                 modelo_copo_lista = ""
@@ -6985,91 +7142,56 @@ elif menu == "Receitas":
                 if "tipo_copo" in receita.columns:
                     valores = receita["tipo_copo"].dropna().astype(str).unique()
                     if len(valores) > 0:
-                        tipo_copo_lista = valores[0]
+                        tipo_copo_lista = texto_seguro(valores[0])
 
                 if "modelo_copo" in receita.columns:
                     valores = receita["modelo_copo"].dropna().astype(str).unique()
                     if len(valores) > 0:
-                        modelo_copo_lista = valores[0]
+                        modelo_copo_lista = texto_seguro(valores[0])
 
-                with st.expander(f"🍸 {drink_nome}", expanded=False):
-                    cab1, cab2, cab3, cab4 = st.columns([4, 2, 1, 1])
+                with st.expander(titulo_expander, expanded=False):
+                    info1, info2, acao1, acao2 = st.columns([3.2, 2, 1, 1])
 
-                    with cab1:
-                        if tipo_copo_lista:
-                            st.write(f"🥂 **Copo:** {tipo_copo_lista}")
-                        if modelo_copo_lista:
-                            st.write(f"📌 **Modelo:** {modelo_copo_lista}")
+                    with info1:
+                        if tipo_copo_lista or modelo_copo_lista:
+                            detalhes_copo = []
+                            if tipo_copo_lista:
+                                detalhes_copo.append(f"🥂 {tipo_copo_lista}")
+                            if modelo_copo_lista:
+                                detalhes_copo.append(f"📌 {modelo_copo_lista}")
+                            st.caption("  •  ".join(detalhes_copo))
 
-                    custo_drink = 0.0
-                    custo_incompleto = False
-                    dados_componentes = []
-
-                    for _, row in receita.iterrows():
-                        ingrediente = texto_seguro(row.get("ingrediente", ""))
-                        categoria = texto_seguro(row.get("categoria", ""))
-                        tipo_base = texto_seguro(row.get("tipo_base", ""))
-                        quantidade = numero_seguro(row.get("quantidade", 0))
-                        unidade = str(row.get("unidade", "") or "").strip()
-
-                        categoria_exibida = categoria
-                        base_exibida = tipo_base
-
-                        if not categoria or not tipo_base:
-                            sugestao = sugerir_vinculo_antigo(ingrediente)
-                            if sugestao["status"] == "sugerido":
-                                categoria_exibida = "⚠️ " + sugestao["categoria"]
-                                base_exibida = sugestao["tipo_base"]
-                            else:
-                                categoria_exibida = "⚠️ Não revisado"
-                                base_exibida = ingrediente
-
-                        custo_item = None
-                        custo_info = {"quantidade_opcoes": 0}
-
-                        if categoria and tipo_base:
-                            custo_item, custo_info = calcular_custo_referencia(
-                                categoria,
-                                tipo_base,
-                                quantidade,
-                                unidade,
+                        if vinculo_pendente:
+                            st.warning(
+                                "Esta receita ainda possui componente pendente de vínculo.",
+                                icon="⚠️",
+                            )
+                        else:
+                            st.success(
+                                "Receita validada e vinculada às bases corretas.",
+                                icon="✅",
                             )
 
-                        if custo_item is None:
-                            custo_incompleto = True
-                        else:
-                            custo_drink += custo_item
-
-                        dados_componentes.append({
-                            "Ingrediente": ingrediente,
-                            "Categoria": categoria_exibida,
-                            "Base": base_exibida,
-                            "Quantidade": quantidade,
-                            "Unidade": unidade,
-                            "Opções": custo_info.get("quantidade_opcoes", 0),
-                            "Custo ref.": custo_item,
-                        })
-
-                    with cab2:
+                    with info2:
                         st.metric(
                             "Custo unitário estimado",
                             f"R$ {custo_drink:,.2f}",
                             help="Custo médio de referência para produzir 1 drink.",
                         )
 
-                    with cab3:
+                    with acao1:
                         if st.button(
                             "✏️ Editar",
-                            key=f"editar_receita_v7_{drink_nome}",
+                            key=f"editar_receita_v8_{drink_nome}",
                             use_container_width=True,
                         ):
                             iniciar_edicao_receita(drink_nome)
                             st.rerun()
 
-                    with cab4:
+                    with acao2:
                         if st.button(
                             "🗑️ Excluir",
-                            key=f"excluir_receita_v3_{drink_nome}",
+                            key=f"excluir_receita_v8_{drink_nome}",
                             use_container_width=True,
                         ):
                             supabase.table("receitas").delete().eq(
@@ -7084,21 +7206,42 @@ elif menu == "Receitas":
 
                             st.rerun()
 
+                    df_visual = pd.DataFrame(dados_componentes)
+
                     st.dataframe(
-                        pd.DataFrame(dados_componentes),
+                        df_visual,
                         use_container_width=True,
                         hide_index=True,
                         column_config={
+                            "Ingrediente": st.column_config.TextColumn(
+                                "Ingrediente"
+                            ),
+                            "Categoria": st.column_config.TextColumn(
+                                "Categoria"
+                            ),
+                            "Base": st.column_config.TextColumn(
+                                "Base"
+                            ),
+                            "Quantidade": st.column_config.NumberColumn(
+                                "Qtd.", format="%.2f"
+                            ),
+                            "Unidade": st.column_config.TextColumn(
+                                "Un."
+                            ),
+                            "Opções": st.column_config.NumberColumn(
+                                "Opções", format="%d",
+                                help="Quantidade de marcas/opções cadastradas para esta base."
+                            ),
                             "Custo ref.": st.column_config.NumberColumn(
                                 "Custo ref.", format="R$ %.2f"
-                            )
+                            ),
                         },
                     )
 
                     if custo_incompleto:
                         st.caption(
-                            "⚠️ O custo unitário está parcial: há componente não "
-                            "revisado ou unidade sem conversão automática."
+                            "⚠️ Custo parcial: existe componente pendente ou unidade "
+                            "sem conversão automática."
                         )
 
             # =====================================================
@@ -8183,7 +8326,6 @@ elif menu == "Receitas":
                 use_container_width=True,
                 hide_index=True,
             )
-
 
                 
 elif menu == "Orçamentos":
