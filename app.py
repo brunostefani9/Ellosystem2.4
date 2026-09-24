@@ -6184,9 +6184,18 @@ elif menu == "Receitas":
         "guarnição",
     ]
 
+    def texto_seguro(valor):
+        """Converte valores vazios/NaN em texto vazio para não exibir 'nan'."""
+        try:
+            if valor is None or pd.isna(valor):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        return str(valor).strip()
+
     def chave_texto(valor):
         """Normalização apenas para comparação."""
-        texto = str(valor or "").strip().lower()
+        texto = texto_seguro(valor).lower()
         texto = unicodedata.normalize("NFKD", texto)
         texto = "".join(
             c for c in texto
@@ -6562,9 +6571,9 @@ elif menu == "Receitas":
                 except (TypeError, ValueError):
                     item_id = None
 
-            ingrediente = str(linha.get("ingrediente", "") or "").strip()
-            categoria = str(linha.get("categoria", "") or "").strip()
-            tipo_base = str(linha.get("tipo_base", "") or "").strip()
+            ingrediente = texto_seguro(linha.get("ingrediente", ""))
+            categoria = texto_seguro(linha.get("categoria", ""))
+            tipo_base = texto_seguro(linha.get("tipo_base", ""))
 
             if not categoria or not tipo_base:
                 sugestao = sugerir_vinculo_antigo(ingrediente)
@@ -6584,11 +6593,11 @@ elif menu == "Receitas":
 
         limpar_edicao_receita()
 
-        st.session_state["editar_receita_v6_ativa"] = str(nome_drink)
-        st.session_state["editar_receita_v6_nome_original"] = str(nome_drink)
-        st.session_state["editar_receita_v6_itens"] = itens
-        st.session_state["editar_receita_v6_ids_originais"] = ids_originais
-        st.session_state["editar_receita_v6_contador"] = 0
+        st.session_state["editar_receita_v7_ativa"] = str(nome_drink)
+        st.session_state["editar_receita_v7_nome_original"] = str(nome_drink)
+        st.session_state["editar_receita_v7_itens"] = itens
+        st.session_state["editar_receita_v7_ids_originais"] = ids_originais
+        st.session_state["editar_receita_v7_contador"] = 0
 
         st.session_state["edit_receita_nome_v6"] = str(nome_drink)
         st.session_state["edit_receita_tipo_copo_v6"] = (
@@ -6848,7 +6857,7 @@ elif menu == "Receitas":
                 hide_index=True,
                 column_config={
                     "Custo ref.": st.column_config.NumberColumn(
-                        "Custo ref.", format="R$ %.4f"
+                        "Custo ref.", format="R$ %.2f"
                     )
                 },
             )
@@ -6997,9 +7006,9 @@ elif menu == "Receitas":
                     dados_componentes = []
 
                     for _, row in receita.iterrows():
-                        ingrediente = str(row.get("ingrediente", "") or "").strip()
-                        categoria = str(row.get("categoria", "") or "").strip()
-                        tipo_base = str(row.get("tipo_base", "") or "").strip()
+                        ingrediente = texto_seguro(row.get("ingrediente", ""))
+                        categoria = texto_seguro(row.get("categoria", ""))
+                        tipo_base = texto_seguro(row.get("tipo_base", ""))
                         quantidade = numero_seguro(row.get("quantidade", 0))
                         unidade = str(row.get("unidade", "") or "").strip()
 
@@ -7051,7 +7060,7 @@ elif menu == "Receitas":
                     with cab3:
                         if st.button(
                             "✏️ Editar",
-                            key=f"editar_receita_v6_{drink_nome}",
+                            key=f"editar_receita_v7_{drink_nome}",
                             use_container_width=True,
                         ):
                             iniciar_edicao_receita(drink_nome)
@@ -7068,7 +7077,7 @@ elif menu == "Receitas":
                             ).execute()
 
                             if (
-                                st.session_state.get("editar_receita_v6_ativa")
+                                st.session_state.get("editar_receita_v7_ativa")
                                 == str(drink_nome)
                             ):
                                 limpar_edicao_receita()
@@ -7081,7 +7090,7 @@ elif menu == "Receitas":
                         hide_index=True,
                         column_config={
                             "Custo ref.": st.column_config.NumberColumn(
-                                "Custo ref.", format="R$ %.4f"
+                                "Custo ref.", format="R$ %.2f"
                             )
                         },
                     )
@@ -7095,14 +7104,14 @@ elif menu == "Receitas":
             # =====================================================
             # EDITOR DO DRINK SELECIONADO
             # =====================================================
-            if st.session_state.get("editar_receita_v6_ativa"):
+            if st.session_state.get("editar_receita_v7_ativa"):
                 st.divider()
 
                 nome_original = st.session_state.get(
-                    "editar_receita_v6_nome_original", ""
+                    "editar_receita_v7_nome_original", ""
                 )
                 itens_edicao = st.session_state.get(
-                    "editar_receita_v6_itens", []
+                    "editar_receita_v7_itens", []
                 )
 
                 st.subheader(f"✏️ Editando: {nome_original}")
@@ -7154,7 +7163,7 @@ elif menu == "Receitas":
                         )
                         st.markdown(f"#### {posicao + 1}. {titulo_item}")
 
-                        categoria_inicial = str(item.get("categoria", "") or "").strip()
+                        categoria_inicial = texto_seguro(item.get("categoria", ""))
                         opcoes_categoria = ["Selecione..."] + CATEGORIAS_RECEITA
 
                         if categoria_inicial not in CATEGORIAS_RECEITA:
@@ -7179,8 +7188,8 @@ elif menu == "Receitas":
                             else []
                         )
 
-                        key_base = f"edit_receita_base_v6_{uid}"
-                        base_inicial = str(item.get("tipo_base", "") or "").strip()
+                        key_base = f"edit_receita_base_v7_{uid}"
+                        base_inicial = texto_seguro(item.get("tipo_base", ""))
 
                         if key_base not in st.session_state:
                             if any(
@@ -7294,7 +7303,7 @@ elif menu == "Receitas":
                             custo_edicao_incompleto = True
 
                 if uids_remover:
-                    st.session_state["editar_receita_v6_itens"] = [
+                    st.session_state["editar_receita_v7_itens"] = [
                         item for item in itens_edicao
                         if item.get("uid") not in set(uids_remover)
                     ]
@@ -7302,7 +7311,7 @@ elif menu == "Receitas":
                     for uid in uids_remover:
                         for prefixo in [
                             "edit_receita_cat_v6_",
-                            "edit_receita_base_v6_",
+                            "edit_receita_base_v7_",
                             "edit_receita_qtd_v6_",
                             "edit_receita_un_v6_",
                         ]:
@@ -7401,14 +7410,14 @@ elif menu == "Receitas":
                     else:
                         duplicado = False
 
-                        for item in st.session_state.get("editar_receita_v6_itens", []):
+                        for item in st.session_state.get("editar_receita_v7_itens", []):
                             uid_item = item.get("uid")
                             cat_atual = st.session_state.get(
                                 f"edit_receita_cat_v6_{uid_item}",
                                 item.get("categoria", ""),
                             )
                             base_atual = st.session_state.get(
-                                f"edit_receita_base_v6_{uid_item}",
+                                f"edit_receita_base_v7_{uid_item}",
                                 item.get("tipo_base", ""),
                             )
                             un_atual = st.session_state.get(
@@ -7431,12 +7440,12 @@ elif menu == "Receitas":
                             )
                         else:
                             contador = int(
-                                st.session_state.get("editar_receita_v6_contador", 0)
+                                st.session_state.get("editar_receita_v7_contador", 0)
                             ) + 1
-                            st.session_state["editar_receita_v6_contador"] = contador
+                            st.session_state["editar_receita_v7_contador"] = contador
 
                             novo_uid = f"novo_{contador}"
-                            st.session_state["editar_receita_v6_itens"].append({
+                            st.session_state["editar_receita_v7_itens"].append({
                                 "id": None,
                                 "uid": novo_uid,
                                 "ingrediente_original": nova_base_ed,
@@ -7477,14 +7486,14 @@ elif menu == "Receitas":
                     problemas = []
 
                     for posicao, item in enumerate(
-                        st.session_state.get("editar_receita_v6_itens", [])
+                        st.session_state.get("editar_receita_v7_itens", [])
                     ):
                         uid = item.get("uid", f"linha_{posicao}")
                         categoria_final = st.session_state.get(
                             f"edit_receita_cat_v6_{uid}", item.get("categoria", "")
                         )
                         base_final = st.session_state.get(
-                            f"edit_receita_base_v6_{uid}", item.get("tipo_base", "")
+                            f"edit_receita_base_v7_{uid}", item.get("tipo_base", "")
                         )
                         qtd_final = numero_seguro(
                             st.session_state.get(
@@ -7563,7 +7572,7 @@ elif menu == "Receitas":
                             try:
                                 ids_originais = set(
                                     int(x) for x in st.session_state.get(
-                                        "editar_receita_v6_ids_originais", []
+                                        "editar_receita_v7_ids_originais", []
                                     )
                                 )
                                 ids_mantidos = set()
@@ -7634,11 +7643,12 @@ elif menu == "Receitas":
             # CORRESPONDÊNCIA ESTRITA PARA AUTO-VALIDAÇÃO
             # ---------------------------------------------------------
             # IMPORTANTE:
-            # - Aqui NÃO usamos nome/marca de bebida.
-            # - A comparação automática é somente Ingrediente x TIPO.
+            # - Primeiro tenta Ingrediente x TIPO de forma exata.
+            # - Se não houver TIPO exato, um NOME exato e único pode servir
+            #   apenas para descobrir a BASE/TIPO canônico (ex.: Aperol -> Aperitivo).
+            # - A receita continua vinculada ao TIPO, nunca à marca/tamanho.
             # - Maiúsculas, minúsculas, acentos e espaços são normalizados.
-            # - Várias marcas do mesmo tipo continuam sendo UMA única base.
-            # - Se o mesmo tipo existir em mais de uma categoria, fica ambíguo.
+            # - Se houver mais de uma possibilidade segura, fica ambíguo.
             # ---------------------------------------------------------
             def correspondencia_exata_unica_tipo(ingrediente):
                 chave = chave_texto(ingrediente)
@@ -7709,6 +7719,37 @@ elif menu == "Receitas":
                         "candidatos": unicos,
                     }
 
+                # -------------------------------------------------
+                # SEGUNDA REGRA SEGURA:
+                # Se não houve TIPO exato, aceita um NOME exato e
+                # único apenas para descobrir sua BASE/TIPO canônico.
+                # Ex.: ingrediente antigo "Aperol" -> cadastro
+                # nome="Aperol", tipo="Aperitivo" -> receita passa
+                # a ficar vinculada a "Aperitivo", nunca à marca.
+                # -------------------------------------------------
+                sugestao_nome = sugerir_vinculo_antigo(ingrediente)
+
+                if sugestao_nome.get("status") == "sugerido":
+                    return {
+                        "status": "exato_unico",
+                        "categoria": sugestao_nome.get("categoria"),
+                        "tipo_base": sugestao_nome.get("tipo_base"),
+                        "candidatos": [
+                            (
+                                sugestao_nome.get("categoria"),
+                                sugestao_nome.get("tipo_base"),
+                            )
+                        ],
+                    }
+
+                if sugestao_nome.get("status") == "ambiguo":
+                    return {
+                        "status": "ambiguo",
+                        "categoria": None,
+                        "tipo_base": None,
+                        "candidatos": sugestao_nome.get("candidatos", []),
+                    }
+
                 return {
                     "status": "nao_encontrado",
                     "categoria": None,
@@ -7722,8 +7763,8 @@ elif menu == "Receitas":
             auto_validados = 0
 
             for indice, linha in df_receitas.iterrows():
-                categoria_atual = str(linha.get("categoria", "") or "").strip()
-                tipo_base_atual = str(linha.get("tipo_base", "") or "").strip()
+                categoria_atual = texto_seguro(linha.get("categoria", ""))
+                tipo_base_atual = texto_seguro(linha.get("tipo_base", ""))
 
                 # Já revisado: não altera automaticamente.
                 if categoria_atual and tipo_base_atual:
@@ -7777,8 +7818,8 @@ elif menu == "Receitas":
             total_sem_correspondencia = 0
 
             for _, linha in df_receitas.iterrows():
-                categoria = str(linha.get("categoria", "") or "").strip()
-                tipo_base = str(linha.get("tipo_base", "") or "").strip()
+                categoria = texto_seguro(linha.get("categoria", ""))
+                tipo_base = texto_seguro(linha.get("tipo_base", ""))
 
                 if categoria and tipo_base:
                     total_validados += 1
@@ -7839,15 +7880,15 @@ elif menu == "Receitas":
 
                 for posicao, (_, linha) in enumerate(receita_rev.iterrows()):
                     item_id = linha.get("id")
-                    ingrediente_atual = str(
-                        linha.get("ingrediente", "") or ""
-                    ).strip()
-                    categoria_atual = str(
-                        linha.get("categoria", "") or ""
-                    ).strip()
-                    tipo_base_atual = str(
-                        linha.get("tipo_base", "") or ""
-                    ).strip()
+                    ingrediente_atual = texto_seguro(
+                        linha.get("ingrediente", "")
+                    )
+                    categoria_atual = texto_seguro(
+                        linha.get("categoria", "")
+                    )
+                    tipo_base_atual = texto_seguro(
+                        linha.get("tipo_base", "")
+                    )
                     quantidade_atual = numero_seguro(
                         linha.get("quantidade", 0)
                     )
@@ -8096,8 +8137,8 @@ elif menu == "Receitas":
                 custo_calculavel = 0
 
                 for _, linha in rec.iterrows():
-                    categoria = str(linha.get("categoria", "") or "").strip()
-                    base = str(linha.get("tipo_base", "") or "").strip()
+                    categoria = texto_seguro(linha.get("categoria", ""))
+                    base = texto_seguro(linha.get("tipo_base", ""))
                     quantidade = numero_seguro(linha.get("quantidade", 0))
                     unidade = str(linha.get("unidade", "") or "").strip()
 
@@ -8142,6 +8183,7 @@ elif menu == "Receitas":
                 use_container_width=True,
                 hide_index=True,
             )
+
 
                 
 elif menu == "Orçamentos":
