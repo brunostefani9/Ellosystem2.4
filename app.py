@@ -8526,13 +8526,63 @@ elif menu == "Receitas":
             )
 
                 
-elif menu == "Orçamentos":
+
     
     import math
     import re
     import io
     import unicodedata
     from difflib import SequenceMatcher
+
+    # =========================================================
+    # IDENTIDADE VISUAL / SEÇÕES DO ORÇAMENTO
+    # =========================================================
+
+    def _secao_orcamento(numero, titulo, descricao="", icone=""):
+        """Cabeçalho visual de ponta a ponta para separar as etapas."""
+        subtitulo = (
+            f'<div style="margin-top:4px;color:#AAB2BF;font-size:0.92rem;">{descricao}</div>'
+            if descricao else ""
+        )
+        st.markdown(
+            f"""
+            <div style="
+                margin: 30px 0 18px 0;
+                padding: 15px 18px;
+                border: 1px solid rgba(255,255,255,0.14);
+                border-left: 6px solid #FF4B4B;
+                border-radius: 10px;
+                background: linear-gradient(90deg, rgba(255,75,75,0.13), rgba(255,255,255,0.025));
+            ">
+                <div style="font-size:1.35rem;font-weight:750;line-height:1.25;">
+                    {numero} {icone} {titulo}
+                </div>
+                {subtitulo}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    def _subsecao_orcamento(titulo, descricao=""):
+        subtitulo = (
+            f'<div style="margin-top:3px;color:#9199A6;font-size:0.84rem;">{descricao}</div>'
+            if descricao else ""
+        )
+        st.markdown(
+            f"""
+            <div style="
+                margin: 18px 0 12px 0;
+                padding: 10px 14px;
+                border-radius: 8px;
+                background: rgba(255,255,255,0.055);
+                border: 1px solid rgba(255,255,255,0.09);
+            ">
+                <div style="font-size:1.03rem;font-weight:700;">{titulo}</div>
+                {subtitulo}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # =========================================================
     # FUNÇÕES AUXILIARES DO ORÇAMENTO
@@ -8636,6 +8686,8 @@ elif menu == "Orçamentos":
             return None
 
         if len(opcoes) == 1:
+            st.caption(titulo)
+            st.markdown(f"**{_rotulo_produto(opcoes.iloc[0], 0)}**")
             return opcoes.iloc[0]
 
         indices = list(range(len(opcoes)))
@@ -8723,8 +8775,9 @@ elif menu == "Orçamentos":
             )
         except Exception:
             return None, (
-                "Para gerar PDF, instale a biblioteca reportlab: "
-                "pip install reportlab"
+                "PDF indisponível: falta a biblioteca reportlab. "
+                "No terminal do projeto execute: python -m pip install reportlab "
+                "e depois reinicie o Streamlit."
             )
 
         buffer = io.BytesIO()
@@ -8942,8 +8995,9 @@ elif menu == "Orçamentos":
             from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         except Exception:
             return None, (
-                "Para gerar PDF, instale a biblioteca reportlab: "
-                "pip install reportlab"
+                "PDF indisponível: falta a biblioteca reportlab. "
+                "No terminal do projeto execute: python -m pip install reportlab "
+                "e depois reinicie o Streamlit."
             )
 
         buffer = io.BytesIO()
@@ -9236,9 +9290,13 @@ elif menu == "Orçamentos":
     # =========================================================
     with tab1:
 
-        st.markdown("## 1️⃣ Evento & Carta")
-        st.caption("Dados comerciais, configuração do evento e definição da carta de drinks.")
-        st.subheader("Dados do Cliente")
+        _secao_orcamento(
+            "1️⃣",
+            "Dados do Evento e Cliente",
+            "Informações comerciais, local, data, horários e configuração geral do atendimento.",
+            "🎉",
+        )
+        _subsecao_orcamento("👤 Dados do Cliente")
 
         col1, col2, col3 = st.columns(3)
 
@@ -9272,7 +9330,7 @@ elif menu == "Orçamentos":
         # =====================================================
         with tab_bar:
 
-            st.subheader("👥 Equipe")
+            _subsecao_orcamento("👥 Equipe e Horários")
 
             nomes_equipe = st.text_area(
                 "Nomes da equipe (um por linha)",
@@ -9303,7 +9361,7 @@ elif menu == "Orçamentos":
                 key="orc_modo_calculo",
             )
 
-            st.subheader("Configuração do Evento")
+            _subsecao_orcamento("⚙️ Configuração do Evento")
 
             col1, col2, col3 = st.columns(3)
 
@@ -9405,7 +9463,13 @@ elif menu == "Orçamentos":
                         ]
                     )
 
-                    st.markdown("### 🍹 Seleção de Drinks")
+                    _secao_orcamento(
+                        "2️⃣",
+                        "Carta de Drinks e Distribuição",
+                        "Escolha os drinks e ajuste o peso de saída de cada opção antes do cálculo dos insumos.",
+                        "🍸",
+                    )
+                    _subsecao_orcamento("🍹 Seleção de Drinks")
 
                     selecao = st.multiselect(
                         "Escolha os drinks do evento",
@@ -9432,9 +9496,10 @@ elif menu == "Orçamentos":
 
                     if selecao:
 
-                        st.divider()
-                        st.markdown("### 📊 Distribuição estimada de consumo")
-                        st.caption("Baseada somente nos drinks selecionados.")
+                        _subsecao_orcamento(
+                            "📊 Distribuição inicial",
+                            "Estimativa uniforme antes do ajuste de peso de saída.",
+                        )
 
                         media_por_drink = (
                             float(total_drinks) / len(selecao)
@@ -9445,10 +9510,9 @@ elif menu == "Orçamentos":
                         for drink in selecao:
                             st.write(f"• {drink}: ~{media_por_drink:.0f} drinks")
 
-                        st.divider()
-                        st.markdown("### ⚖️ Volume de saída dos drinks")
-                        st.caption(
-                            "Peso 2 significa aproximadamente o dobro da saída de um drink com peso 1."
+                        _subsecao_orcamento(
+                            "⚖️ Ajuste de saída por drink",
+                            "Use peso 1 como padrão. Peso 2 representa aproximadamente o dobro da saída de um drink com peso 1.",
                         )
 
                         pesos = {}
@@ -9495,7 +9559,10 @@ elif menu == "Orçamentos":
 
                             st.session_state["orc_assinatura_pesos"] = assinatura_pesos
 
-                        st.markdown("### 📈 Distribuição real")
+                        _subsecao_orcamento(
+                            "📈 Distribuição final calculada",
+                            "Esta é a distribuição que será usada para calcular os ingredientes do evento.",
+                        )
 
                         qtd_por_drink = {}
 
@@ -9741,28 +9808,16 @@ elif menu == "Orçamentos":
                                 necessidades[chave_necessidade]["quantidade"] += necessidade
                                 necessidades[chave_necessidade]["drinks"].add(drink)
 
-                        st.markdown("## 2️⃣ Planejamento Operacional")
-                        st.caption("Quantidades, marcas, ingredientes e materiais que formarão o checklist.")
+                        _secao_orcamento(
+                            "3️⃣",
+                            "Planejamento Operacional",
+                            "Escolha marcas e embalagens, faça o ajuste fino das quantidades e inclua os materiais que irão para o evento.",
+                            "📦",
+                        )
 
                         # =============================================
                         # AUDITORIA DOS INGREDIENTES
                         # =============================================
-
-                        st.divider()
-                        st.markdown("### 🔎 Diagnóstico técnico dos ingredientes")
-
-                        if pendencias_ingredientes:
-                            st.error(
-                                "Existem ingredientes das receitas que não puderam "
-                                "ser classificados com segurança. O orçamento não será "
-                                "salvo enquanto eles não forem corrigidos."
-                            )
-
-                            st.dataframe(
-                                pd.DataFrame(pendencias_ingredientes),
-                                use_container_width=True,
-                                hide_index=True,
-                            )
 
                         auditoria = []
 
@@ -9785,17 +9840,37 @@ elif menu == "Orçamentos":
                                 "Correspondência": dados_necessidade["modo_match"],
                             })
 
-                        if auditoria:
-                            st.dataframe(
-                                pd.DataFrame(auditoria),
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Quantidade": st.column_config.NumberColumn(
-                                        format="%.3f"
-                                    )
-                                },
-                            )
+                        with st.expander(
+                            "🔎 Diagnóstico técnico dos ingredientes",
+                            expanded=bool(pendencias_ingredientes),
+                        ):
+                            if pendencias_ingredientes:
+                                st.error(
+                                    "Existem ingredientes das receitas que não puderam "
+                                    "ser classificados com segurança. O orçamento não será "
+                                    "salvo enquanto eles não forem corrigidos."
+                                )
+                                st.dataframe(
+                                    pd.DataFrame(pendencias_ingredientes),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
+                            else:
+                                st.success(
+                                    "✅ Todas as receitas selecionadas possuem vínculos válidos para este orçamento."
+                                )
+
+                            if auditoria:
+                                st.dataframe(
+                                    pd.DataFrame(auditoria),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    column_config={
+                                        "Quantidade": st.column_config.NumberColumn(
+                                            format="%.3f"
+                                        )
+                                    },
+                                )
 
                         # =============================================
                         # MONTAGEM DOS ITENS FINAIS
@@ -9818,7 +9893,10 @@ elif menu == "Orçamentos":
                             if x["origem"] == "Bebidas"
                         ]
 
-                        st.subheader("🍸 Bebidas")
+                        _subsecao_orcamento(
+                            "🍾 Bebidas",
+                            "Cada item fica separado em duas decisões: marca/embalagem e ajuste fino da quantidade que irá para o evento.",
+                        )
 
                         if not bebidas_calc:
                             st.caption("Nenhuma bebida necessária para os drinks selecionados.")
@@ -9848,69 +9926,73 @@ elif menu == "Orçamentos":
                                 f"{ingrediente}_{unidade}"
                             )
 
-                            linha_produto = _selecionar_linha_produto(
-                                opcoes,
-                                f"🏷️ Marca / embalagem para {ingrediente}",
-                                key=f"orc_marca_{chave_base}",
-                            )
-
-                            if linha_produto is None:
-                                erros_calculo.append(
-                                    f"{ingrediente}: nenhuma opção válida encontrada."
+                            with st.container(border=True):
+                                st.markdown(f"#### 🍾 {ingrediente}")
+                                st.caption(
+                                    f"Necessidade calculada pela carta: {qtd_necessaria:.0f} ml"
                                 )
-                                continue
 
-                            marca = str(
-                                linha_produto.get("nome", ingrediente) or ingrediente
-                            ).strip()
+                                col_marca, col_ajuste = st.columns([3, 2], gap="large")
 
-                            volume = float(
-                                linha_produto.get("quantidade", 0) or 0
-                            )
+                                with col_marca:
+                                    linha_produto = _selecionar_linha_produto(
+                                        opcoes,
+                                        "1️⃣ Marca / embalagem",
+                                        key=f"orc_marca_{chave_base}",
+                                    )
 
-                            preco = float(
-                                linha_produto.get("preco", 0) or 0
-                            )
+                                if linha_produto is None:
+                                    erros_calculo.append(
+                                        f"{ingrediente}: nenhuma opção válida encontrada."
+                                    )
+                                    continue
 
-                            if volume <= 0:
-                                erros_calculo.append(
-                                    f"{marca}: quantidade/volume cadastrado é inválido."
+                                marca = str(
+                                    linha_produto.get("nome", ingrediente) or ingrediente
+                                ).strip()
+                                volume = float(
+                                    linha_produto.get("quantidade", 0) or 0
                                 )
-                                continue
+                                preco = float(
+                                    linha_produto.get("preco", 0) or 0
+                                )
 
-                            qtd_calculada = math.ceil(
-                                qtd_necessaria / volume
-                            )
+                                if volume <= 0:
+                                    erros_calculo.append(
+                                        f"{marca}: quantidade/volume cadastrado é inválido."
+                                    )
+                                    continue
 
-                            chave_qtd = (
-                                f"orc_qtd_beb_{chave_base}_{_safe_key(marca)}"
-                            )
+                                qtd_calculada = math.ceil(qtd_necessaria / volume)
+                                chave_qtd = (
+                                    f"orc_qtd_beb_{chave_base}_{_safe_key(marca)}"
+                                )
+                                if chave_qtd not in st.session_state:
+                                    st.session_state[chave_qtd] = int(qtd_calculada)
 
-                            if chave_qtd not in st.session_state:
-                                st.session_state[chave_qtd] = int(qtd_calculada)
+                                with col_ajuste:
+                                    st.markdown("**2️⃣ Ajuste fino da saída**")
+                                    st.caption(
+                                        f"Sugestão do sistema: {int(qtd_calculada)} garrafa(s)"
+                                    )
+                                    qtd_editavel = st.number_input(
+                                        "Garrafas que irão para o evento",
+                                        min_value=0,
+                                        step=1,
+                                        key=chave_qtd,
+                                    )
 
-                            col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
+                                custo_item = float(qtd_editavel) * preco
 
-                            col1.markdown(f"**{marca}**")
-                            col1.caption(
-                                f"Base: {ingrediente} | "
-                                f"Necessidade: {qtd_necessaria:.0f} ml"
-                            )
-
-                            qtd_editavel = col2.number_input(
-                                "Garrafas",
-                                min_value=0,
-                                step=1,
-                                key=chave_qtd,
-                            )
-
-                            col3.write(f"R$ {preco:,.2f}")
-                            col3.caption("Preço unit.")
-
-                            custo_item = float(qtd_editavel) * preco
-
-                            col4.write(f"**R$ {custo_item:,.2f}**")
-                            col4.caption("Total")
+                                info1, info2, info3, info4 = st.columns(4)
+                                info1.caption("Produto selecionado")
+                                info1.markdown(f"**{marca}**")
+                                info2.caption("Embalagem")
+                                info2.markdown(f"**{volume:g} ml**")
+                                info3.caption("Preço unitário")
+                                info3.markdown(f"**R$ {preco:,.2f}**")
+                                info4.caption("Custo previsto")
+                                info4.markdown(f"**R$ {custo_item:,.2f}**")
 
                             custo_bebidas += custo_item
 
@@ -9949,7 +10031,7 @@ elif menu == "Orçamentos":
                             else:
                                 titulo = "🧴 Insumos"
 
-                            st.subheader(titulo)
+                            _subsecao_orcamento(titulo)
 
                             if not itens_calc:
                                 st.caption(
@@ -10093,7 +10175,7 @@ elif menu == "Orçamentos":
                             if x["origem"] == "Artesanais"
                         ]
 
-                        st.subheader("🧪 Produção Artesanal")
+                        _subsecao_orcamento("🧪 Produção Artesanal")
 
                         if not artesanais_calc:
                             st.caption(
@@ -10219,7 +10301,10 @@ elif menu == "Orçamentos":
                         # CUSTOS EXTRAS
                         # =============================================
 
-                        st.subheader("💸 Custos Extras")
+                        _subsecao_orcamento(
+                            "💸 Custos Operacionais Extras",
+                            "Somente custos que não nasceram das receitas ou do checklist calculado.",
+                        )
 
                         col1, col2, col3, col4 = st.columns(4)
 
@@ -10277,8 +10362,7 @@ elif menu == "Orçamentos":
                         # para não apagar/duplicar itens dos drinks.
                         # =============================================
 
-                        st.divider()
-                        st.subheader("📦 Serviços Adicionais")
+                        _subsecao_orcamento("📦 Serviços Adicionais")
 
                         pacotes = (
                             supabase.table("pacotes")
@@ -10508,13 +10592,17 @@ elif menu == "Orçamentos":
                         # MATERIAIS OPERACIONAIS OPCIONAIS
                         # =============================================
                         st.divider()
+                        _subsecao_orcamento(
+                            "🧰 Materiais Operacionais",
+                            "Tudo que a equipe precisa levar além dos ingredientes: utensílios, copos, decoração, limpeza e itens adicionais.",
+                        )
                         with st.expander(
-                            "🧰 Materiais operacionais do evento",
+                            "Selecionar materiais e itens adicionais",
                             expanded=False,
                         ):
                             st.caption(
                                 "Itens selecionados aqui entram no checklist/PDF, "
-                                "mas não alteram o custo de bebidas e ingredientes."
+                                "mas não alteram automaticamente o custo de bebidas e ingredientes."
                             )
                             itens_materiais = []
 
@@ -10578,6 +10666,94 @@ elif menu == "Orçamentos":
                                             "custo_unitario_operacional": 0.0,
                                         })
 
+                            st.markdown("---")
+                            st.markdown("**➕ Item adicional do checklist**")
+                            st.caption(
+                                "Use para limpeza/higienização ou qualquer item operacional que ainda não possua cadastro próprio."
+                            )
+
+                            if "orc_itens_manuais" not in st.session_state:
+                                st.session_state["orc_itens_manuais"] = []
+
+                            m1, m2, m3, m4 = st.columns([2, 4, 1.5, 1.5])
+                            categoria_manual = m1.selectbox(
+                                "Categoria",
+                                [
+                                    "Kit Bar",
+                                    "Limpeza / Higienização",
+                                    "Copos / Taças",
+                                    "Decoração",
+                                    "Gelo",
+                                    "Outros",
+                                ],
+                                key="orc_manual_categoria",
+                            )
+                            item_manual = m2.text_input(
+                                "Item",
+                                key="orc_manual_item",
+                                placeholder="Ex.: pano multiuso, saco de lixo, balde...",
+                            )
+                            qtd_manual = m3.number_input(
+                                "Qtd.",
+                                min_value=0.0,
+                                value=1.0,
+                                step=1.0,
+                                key="orc_manual_qtd",
+                            )
+                            unidade_manual = m4.selectbox(
+                                "Unidade",
+                                ["un", "kit", "pct", "cx", "kg", "g", "L", "ml"],
+                                key="orc_manual_unidade",
+                            )
+
+                            if st.button(
+                                "➕ Adicionar item ao checklist",
+                                key="orc_manual_add",
+                                use_container_width=True,
+                            ):
+                                if not item_manual.strip():
+                                    st.warning("Informe o nome do item adicional.")
+                                elif qtd_manual <= 0:
+                                    st.warning("A quantidade deve ser maior que zero.")
+                                else:
+                                    st.session_state["orc_itens_manuais"].append({
+                                        "categoria": categoria_manual,
+                                        "produto": item_manual.strip(),
+                                        "quantidade": float(qtd_manual),
+                                        "unidade": unidade_manual,
+                                        "custo_estimado": 0.0,
+                                        "tipo_base": categoria_manual,
+                                        "produto_ref_id": None,
+                                        "quantidade_base": 1.0,
+                                        "preco_unitario": 0.0,
+                                        "custo_unitario_operacional": 0.0,
+                                    })
+                                    st.rerun()
+
+                            if st.session_state["orc_itens_manuais"]:
+                                st.dataframe(
+                                    pd.DataFrame(st.session_state["orc_itens_manuais"])[
+                                        ["categoria", "produto", "quantidade", "unidade"]
+                                    ].rename(columns={
+                                        "categoria": "Categoria",
+                                        "produto": "Item",
+                                        "quantidade": "Quantidade",
+                                        "unidade": "Unidade",
+                                    }),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
+                                if st.button(
+                                    "🗑️ Limpar itens adicionais",
+                                    key="orc_manual_limpar",
+                                ):
+                                    st.session_state["orc_itens_manuais"] = []
+                                    st.rerun()
+
+                            itens_materiais.extend(
+                                st.session_state.get("orc_itens_manuais", [])
+                            )
+
                         # =============================================
                         # LISTA CANÔNICA DO EVENTO
                         # É esta lista que é mostrada e depois salva.
@@ -10589,12 +10765,13 @@ elif menu == "Orçamentos":
                             itens_orcamento
                         )
 
-                        st.divider()
-                        st.markdown("## 3️⃣ Checklist Operacional")
-                        st.subheader("📋 Checklist Previsto do Evento")
-                        st.caption(
-                            "Este será o mapa operacional oficial. O PDF não exibe custos."
+                        _secao_orcamento(
+                            "4️⃣",
+                            "Checklist Operacional",
+                            "Mapa oficial da equipe. O sistema acrescenta Consumo e Divergência; o PDF segue o modelo operacional sem custos internos.",
+                            "📋",
                         )
+                        _subsecao_orcamento("📋 Checklist Previsto do Evento")
 
                         if itens_orcamento:
                             df_check_previsto = pd.DataFrame(itens_orcamento)
@@ -10666,19 +10843,28 @@ elif menu == "Orçamentos":
                             + custo_servicos
                         )
 
-                        st.divider()
+                        _secao_orcamento(
+                            "5️⃣",
+                            "Precificação Interna e Fechamento",
+                            "Área interna: custo, margem, desconto, comissão e resultado estimado. Estes dados não aparecem no modo cliente.",
+                            "💰",
+                        )
 
-                        st.metric(
+                        col_custo_resumo, col_itens_resumo = st.columns(2)
+                        col_custo_resumo.metric(
                             "💰 Custo Total do Evento (Orçado)",
                             f"R$ {custo_total:,.2f}",
+                        )
+                        col_itens_resumo.metric(
+                            "📦 Itens no Checklist",
+                            len(itens_orcamento),
                         )
 
                         # =============================================
                         # PRECIFICAÇÃO
                         # =============================================
 
-                        st.markdown("## 4️⃣ Precificação & Fechamento")
-                        st.subheader("📈 Precificação")
+                        _subsecao_orcamento("📈 Precificação Interna")
 
                         margem = st.slider(
                             "Margem de lucro (%)",
@@ -10838,10 +11024,11 @@ elif menu == "Orçamentos":
                             f"**{margem_real:.1f}%**"
                         )
 
-                        st.divider()
-                        st.subheader("👁️ Apresentação ao Cliente")
-                        st.caption(
-                            "Esta visão não exibe custo, margem, lucro ou cálculo interno."
+                        _secao_orcamento(
+                            "6️⃣",
+                            "Apresentação ao Cliente",
+                            "Visão comercial limpa: carta, dados do evento e investimento final, sem custo, margem ou lucro interno.",
+                            "👁️",
                         )
 
                         with st.expander("👁️ Modo Cliente / Prévia", expanded=False):
@@ -11066,6 +11253,7 @@ elif menu == "Orçamentos":
                                     )
 
                                     _limpar_estado_calculo_orcamento()
+                                    st.session_state["orc_itens_manuais"] = []
 
                                     st.rerun()
 
@@ -12203,9 +12391,7 @@ elif menu == "Orçamentos":
                         except Exception as e:
                             st.error(
                                 f"Erro ao finalizar: {e}"
-                            )
 
-                    st.divider()
 elif menu == "Cachês":
 
     st.title("👥 Gestão de Cachês")
