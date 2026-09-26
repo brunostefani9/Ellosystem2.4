@@ -8526,8 +8526,7 @@ elif menu == "Receitas":
             )
 
                 
-
-    
+elif menu == "Orçamentos":
     import math
     import re
     import io
