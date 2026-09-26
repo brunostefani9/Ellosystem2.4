@@ -8530,6 +8530,7 @@ elif menu == "Orçamentos":
     
     import math
     import re
+    import io
     import unicodedata
     from difflib import SequenceMatcher
 
@@ -8653,12 +8654,13 @@ elif menu == "Orçamentos":
         return opcoes.iloc[int(indice_escolhido)]
 
     def _consolidar_itens(lista_itens):
+        """Consolida itens iguais preservando o snapshot operacional."""
         consolidados = {}
 
         for item in lista_itens:
-            categoria = str(item.get("categoria", "")).strip()
-            produto = str(item.get("produto", "")).strip()
-            unidade = str(item.get("unidade", "")).strip()
+            categoria = str(item.get("categoria", "") or "").strip()
+            produto = str(item.get("produto", "") or "").strip()
+            unidade = str(item.get("unidade", "") or "").strip()
 
             if not produto:
                 continue
@@ -8667,6 +8669,7 @@ elif menu == "Orçamentos":
                 categoria.lower(),
                 _norm_orcamento(produto),
                 unidade.lower(),
+                str(item.get("produto_ref_id", "") or ""),
             )
 
             if chave not in consolidados:
@@ -8676,17 +8679,358 @@ elif menu == "Orçamentos":
                     "quantidade": 0.0,
                     "unidade": unidade,
                     "custo_estimado": 0.0,
+                    "tipo_base": str(item.get("tipo_base", "") or ""),
+                    "produto_ref_id": item.get("produto_ref_id"),
+                    "quantidade_base": float(item.get("quantidade_base", 0) or 0),
+                    "preco_unitario": float(item.get("preco_unitario", 0) or 0),
+                    "custo_unitario_operacional": float(
+                        item.get("custo_unitario_operacional", 0) or 0
+                    ),
                 }
 
-            consolidados[chave]["quantidade"] += float(item.get("quantidade", 0) or 0)
-            consolidados[chave]["custo_estimado"] += float(item.get("custo_estimado", 0) or 0)
+            consolidados[chave]["quantidade"] += float(
+                item.get("quantidade", 0) or 0
+            )
+            consolidados[chave]["custo_estimado"] += float(
+                item.get("custo_estimado", 0) or 0
+            )
 
         return list(consolidados.values())
 
-    def _renderizar_checklist_evento(evento_id, itens, prefixo):
+    def _fmt_qtd_pdf(valor):
+        try:
+            valor = float(valor or 0)
+        except Exception:
+            return ""
+        if abs(valor - round(valor)) < 1e-9:
+            return str(int(round(valor)))
+        return f"{valor:.3f}".rstrip("0").rstrip(".")
+
+    def _gerar_pdf_checklist_operacional(evento, itens):
         """
-        Checklist único usado tanto em Pendentes quanto em Aprovados.
-        Ele trabalha exclusivamente com os itens salvos em evento_itens.
+        PDF operacional inspirado no checklist físico do usuário.
+        Não exibe custos, margem, lucro ou consumo gerencial.
+        """
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.units import mm
+            from reportlab.platypus import (
+                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+                PageBreak, KeepTogether,
+            )
+        except Exception:
+            return None, (
+                "Para gerar PDF, instale a biblioteca reportlab: "
+                "pip install reportlab"
+            )
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            rightMargin=10 * mm,
+            leftMargin=10 * mm,
+            topMargin=10 * mm,
+            bottomMargin=10 * mm,
+        )
+
+        styles = getSampleStyleSheet()
+        titulo = ParagraphStyle(
+            "titulo_check_v10",
+            parent=styles["Title"],
+            alignment=TA_CENTER,
+            fontSize=16,
+            leading=19,
+            spaceAfter=6,
+        )
+        subtitulo = ParagraphStyle(
+            "sub_check_v10",
+            parent=styles["Heading2"],
+            fontSize=10,
+            leading=12,
+            spaceBefore=5,
+            spaceAfter=4,
+        )
+        normal = ParagraphStyle(
+            "normal_check_v10",
+            parent=styles["BodyText"],
+            fontSize=8.5,
+            leading=10,
+        )
+        pequeno = ParagraphStyle(
+            "peq_check_v10",
+            parent=styles["BodyText"],
+            fontSize=7.5,
+            leading=9,
+        )
+
+        story = []
+        story.append(Paragraph("CHECKLIST DE LOGÍSTICA E REVISÃO DE EVENTO", titulo))
+
+        info = [
+            ["Cliente", str(evento.get("cliente", "") or ""),
+             "Data", str(evento.get("data", "") or ""),
+             "Evento", str(evento.get("tipo_evento", "") or "")],
+            ["Cidade", str(evento.get("cidade", "") or ""),
+             "Local", str(evento.get("endereco", "") or ""),
+             "Convidados", str(evento.get("convidados", "") or "")],
+            ["Chegada equipe", str(evento.get("hora_chegada", "") or ""),
+             "Início serviço", str(evento.get("hora_inicio", "") or ""),
+             "Evento #", str(evento.get("id", "") or "")],
+        ]
+        t_info = Table(info, colWidths=[25*mm, 55*mm, 25*mm, 45*mm, 25*mm, 45*mm])
+        t_info.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#F3F4F6")),
+            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#B8BEC8")),
+            ("FONTNAME", (0,0), (-1,-1), "Helvetica"),
+            ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+            ("FONTNAME", (2,0), (2,-1), "Helvetica-Bold"),
+            ("FONTNAME", (4,0), (4,-1), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 4),
+            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+            ("TOPPADDING", (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ]))
+        story.append(t_info)
+        story.append(Spacer(1, 5*mm))
+
+        drinks_txt = str(evento.get("drinks", "") or "").strip()
+        if drinks_txt:
+            lista = [d.strip() for d in drinks_txt.split("\n") if d.strip()]
+            story.append(Paragraph("Carta de Drinks", subtitulo))
+            story.append(Paragraph(" • ".join(lista), normal))
+            story.append(Spacer(1, 4*mm))
+
+        if isinstance(itens, pd.DataFrame):
+            dados_itens = itens.to_dict("records")
+        else:
+            dados_itens = list(itens or [])
+
+        # Somente itens físicos/operacionais entram no mapa de carga.
+        ignorar = {"equipe", "custos"}
+        dados_itens = [
+            x for x in dados_itens
+            if str(x.get("categoria", "") or "").strip().lower() not in ignorar
+            and float(x.get("quantidade", 0) or 0) > 0
+        ]
+
+        ordem = {
+            "Bebidas": 1,
+            "Frutas": 2,
+            "Insumos": 3,
+            "Artesanais": 4,
+            "Gelo": 5,
+            "Kit Bar": 6,
+            "Materiais": 6,
+            "Copos / Taças": 7,
+            "Locação": 7,
+            "Decoração": 8,
+        }
+        dados_itens = sorted(
+            dados_itens,
+            key=lambda x: (
+                ordem.get(str(x.get("categoria", "") or ""), 99),
+                _norm_orcamento(x.get("produto", "")),
+            ),
+        )
+
+        cab = [
+            "Tipo do Material",
+            "Descrição do Item",
+            "Qtd. Sistema\n(Prevista)",
+            "Conf. Ida\n(Equipe)",
+            "Conf. Volta\n(Equipe)",
+            "Contagem Final\n(Estoque)",
+            "Diferença\nSobra / Perda",
+        ]
+        linhas = [cab]
+        for item in dados_itens:
+            unidade = str(item.get("unidade", "") or "").strip()
+            qtd = _fmt_qtd_pdf(item.get("quantidade", 0))
+            qtd_sistema = f"{qtd} {unidade}".strip()
+            linhas.append([
+                str(item.get("categoria", "") or ""),
+                str(item.get("produto", "") or ""),
+                qtd_sistema,
+                "",
+                "",
+                "",
+                "",
+            ])
+
+        tabela = Table(
+            linhas,
+            repeatRows=1,
+            colWidths=[30*mm, 63*mm, 31*mm, 31*mm, 31*mm, 34*mm, 34*mm],
+            rowHeights=None,
+        )
+        tabela.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,0), 7.2),
+            ("ALIGN", (2,0), (-1,-1), "CENTER"),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("GRID", (0,0), (-1,-1), 0.45, colors.HexColor("#9CA3AF")),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F9FAFB")]),
+            ("FONTSIZE", (0,1), (-1,-1), 7.8),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ("LEFTPADDING", (0,0), (-1,-1), 4),
+            ("RIGHTPADDING", (0,0), (-1,-1), 4),
+        ]))
+        story.append(tabela)
+
+        story.append(Spacer(1, 5*mm))
+        assinaturas = Table([
+            ["Conferência de Ida - Estoquista / Equipe", "Responsável pelo Evento", "Conferência Final - Estoque"],
+            ["\n\n________________________________", "\n\n________________________________", "\n\n________________________________"],
+        ], colWidths=[85*mm, 85*mm, 85*mm])
+        assinaturas.setStyle(TableStyle([
+            ("ALIGN", (0,0), (-1,-1), "CENTER"),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        ]))
+        story.append(assinaturas)
+
+        story.append(PageBreak())
+        story.append(Paragraph("REGISTRO DE OCORRÊNCIAS DO EVENTO", titulo))
+        story.append(Paragraph(
+            "Utilize esta página para registrar fatos que impactem o fechamento do evento.",
+            normal,
+        ))
+        story.append(Spacer(1, 4*mm))
+
+        for secao in [
+            "Horas extras / extensão do evento",
+            "Atrasos / intervalos",
+            "Quebras e avarias",
+            "Observações gerais",
+        ]:
+            story.append(Paragraph(secao, subtitulo))
+            linhas_obs = [["Data / Hora", "Descrição / Ocorrência", "Responsável"]]
+            linhas_obs += [["", "", ""] for _ in range(4)]
+            t = Table(linhas_obs, colWidths=[35*mm, 170*mm, 50*mm], rowHeights=[8*mm] + [11*mm]*4)
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#E5E7EB")),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#9CA3AF")),
+                ("FONTSIZE", (0,0), (-1,-1), 8),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 3*mm))
+
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue(), None
+
+    def _gerar_pdf_proposta_cliente(dados):
+        """Gera proposta comercial sem expor custos, margem ou lucro."""
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.units import mm
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        except Exception:
+            return None, (
+                "Para gerar PDF, instale a biblioteca reportlab: "
+                "pip install reportlab"
+            )
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=18*mm,
+            leftMargin=18*mm,
+            topMargin=15*mm,
+            bottomMargin=15*mm,
+        )
+        styles = getSampleStyleSheet()
+        title = ParagraphStyle(
+            "prop_title_v10", parent=styles["Title"], alignment=TA_CENTER,
+            fontSize=20, leading=24, spaceAfter=8,
+        )
+        h2 = ParagraphStyle(
+            "prop_h2_v10", parent=styles["Heading2"], fontSize=12,
+            leading=15, spaceBefore=8, spaceAfter=5,
+        )
+        normal = ParagraphStyle(
+            "prop_norm_v10", parent=styles["BodyText"], fontSize=10, leading=14,
+        )
+        valor = ParagraphStyle(
+            "prop_val_v10", parent=styles["Title"], alignment=TA_CENTER,
+            fontSize=23, leading=28, textColor=colors.HexColor("#111827"),
+            spaceBefore=10, spaceAfter=8,
+        )
+
+        story = [
+            Paragraph("PROPOSTA PARA EVENTO", title),
+            Paragraph(
+                "Uma proposta preparada especialmente para o seu evento.",
+                normal,
+            ),
+            Spacer(1, 5*mm),
+        ]
+        info = [
+            ["Cliente", str(dados.get("cliente", "") or "")],
+            ["Evento", str(dados.get("tipo_evento", "") or "")],
+            ["Data", str(dados.get("data", "") or "")],
+            ["Local", str(dados.get("local", "") or "")],
+            ["Convidados", str(dados.get("convidados", "") or "")],
+            ["Duração", f"{dados.get('horas', 0)} horas"],
+        ]
+        t = Table(info, colWidths=[38*mm, 115*mm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#F3F4F6")),
+            ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#D1D5DB")),
+            ("FONTSIZE", (0,0), (-1,-1), 9),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ]))
+        story.append(t)
+        drinks = dados.get("drinks", []) or []
+        if drinks:
+            story.append(Paragraph("Carta de Drinks", h2))
+            for d in drinks:
+                story.append(Paragraph(f"• {d}", normal))
+
+        story.append(Paragraph("Serviço", h2))
+        story.append(Paragraph(
+            "Estrutura e operação de bar conforme a modalidade contratada, "
+            "com os itens e equipe definidos para o evento.",
+            normal,
+        ))
+        story.append(Paragraph("Investimento", h2))
+        story.append(Paragraph(
+            f"R$ {float(dados.get('valor_final', 0) or 0):,.2f}", valor
+        ))
+        if float(dados.get("valor_por_convidado", 0) or 0) > 0:
+            story.append(Paragraph(
+                f"Referência por convidado: R$ {float(dados.get('valor_por_convidado', 0) or 0):,.2f}",
+                normal,
+            ))
+        story.append(Spacer(1, 8*mm))
+        story.append(Paragraph("Validade da proposta: 7 dias.", normal))
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue(), None
+
+    def _renderizar_checklist_evento(evento_id, itens, prefixo, evento=None):
+        """
+        Checklist digital oficial. O PDF operacional usa os mesmos itens,
+        mas não exibe Consumo (indicador gerencial calculado pelo sistema).
         """
         if itens.empty:
             st.info("Nenhum item foi salvo para este evento.")
@@ -8697,9 +9041,15 @@ elif menu == "Orçamentos":
             "Frutas",
             "Insumos",
             "Artesanais",
+            "Gelo",
+            "Kit Bar",
+            "Materiais",
+            "Copos / Taças",
+            "Decoração",
         ]
 
         editores = []
+        erros = []
 
         for categoria in categorias_operacionais:
             df_cat = itens[
@@ -8714,7 +9064,7 @@ elif menu == "Orçamentos":
 
             base = pd.DataFrame({
                 "_id": df_cat["id"].tolist(),
-                "Produto": df_cat["produto"].fillna("").astype(str).tolist(),
+                "Item": df_cat["produto"].fillna("").astype(str).tolist(),
                 "Sistema": pd.to_numeric(
                     df_cat["quantidade"], errors="coerce"
                 ).fillna(0).tolist(),
@@ -8728,7 +9078,7 @@ elif menu == "Orçamentos":
                 ).fillna(0).tolist()
                 if "quantidade_volta" in df_cat.columns
                 else [0.0] * len(df_cat),
-                "Conferência": pd.to_numeric(
+                "Conferência Final": pd.to_numeric(
                     df_cat.get("quantidade_estoquista", 0), errors="coerce"
                 ).fillna(0).tolist()
                 if "quantidade_estoquista" in df_cat.columns
@@ -8738,106 +9088,104 @@ elif menu == "Orçamentos":
 
             editor = st.data_editor(
                 base[[
-                    "Produto",
-                    "Sistema",
-                    "Ida",
-                    "Volta",
-                    "Conferência",
-                    "Unidade",
+                    "Item", "Sistema", "Ida", "Volta",
+                    "Conferência Final", "Unidade",
                 ]],
                 use_container_width=True,
                 hide_index=True,
-                disabled=[
-                    "Produto",
-                    "Sistema",
-                    "Unidade",
-                ],
+                disabled=["Item", "Sistema", "Unidade"],
                 column_config={
-                    "Produto": st.column_config.TextColumn("📦 Produto"),
+                    "Item": st.column_config.TextColumn("📦 Item"),
                     "Sistema": st.column_config.NumberColumn(
-                        "📊 Previsto",
-                        format="%.3f",
+                        "📊 Sistema", format="%.3f"
                     ),
                     "Ida": st.column_config.NumberColumn(
-                        "🚚 Ida",
-                        min_value=0.0,
-                        format="%.3f",
+                        "🚚 Ida", min_value=0.0, format="%.3f"
                     ),
                     "Volta": st.column_config.NumberColumn(
-                        "↩️ Volta",
-                        min_value=0.0,
-                        format="%.3f",
+                        "↩️ Volta", min_value=0.0, format="%.3f"
                     ),
-                    "Conferência": st.column_config.NumberColumn(
-                        "🔎 Conferência",
-                        min_value=0.0,
-                        format="%.3f",
+                    "Conferência Final": st.column_config.NumberColumn(
+                        "🔎 Conferência Final", min_value=0.0, format="%.3f"
                     ),
                     "Unidade": st.column_config.TextColumn("Unidade"),
                 },
-                key=f"{prefixo}_{categoria}_{evento_id}",
+                key=f"{prefixo}_{_safe_key(categoria)}_{evento_id}",
             )
 
             resumo = editor.copy()
-            resumo["Consumo"] = (
-                pd.to_numeric(resumo["Ida"], errors="coerce").fillna(0)
-                - pd.to_numeric(resumo["Volta"], errors="coerce").fillna(0)
-            )
-            resumo["Divergência"] = (
-                pd.to_numeric(resumo["Volta"], errors="coerce").fillna(0)
-                - pd.to_numeric(resumo["Conferência"], errors="coerce").fillna(0)
-            )
+            ida = pd.to_numeric(resumo["Ida"], errors="coerce").fillna(0)
+            volta = pd.to_numeric(resumo["Volta"], errors="coerce").fillna(0)
+            final = pd.to_numeric(
+                resumo["Conferência Final"], errors="coerce"
+            ).fillna(0)
+            resumo["Consumo"] = ida - final
+            resumo["Divergência"] = volta - final
 
-            if (resumo["Consumo"] < 0).any():
-                st.error(
-                    "Há item com Volta maior que Ida. Corrija antes de salvar."
-                )
+            if (volta > ida).any():
+                erros.append(f"{categoria}: há Volta maior que Ida.")
+            if (final > ida).any():
+                erros.append(f"{categoria}: há Conferência Final maior que Ida.")
+
+            # Para garrafas, mantém a regra operacional de meio em meio.
+            if categoria == "Bebidas":
+                for col in ["Ida", "Volta", "Conferência Final"]:
+                    serie = pd.to_numeric(editor[col], errors="coerce").fillna(0)
+                    if ((serie * 2 - (serie * 2).round()).abs() > 1e-7).any():
+                        erros.append(
+                            "Bebidas: use quantidades em passos de 0,5 "
+                            "para Ida, Volta e Conferência Final."
+                        )
+                        break
 
             st.dataframe(
                 resumo[[
-                    "Produto",
-                    "Consumo",
-                    "Divergência",
-                    "Unidade",
+                    "Item", "Sistema", "Ida", "Volta", "Conferência Final",
+                    "Consumo", "Divergência", "Unidade",
                 ]],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
+                    "Sistema": st.column_config.NumberColumn(format="%.3f"),
                     "Consumo": st.column_config.NumberColumn(
-                        "🔥 Consumo",
-                        format="%.3f",
+                        "🔥 Consumo", format="%.3f"
                     ),
                     "Divergência": st.column_config.NumberColumn(
-                        "⚠️ Divergência",
-                        format="%.3f",
+                        "⚠️ Divergência", format="%.3f"
                     ),
                 },
             )
+            editores.append((base, editor, categoria))
 
-            editores.append((base, editor))
-
-        # Itens que não são de consumo ficam visíveis, mas não entram
-        # no checklist de ida/volta.
-        categorias_leitura = ["Equipe", "Locação", "Custos"]
-
-        for categoria in categorias_leitura:
+        # Categorias administrativas permanecem visíveis, mas não entram na conferência.
+        for categoria in ["Equipe", "Custos"]:
             df_cat = itens[
                 itens["categoria"].fillna("").astype(str).str.lower()
                 == categoria.lower()
             ].copy()
-
             if not df_cat.empty:
                 st.markdown(f"### {categoria}")
-                cols = [
-                    c
-                    for c in ["produto", "quantidade", "unidade"]
-                    if c in df_cat.columns
-                ]
-                st.dataframe(
-                    df_cat[cols],
+                cols = [c for c in ["produto", "quantidade", "unidade"] if c in df_cat.columns]
+                st.dataframe(df_cat[cols], use_container_width=True, hide_index=True)
+
+        if erros:
+            for erro in sorted(set(erros)):
+                st.error(erro)
+
+        if evento is not None:
+            pdf, erro_pdf = _gerar_pdf_checklist_operacional(evento, itens)
+            if pdf:
+                nome_pdf = f"checklist_evento_{evento_id}.pdf"
+                st.download_button(
+                    "📄 Baixar Checklist PDF",
+                    data=pdf,
+                    file_name=nome_pdf,
+                    mime="application/pdf",
+                    key=f"{prefixo}_pdf_{evento_id}",
                     use_container_width=True,
-                    hide_index=True,
                 )
+            elif erro_pdf:
+                st.caption(erro_pdf)
 
         if editores:
             if st.button(
@@ -8845,33 +9193,35 @@ elif menu == "Orçamentos":
                 key=f"{prefixo}_salvar_{evento_id}",
                 use_container_width=True,
             ):
-                existe_erro = False
+                if erros:
+                    st.error("Corrija as divergências acima antes de salvar.")
+                    return
 
-                for base, editor in editores:
+                for base, editor, categoria in editores:
                     for indice, linha in editor.iterrows():
                         ida = float(linha.get("Ida", 0) or 0)
                         volta = float(linha.get("Volta", 0) or 0)
-                        conferencia = float(linha.get("Conferência", 0) or 0)
+                        conferencia = float(
+                            linha.get("Conferência Final", 0) or 0
+                        )
 
-                        if volta > ida:
-                            existe_erro = True
+                        if volta > ida or conferencia > ida:
                             continue
 
-                        item_id = int(base.iloc[indice]["_id"])
+                        if categoria == "Bebidas":
+                            valores = [ida, volta, conferencia]
+                            if any(abs(v * 2 - round(v * 2)) > 1e-7 for v in valores):
+                                continue
 
+                        item_id = int(base.iloc[indice]["_id"])
                         supabase.table("evento_itens").update({
                             "quantidade_ida": ida,
                             "quantidade_volta": volta,
                             "quantidade_estoquista": conferencia,
                         }).eq("id", item_id).execute()
 
-                if existe_erro:
-                    st.error(
-                        "Alguns itens não foram salvos porque a Volta estava maior que a Ida."
-                    )
-                else:
-                    st.success("✅ Checklist salvo com sucesso!")
-                    st.rerun()
+                st.success("✅ Checklist salvo com sucesso!")
+                st.rerun()
 
     st.title("Orçamentos")
 
@@ -8886,6 +9236,8 @@ elif menu == "Orçamentos":
     # =========================================================
     with tab1:
 
+        st.markdown("## 1️⃣ Evento & Carta")
+        st.caption("Dados comerciais, configuração do evento e definição da carta de drinks.")
         st.subheader("Dados do Cliente")
 
         col1, col2, col3 = st.columns(3)
@@ -9169,153 +9521,108 @@ elif menu == "Orçamentos":
                             "Artesanais": df_artesanais,
                         }
 
-                        def localizar_ingrediente(nome):
-                            """
-                            Resolve o ingrediente sem listas fixas de marcas/produtos.
+                        def _filtrar_base_exata(base, categoria_receita, tipo_base):
+                            chave = _norm_orcamento(tipo_base)
+                            if not chave or base.empty:
+                                return pd.DataFrame()
 
-                            Ordem:
-                            1) nome exato;
-                            2) tipo exato;
-                            3) aproximação textual somente quando a melhor origem
-                               é inequívoca.
+                            if categoria_receita == "Bebida":
+                                return base[base["_tipo_norm"] == chave].copy()
 
-                            Se houver ambiguidade, o sistema NÃO chuta. Ele bloqueia
-                            o salvamento e mostra o ingrediente para correção.
-                            """
-                            nome_norm = _norm_orcamento(nome)
+                            if categoria_receita == "Gelo":
+                                return base[
+                                    (base["_nome_norm"] == chave)
+                                    | (base["_tipo_norm"] == chave)
+                                ].copy()
 
+                            return base[
+                                (base["_nome_norm"] == chave)
+                                | (base["_tipo_norm"] == chave)
+                            ].copy()
+
+                        def localizar_receita_padronizada(linha_receita):
+                            categoria_receita = str(
+                                linha_receita.get("categoria", "") or ""
+                            ).strip()
+                            tipo_base = str(
+                                linha_receita.get("tipo_base", "") or ""
+                            ).strip()
+                            ingrediente = str(
+                                linha_receita.get("ingrediente", "") or ""
+                            ).strip()
+
+                            if categoria_receita and tipo_base:
+                                if categoria_receita == "Bebida":
+                                    base = df_bebidas
+                                    origem = "Bebidas"
+                                elif categoria_receita in ["Fruta / Insumo", "Gelo"]:
+                                    base = df_insumos
+                                    origem = "Insumos"
+                                elif categoria_receita == "Artesanal":
+                                    base = df_artesanais
+                                    origem = "Artesanais"
+                                else:
+                                    base = pd.DataFrame()
+                                    origem = ""
+
+                                linhas = _filtrar_base_exata(
+                                    base, categoria_receita, tipo_base
+                                )
+
+                                if not linhas.empty:
+                                    return (
+                                        origem,
+                                        linhas,
+                                        "receita validada",
+                                        categoria_receita,
+                                        tipo_base,
+                                    ), None
+
+                                return None, (
+                                    f"'{tipo_base}' está validado na receita, mas não possui "
+                                    f"cadastro correspondente em {categoria_receita}."
+                                )
+
+                            # Fallback apenas para receitas antigas ainda não revisadas.
+                            nome_norm = _norm_orcamento(ingrediente)
                             if not nome_norm:
                                 return None, "Ingrediente sem nome válido."
 
-                            # 1. Nome exato
-                            encontrados_nome = []
-
-                            for origem, base in bases.items():
-                                linhas = base[
-                                    base["_nome_norm"] == nome_norm
-                                ].copy()
-
+                            encontrados = []
+                            for origem, base, cat_receita in [
+                                ("Bebidas", df_bebidas, "Bebida"),
+                                ("Insumos", df_insumos, "Fruta / Insumo"),
+                                ("Artesanais", df_artesanais, "Artesanal"),
+                            ]:
+                                linhas_nome = base[base["_nome_norm"] == nome_norm].copy()
+                                linhas_tipo = base[base["_tipo_norm"] == nome_norm].copy()
+                                linhas = pd.concat([linhas_nome, linhas_tipo]).drop_duplicates()
                                 if not linhas.empty:
-                                    # Para bebida com nome exato, mantém todas as
-                                    # embalagens com o mesmo nome. A troca por outra
-                                    # marca continua disponível quando a receita usa
-                                    # o TIPO genérico cadastrado.
-                                    encontrados_nome.append(
-                                        (origem, linhas, "nome exato")
-                                    )
+                                    encontrados.append((origem, linhas, cat_receita))
 
-                            if len(encontrados_nome) == 1:
-                                return encontrados_nome[0], None
+                            if len(encontrados) == 1:
+                                origem, linhas, cat_receita = encontrados[0]
+                                tipo_ref = str(linhas.iloc[0].get("tipo", "") or "").strip()
+                                nome_ref = str(linhas.iloc[0].get("nome", "") or "").strip()
+                                base_ref = tipo_ref or nome_ref or ingrediente
+                                return (
+                                    origem,
+                                    linhas,
+                                    "fallback exato - revisar receita",
+                                    cat_receita,
+                                    base_ref,
+                                ), None
 
-                            if len(encontrados_nome) > 1:
+                            if len(encontrados) > 1:
                                 return None, (
-                                    f"'{nome}' existe com o mesmo nome em mais de uma base: "
-                                    + ", ".join(x[0] for x in encontrados_nome)
+                                    f"'{ingrediente}' possui correspondência exata em mais de "
+                                    "uma base. Revise categoria e tipo_base na aba Receitas."
                                 )
 
-                            # 2. Tipo exato. Aqui entram naturalmente as variedades
-                            # de marca/tamanho cadastradas no mesmo tipo.
-                            encontrados_tipo = []
-
-                            for origem, base in bases.items():
-                                linhas = base[
-                                    base["_tipo_norm"] == nome_norm
-                                ].copy()
-
-                                if not linhas.empty:
-                                    encontrados_tipo.append(
-                                        (origem, linhas, "tipo exato")
-                                    )
-
-                            if len(encontrados_tipo) == 1:
-                                return encontrados_tipo[0], None
-
-                            if len(encontrados_tipo) > 1:
-                                return None, (
-                                    f"'{nome}' coincide com o campo Tipo em mais de uma base: "
-                                    + ", ".join(x[0] for x in encontrados_tipo)
-                                )
-
-                            # 3. Aproximação dinâmica para nomes equivalentes/parecidos.
-                            candidatos = []
-
-                            for origem, base in bases.items():
-                                for idx, linha in base.iterrows():
-                                    score_nome = _similaridade_texto(
-                                        nome_norm, linha.get("_nome_norm", "")
-                                    )
-                                    score_tipo = _similaridade_texto(
-                                        nome_norm, linha.get("_tipo_norm", "")
-                                    )
-                                    score = max(score_nome, score_tipo)
-                                    campo = "tipo" if score_tipo >= score_nome else "nome"
-
-                                    if score >= 0.82:
-                                        candidatos.append({
-                                            "origem": origem,
-                                            "indice": idx,
-                                            "score": score,
-                                            "campo": campo,
-                                        })
-
-                            if not candidatos:
-                                return None, (
-                                    f"'{nome}' está na receita, mas não foi encontrado "
-                                    "com segurança em precos_bebidas, precos_insumos "
-                                    "ou precos_artesanais."
-                                )
-
-                            candidatos = sorted(
-                                candidatos,
-                                key=lambda x: x["score"],
-                                reverse=True,
+                            return None, (
+                                f"'{ingrediente}' não possui categoria/tipo_base validado e "
+                                "não foi encontrado exatamente na Precificação. Revise a receita."
                             )
-
-                            melhor = candidatos[0]
-                            proximos = [
-                                c for c in candidatos
-                                if c["score"] >= melhor["score"] - 0.04
-                            ]
-
-                            origens_proximas = {c["origem"] for c in proximos}
-
-                            if len(origens_proximas) != 1:
-                                return None, (
-                                    f"'{nome}' possui correspondências parecidas em "
-                                    "mais de uma base. Ajuste o Nome ou Tipo do cadastro "
-                                    "para eliminar a ambiguidade."
-                                )
-
-                            origem = melhor["origem"]
-                            base = bases[origem]
-                            linha_melhor = base.loc[melhor["indice"]]
-
-                            # Se o melhor casamento foi pelo tipo, oferece todas as
-                            # marcas/embalagens desse tipo. Se foi pelo nome, oferece
-                            # somente as linhas de nome equivalente, evitando trocar
-                            # sabores/itens apenas porque pertencem à mesma categoria.
-                            if melhor["campo"] == "tipo" and _norm_orcamento(
-                                linha_melhor.get("tipo", "")
-                            ):
-                                tipo_norm = _norm_orcamento(
-                                    linha_melhor.get("tipo", "")
-                                )
-                                linhas = base[
-                                    base["_tipo_norm"] == tipo_norm
-                                ].copy()
-                            else:
-                                melhor_nome_norm = _norm_orcamento(
-                                    linha_melhor.get("nome", "")
-                                )
-                                linhas = base[
-                                    base["_nome_norm"] == melhor_nome_norm
-                                ].copy()
-
-                            return (
-                                origem,
-                                linhas,
-                                f"aproximação {melhor['score']:.0%}",
-                            ), None
 
                         # =============================================
                         # CÁLCULO EXATO A PARTIR DAS RECEITAS SELECIONADAS
@@ -9348,8 +9655,8 @@ elif menu == "Orçamentos":
                                 if not ingrediente or quantidade_receita <= 0:
                                     continue
 
-                                localizado, erro_localizacao = localizar_ingrediente(
-                                    ingrediente
+                                localizado, erro_localizacao = localizar_receita_padronizada(
+                                    linha_receita
                                 )
 
                                 if erro_localizacao:
@@ -9362,17 +9669,22 @@ elif menu == "Orçamentos":
                                     )
                                     continue
 
-                                origem, linhas_origem, modo_match = localizado
+                                (
+                                    origem, linhas_origem, modo_match,
+                                    categoria_receita, tipo_base_receita,
+                                ) = localizado
 
-                                categoria = origem
-
-                                if origem == "Insumos":
+                                if categoria_receita == "Gelo":
+                                    categoria = "Gelo"
+                                elif origem == "Insumos":
                                     primeira_linha = linhas_origem.iloc[0]
                                     categoria = (
                                         "Frutas"
                                         if _eh_fruta_por_tipo(primeira_linha)
                                         else "Insumos"
                                     )
+                                else:
+                                    categoria = origem
 
                                 # A quantidade vem EXCLUSIVAMENTE da receita.
                                 # Nenhuma fruta, garnish, rendimento ou ingrediente
@@ -9391,7 +9703,11 @@ elif menu == "Orçamentos":
                                     primeira_ref.get("nome", "")
                                 )
 
-                                if "tipo" in modo_match and tipo_ref:
+                                if tipo_base_receita:
+                                    referencia_norm = (
+                                        f"base:{_norm_orcamento(tipo_base_receita)}"
+                                    )
+                                elif "tipo" in modo_match and tipo_ref:
                                     referencia_norm = f"tipo:{tipo_ref}"
                                 else:
                                     referencia_norm = f"nome:{nome_ref}"
@@ -9409,6 +9725,8 @@ elif menu == "Orçamentos":
                                         "ingrediente": ingrediente,
                                         "aliases": {ingrediente},
                                         "referencia": referencia_norm,
+                                        "tipo_base": tipo_base_receita,
+                                        "categoria_receita": categoria_receita,
                                         "unidade": unidade,
                                         "quantidade": 0.0,
                                         "linhas_origem": linhas_origem,
@@ -9423,12 +9741,15 @@ elif menu == "Orçamentos":
                                 necessidades[chave_necessidade]["quantidade"] += necessidade
                                 necessidades[chave_necessidade]["drinks"].add(drink)
 
+                        st.markdown("## 2️⃣ Planejamento Operacional")
+                        st.caption("Quantidades, marcas, ingredientes e materiais que formarão o checklist.")
+
                         # =============================================
                         # AUDITORIA DOS INGREDIENTES
                         # =============================================
 
                         st.divider()
-                        st.markdown("### 🔎 Auditoria dos Ingredientes")
+                        st.markdown("### 🔎 Diagnóstico técnico dos ingredientes")
 
                         if pendencias_ingredientes:
                             st.error(
@@ -9599,6 +9920,11 @@ elif menu == "Orçamentos":
                                 "quantidade": float(qtd_editavel),
                                 "unidade": "garrafas",
                                 "custo_estimado": custo_item,
+                                "tipo_base": item.get("tipo_base", ingrediente),
+                                "produto_ref_id": linha_produto.get("id"),
+                                "quantidade_base": volume,
+                                "preco_unitario": preco,
+                                "custo_unitario_operacional": preco,
                             })
 
                         st.markdown(
@@ -9609,18 +9935,19 @@ elif menu == "Orçamentos":
                         # FRUTAS E INSUMOS
                         # ---------------------------------------------
 
-                        for categoria_alvo in ["Frutas", "Insumos"]:
+                        for categoria_alvo in ["Frutas", "Insumos", "Gelo"]:
                             itens_calc = [
                                 x
                                 for x in necessidades.values()
                                 if x["categoria"] == categoria_alvo
                             ]
 
-                            titulo = (
-                                "🍋 Frutas"
-                                if categoria_alvo == "Frutas"
-                                else "🧴 Insumos"
-                            )
+                            if categoria_alvo == "Frutas":
+                                titulo = "🍋 Frutas"
+                            elif categoria_alvo == "Gelo":
+                                titulo = "🧊 Gelo"
+                            else:
+                                titulo = "🧴 Insumos"
 
                             st.subheader(titulo)
 
@@ -9730,12 +10057,30 @@ elif menu == "Orçamentos":
                                 else:
                                     custo_insumos += custo_item
 
+                                if unidade == "g":
+                                    custo_unit_oper = preco / 1000.0
+                                    qtd_base_snapshot = 1000.0
+                                elif unidade == "kg":
+                                    custo_unit_oper = preco
+                                    qtd_base_snapshot = 1.0
+                                elif quantidade_embalagem > 0:
+                                    custo_unit_oper = preco / quantidade_embalagem
+                                    qtd_base_snapshot = quantidade_embalagem
+                                else:
+                                    custo_unit_oper = 0.0
+                                    qtd_base_snapshot = 0.0
+
                                 itens_orcamento.append({
                                     "categoria": categoria_alvo,
                                     "produto": produto_escolhido,
                                     "quantidade": float(qtd_editavel),
                                     "unidade": unidade,
                                     "custo_estimado": custo_item,
+                                    "tipo_base": item.get("tipo_base", ingrediente),
+                                    "produto_ref_id": linha_produto.get("id"),
+                                    "quantidade_base": qtd_base_snapshot,
+                                    "preco_unitario": preco,
+                                    "custo_unitario_operacional": custo_unit_oper,
                                 })
 
                         # ---------------------------------------------
@@ -9843,6 +10188,14 @@ elif menu == "Orçamentos":
                                 "quantidade": float(qtd_editavel),
                                 "unidade": unidade,
                                 "custo_estimado": custo_item,
+                                "tipo_base": item.get("tipo_base", ingrediente),
+                                "produto_ref_id": linha_produto.get("id"),
+                                "quantidade_base": quantidade_base,
+                                "preco_unitario": preco_base,
+                                "custo_unitario_operacional": (
+                                    preco_base / quantidade_base
+                                    if quantidade_base > 0 else 0.0
+                                ),
                             })
 
                         st.markdown(
@@ -10111,16 +10464,18 @@ elif menu == "Orçamentos":
                                     itens_pacotes.append({
                                         "categoria": "Bebidas",
                                         "produto": str(
-                                            estoque_item.get(
-                                                "marca",
-                                                "",
-                                            )
+                                            estoque_item.get("marca", "")
                                         ),
-                                        "quantidade": float(
-                                            garrafas
-                                        ),
+                                        "quantidade": float(garrafas),
                                         "unidade": "garrafas",
                                         "custo_estimado": custo_produto,
+                                        "tipo_base": str(
+                                            estoque_item.get("produto", "") or ""
+                                        ),
+                                        "produto_ref_id": estoque_item.get("id"),
+                                        "quantidade_base": tamanho,
+                                        "preco_unitario": preco,
+                                        "custo_unitario_operacional": preco,
                                     })
 
                                     st.write(
@@ -10150,58 +10505,153 @@ elif menu == "Orçamentos":
                         )
 
                         # =============================================
+                        # MATERIAIS OPERACIONAIS OPCIONAIS
+                        # =============================================
+                        st.divider()
+                        with st.expander(
+                            "🧰 Materiais operacionais do evento",
+                            expanded=False,
+                        ):
+                            st.caption(
+                                "Itens selecionados aqui entram no checklist/PDF, "
+                                "mas não alteram o custo de bebidas e ingredientes."
+                            )
+                            itens_materiais = []
+
+                            for tabela_mat, categoria_mat, titulo_mat in [
+                                ("materiais_utensilios_bar", "Kit Bar", "Utensílios de Bar"),
+                                ("copos_tacas", "Copos / Taças", "Copos e Taças"),
+                                ("materiais_decorativos", "Decoração", "Materiais Decorativos"),
+                            ]:
+                                try:
+                                    dados_mat = (
+                                        supabase.table(tabela_mat)
+                                        .select("*")
+                                        .execute()
+                                        .data
+                                        or []
+                                    )
+                                    df_mat = pd.DataFrame(dados_mat)
+                                except Exception:
+                                    df_mat = pd.DataFrame()
+
+                                if df_mat.empty or "nome" not in df_mat.columns:
+                                    continue
+
+                                st.markdown(f"**{titulo_mat}**")
+                                opcoes_mat = [
+                                    str(x).strip()
+                                    for x in df_mat["nome"].dropna().astype(str).tolist()
+                                    if str(x).strip()
+                                ]
+                                selecionados_mat = st.multiselect(
+                                    f"Selecionar {titulo_mat.lower()}",
+                                    opcoes_mat,
+                                    key=f"orc_mat_{_safe_key(tabela_mat)}",
+                                )
+                                for nome_mat in selecionados_mat:
+                                    linha_mat = df_mat[
+                                        df_mat["nome"].astype(str) == nome_mat
+                                    ].iloc[0]
+                                    qtd_padrao = 1.0
+                                    unidade_mat = str(
+                                        linha_mat.get("unidade", "un") or "un"
+                                    )
+                                    qtd_mat = st.number_input(
+                                        f"Quantidade - {nome_mat}",
+                                        min_value=0.0,
+                                        value=qtd_padrao,
+                                        step=1.0,
+                                        key=f"orc_mat_qtd_{_safe_key(tabela_mat)}_{_safe_key(nome_mat)}",
+                                    )
+                                    if qtd_mat > 0:
+                                        itens_materiais.append({
+                                            "categoria": categoria_mat,
+                                            "produto": nome_mat,
+                                            "quantidade": float(qtd_mat),
+                                            "unidade": unidade_mat,
+                                            "custo_estimado": 0.0,
+                                            "tipo_base": categoria_mat,
+                                            "produto_ref_id": linha_mat.get("id"),
+                                            "quantidade_base": 1.0,
+                                            "preco_unitario": 0.0,
+                                            "custo_unitario_operacional": 0.0,
+                                        })
+
+                        # =============================================
                         # LISTA CANÔNICA DO EVENTO
                         # É esta lista que é mostrada e depois salva.
                         # =============================================
 
                         itens_orcamento.extend(itens_pacotes)
+                        itens_orcamento.extend(itens_materiais)
                         itens_orcamento = _consolidar_itens(
                             itens_orcamento
                         )
 
                         st.divider()
-                        st.subheader(
-                            "📋 Checklist Previsto do Evento"
+                        st.markdown("## 3️⃣ Checklist Operacional")
+                        st.subheader("📋 Checklist Previsto do Evento")
+                        st.caption(
+                            "Este será o mapa operacional oficial. O PDF não exibe custos."
                         )
 
                         if itens_orcamento:
-                            df_check_previsto = pd.DataFrame(
-                                itens_orcamento
-                            )
-
+                            df_check_previsto = pd.DataFrame(itens_orcamento)
+                            df_check_sistema = pd.DataFrame({
+                                "Categoria": df_check_previsto["categoria"],
+                                "Item": df_check_previsto["produto"],
+                                "Sistema": df_check_previsto["quantidade"],
+                                "Ida": 0.0,
+                                "Volta": 0.0,
+                                "Conferência Final": 0.0,
+                                "Consumo": 0.0,
+                                "Divergência": 0.0,
+                                "Unidade": df_check_previsto["unidade"],
+                            })
                             st.dataframe(
-                                df_check_previsto[[
-                                    "categoria",
-                                    "produto",
-                                    "quantidade",
-                                    "unidade",
-                                    "custo_estimado",
-                                ]].rename(
-                                    columns={
-                                        "categoria": "Categoria",
-                                        "produto": "Produto",
-                                        "quantidade": "Quantidade",
-                                        "unidade": "Unidade",
-                                        "custo_estimado": "Custo Estimado",
-                                    }
-                                ),
+                                df_check_sistema,
                                 use_container_width=True,
                                 hide_index=True,
                                 column_config={
-                                    "Quantidade":
-                                        st.column_config.NumberColumn(
-                                            format="%.3f"
-                                        ),
-                                    "Custo Estimado":
-                                        st.column_config.NumberColumn(
-                                            format="R$ %.2f"
-                                        ),
+                                    "Sistema": st.column_config.NumberColumn(format="%.3f"),
+                                    "Ida": st.column_config.NumberColumn(format="%.3f"),
+                                    "Volta": st.column_config.NumberColumn(format="%.3f"),
+                                    "Conferência Final": st.column_config.NumberColumn(format="%.3f"),
+                                    "Consumo": st.column_config.NumberColumn(format="%.3f"),
+                                    "Divergência": st.column_config.NumberColumn(format="%.3f"),
                                 },
                             )
-                        else:
-                            st.warning(
-                                "Nenhum item operacional foi calculado."
+
+                            evento_preview = {
+                                "id": "RASCUNHO",
+                                "cliente": nome_cliente,
+                                "data": str(data_evento),
+                                "cidade": cidade_evento,
+                                "endereco": endereco,
+                                "tipo_evento": tipo_evento,
+                                "convidados": num_convidados,
+                                "hora_chegada": str(hora_chegada),
+                                "hora_inicio": str(hora_inicio),
+                                "drinks": "\n".join(map(str, selecao)),
+                            }
+                            pdf_check, erro_pdf_check = _gerar_pdf_checklist_operacional(
+                                evento_preview,
+                                pd.DataFrame(itens_orcamento),
                             )
+                            if pdf_check:
+                                st.download_button(
+                                    "📄 Baixar Checklist Operacional PDF",
+                                    data=pdf_check,
+                                    file_name="checklist_operacional_orcamento.pdf",
+                                    mime="application/pdf",
+                                    key="orc_pdf_checklist_preview",
+                                    use_container_width=True,
+                                )
+                            elif erro_pdf_check:
+                                st.caption(erro_pdf_check)
+                        else:
+                            st.warning("Nenhum item operacional foi calculado.")
 
                         # =============================================
                         # TOTAL
@@ -10227,6 +10677,7 @@ elif menu == "Orçamentos":
                         # PRECIFICAÇÃO
                         # =============================================
 
+                        st.markdown("## 4️⃣ Precificação & Fechamento")
                         st.subheader("📈 Precificação")
 
                         margem = st.slider(
@@ -10387,6 +10838,63 @@ elif menu == "Orçamentos":
                             f"**{margem_real:.1f}%**"
                         )
 
+                        st.divider()
+                        st.subheader("👁️ Apresentação ao Cliente")
+                        st.caption(
+                            "Esta visão não exibe custo, margem, lucro ou cálculo interno."
+                        )
+
+                        with st.expander("👁️ Modo Cliente / Prévia", expanded=False):
+                            st.markdown(f"## 🍸 Proposta para {nome_cliente or 'Cliente'}")
+                            st.write(
+                                f"**Evento:** {tipo_evento}  |  "
+                                f"**Data:** {data_evento}  |  "
+                                f"**Local:** {cidade_evento or endereco}"
+                            )
+                            st.write(f"**Convidados:** {num_convidados}")
+                            st.markdown("### Carta de Drinks")
+                            for drink_cliente in selecao:
+                                st.write(f"• {drink_cliente}")
+                            st.markdown("### Investimento")
+                            st.metric(
+                                "VALOR FINAL",
+                                f"R$ {valor_final_venda:,.2f}",
+                            )
+                            if valor_por_convidado > 0:
+                                st.caption(
+                                    f"Referência por convidado: "
+                                    f"R$ {valor_por_convidado:,.2f}"
+                                )
+                            st.caption("Validade da proposta: 7 dias.")
+
+                        dados_proposta = {
+                            "cliente": nome_cliente,
+                            "tipo_evento": tipo_evento,
+                            "data": str(data_evento),
+                            "local": cidade_evento or endereco,
+                            "convidados": num_convidados,
+                            "horas": horas,
+                            "drinks": list(selecao),
+                            "valor_final": valor_final_venda,
+                            "valor_por_convidado": valor_por_convidado,
+                        }
+                        pdf_proposta, erro_pdf_proposta = _gerar_pdf_proposta_cliente(
+                            dados_proposta
+                        )
+                        if pdf_proposta:
+                            st.download_button(
+                                "📄 Baixar Proposta Comercial PDF",
+                                data=pdf_proposta,
+                                file_name=(
+                                    f"proposta_{_safe_key(nome_cliente or 'cliente')}.pdf"
+                                ),
+                                mime="application/pdf",
+                                key="orc_pdf_proposta_cliente",
+                                use_container_width=True,
+                            )
+                        elif erro_pdf_proposta:
+                            st.caption(erro_pdf_proposta)
+
                         # =============================================
                         # SALVAR ORÇAMENTO
                         # =============================================
@@ -10518,32 +11026,25 @@ elif menu == "Orçamentos":
                                             continue
 
                                         payload_itens.append({
-                                            "evento_id":
-                                                evento_id,
-
-                                            "produto":
-                                                str(
-                                                    item[
-                                                        "produto"
-                                                    ]
-                                                ),
-
-                                            "quantidade":
-                                                quantidade_item,
-
-                                            "unidade":
-                                                str(
-                                                    item[
-                                                        "unidade"
-                                                    ]
-                                                ),
-
-                                            "categoria":
-                                                str(
-                                                    item[
-                                                        "categoria"
-                                                    ]
-                                                ),
+                                            "evento_id": evento_id,
+                                            "produto": str(item["produto"]),
+                                            "quantidade": quantidade_item,
+                                            "unidade": str(item["unidade"]),
+                                            "categoria": str(item["categoria"]),
+                                            "tipo_base": str(item.get("tipo_base", "") or ""),
+                                            "produto_ref_id": item.get("produto_ref_id"),
+                                            "quantidade_base": float(
+                                                item.get("quantidade_base", 0) or 0
+                                            ),
+                                            "preco_unitario": float(
+                                                item.get("preco_unitario", 0) or 0
+                                            ),
+                                            "custo_unitario_operacional": float(
+                                                item.get("custo_unitario_operacional", 0) or 0
+                                            ),
+                                            "custo_estimado": float(
+                                                item.get("custo_estimado", 0) or 0
+                                            ),
                                         })
 
                                     if not payload_itens:
@@ -11128,6 +11629,7 @@ elif menu == "Orçamentos":
                             evento_id,
                             itens,
                             "orc_check_pendente",
+                            evento=row.to_dict(),
                         )
 
                     st.divider()
@@ -11674,6 +12176,7 @@ elif menu == "Orçamentos":
                             evento_id,
                             itens,
                             "orc_check_aprovado",
+                            evento=row.to_dict(),
                         )
 
                     if st.button(
