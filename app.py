@@ -11658,7 +11658,7 @@ elif menu == "Receitas":
         
                 st.success("✅ Orçamento salvo com sucesso!")
 
-# =========================================================
+        # =========================================================
         # ABA 2 - PENDENTES / CHECKLIST
         # =========================================================
         with tab2:
@@ -12391,6 +12391,7 @@ elif menu == "Receitas":
                         except Exception as e:
                             st.error(
                                 f"Erro ao finalizar: {e}"
+                            )
 
 elif menu == "Cachês":
 
