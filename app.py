@@ -8527,6 +8527,7 @@ elif menu == "Receitas":
 
                 
 elif menu == "Orçamentos":
+    
     import math
     import re
     import io
@@ -8618,6 +8619,7 @@ elif menu == "Orçamentos":
     def _limpar_estado_calculo_orcamento():
         prefixos = (
             "orc_qtd_",
+            "orc_sig_qtd_",
             "orc_marca_",
             "orc_insumo_",
             "orc_art_",
@@ -8679,30 +8681,78 @@ elif menu == "Orçamentos":
         return " | ".join(partes)
 
     def _selecionar_linha_produto(opcoes, titulo, key):
+        """Seleciona um produto usando uma referência estável do cadastro.
+
+        A V11 usava a posição (0, 1, 2...) da linha como valor do selectbox.
+        Se a ordem retornada pelo Supabase mudasse entre reruns, o estado do
+        Streamlit podia ficar associado à posição antiga. Aqui usamos o ID do
+        cadastro (ou uma chave composta quando não houver ID), evitando que a
+        marca exibida e o produto usado no cálculo fiquem desencontrados.
+        """
         opcoes = opcoes.copy().reset_index(drop=True)
 
         if opcoes.empty:
             return None
 
+        # Ordem determinística para evitar mudança visual entre reruns.
+        colunas_ordem = [
+            c for c in ["_tipo_norm", "_nome_norm", "quantidade", "preco", "id"]
+            if c in opcoes.columns
+        ]
+        if colunas_ordem:
+            opcoes = opcoes.sort_values(
+                by=colunas_ordem,
+                kind="stable",
+                na_position="last",
+            ).reset_index(drop=True)
+
+        refs = []
+        rotulos = {}
+
+        for i, linha in opcoes.iterrows():
+            item_id = linha.get("id")
+            if pd.notna(item_id) and str(item_id).strip() not in ("", "nan", "None"):
+                ref = f"id:{item_id}"
+            else:
+                ref = (
+                    "item:"
+                    f"{_norm_orcamento(linha.get('tipo', ''))}|"
+                    f"{_norm_orcamento(linha.get('nome', ''))}|"
+                    f"{float(linha.get('quantidade', 0) or 0):.6f}|"
+                    f"{float(linha.get('preco', 0) or 0):.6f}|{i}"
+                )
+
+            # Garante unicidade mesmo se houver duplicidade de cadastro.
+            ref_original = ref
+            contador = 2
+            while ref in rotulos:
+                ref = f"{ref_original}#{contador}"
+                contador += 1
+
+            refs.append(ref)
+            rotulos[ref] = _rotulo_produto(linha, i)
+            opcoes.loc[i, "_orc_ref_estavel"] = ref
+
         if len(opcoes) == 1:
             st.caption(titulo)
-            st.markdown(f"**{_rotulo_produto(opcoes.iloc[0], 0)}**")
+            st.markdown(f"**{rotulos[refs[0]]}**")
             return opcoes.iloc[0]
 
-        indices = list(range(len(opcoes)))
-        rotulos = {
-            i: _rotulo_produto(opcoes.iloc[i], i)
-            for i in indices
-        }
-
-        indice_escolhido = st.selectbox(
+        ref_escolhido = st.selectbox(
             titulo,
-            indices,
-            format_func=lambda i: rotulos[i],
+            refs,
+            format_func=lambda ref: rotulos[ref],
             key=key,
         )
 
-        return opcoes.iloc[int(indice_escolhido)]
+        linha_escolhida = opcoes[
+            opcoes["_orc_ref_estavel"] == ref_escolhido
+        ]
+
+        if linha_escolhida.empty:
+            return None
+
+        return linha_escolhida.iloc[0]
 
     def _consolidar_itens(lista_itens):
         """Consolida itens iguais preservando o snapshot operacional."""
@@ -9937,7 +9987,7 @@ elif menu == "Orçamentos":
                                     linha_produto = _selecionar_linha_produto(
                                         opcoes,
                                         "1️⃣ Marca / embalagem",
-                                        key=f"orc_marca_{chave_base}",
+                                        key=f"orc_marca_v12_{chave_base}",
                                     )
 
                                 if linha_produto is None:
@@ -9963,10 +10013,35 @@ elif menu == "Orçamentos":
                                     continue
 
                                 qtd_calculada = math.ceil(qtd_necessaria / volume)
-                                chave_qtd = (
-                                    f"orc_qtd_beb_{chave_base}_{_safe_key(marca)}"
+
+                                # Uma única chave de quantidade por base/ingrediente.
+                                # A assinatura abaixo força a sugestão a ser reaplicada
+                                # somente quando muda a necessidade ou o produto escolhido.
+                                # Em reruns normais, o ajuste manual do usuário é preservado.
+                                chave_qtd = f"orc_qtd_beb_{chave_base}"
+                                chave_sig_qtd = f"orc_sig_qtd_beb_{chave_base}"
+
+                                produto_ref = linha_produto.get("id")
+                                if pd.isna(produto_ref):
+                                    produto_ref = (
+                                        f"{_norm_orcamento(marca)}|"
+                                        f"{volume:.6f}|{preco:.6f}"
+                                    )
+
+                                assinatura_qtd = (
+                                    str(produto_ref),
+                                    round(float(qtd_necessaria), 6),
+                                    round(float(volume), 6),
+                                    int(qtd_calculada),
                                 )
-                                if chave_qtd not in st.session_state:
+
+                                if (
+                                    st.session_state.get(chave_sig_qtd)
+                                    != assinatura_qtd
+                                ):
+                                    st.session_state[chave_qtd] = int(qtd_calculada)
+                                    st.session_state[chave_sig_qtd] = assinatura_qtd
+                                elif chave_qtd not in st.session_state:
                                     st.session_state[chave_qtd] = int(qtd_calculada)
 
                                 with col_ajuste:
@@ -9980,6 +10055,15 @@ elif menu == "Orçamentos":
                                         step=1,
                                         key=chave_qtd,
                                     )
+
+                                    if int(qtd_editavel) != int(qtd_calculada):
+                                        if st.button(
+                                            "↩️ Usar sugestão",
+                                            key=f"orc_reset_qtd_beb_{chave_base}",
+                                            help="Restaura a quantidade calculada pelo sistema para esta bebida.",
+                                        ):
+                                            st.session_state[chave_qtd] = int(qtd_calculada)
+                                            st.rerun()
 
                                 custo_item = float(qtd_editavel) * preco
 
@@ -11657,7 +11741,7 @@ elif menu == "Orçamentos":
         
                 st.success("✅ Orçamento salvo com sucesso!")
 
-        # =========================================================
+# =========================================================
         # ABA 2 - PENDENTES / CHECKLIST
         # =========================================================
         with tab2:
@@ -12392,6 +12476,7 @@ elif menu == "Orçamentos":
                                 f"Erro ao finalizar: {e}"
                             )
 
+                    st.divider()
 elif menu == "Cachês":
 
     st.title("👥 Gestão de Cachês")
