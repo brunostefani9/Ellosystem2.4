@@ -12483,7 +12483,7 @@ elif menu == "Cachês":
     st.title("👥 Gestão de Cachês")
     st.caption(
         "Livro de registro da equipe + integração segura com CMV e Financeiro. "
-        "O cachê registrado entra no CMV como custo real; somente o cachê PAGO vira saída de caixa."
+        "Agora com correção e exclusão sincronizadas: o CMV usa o valor registrado e o Financeiro usa somente o que foi pago."
     )
 
     # =========================================================
@@ -12594,6 +12594,97 @@ elif menu == "Cachês":
             "financeiro_id": None,
             "financeiro_data_lancamento": None,
         }).eq("id", int(cache_id)).execute()
+
+
+    def _cache_evento_fechado(evento_id):
+        """Retorna True quando o evento vinculado já possui CMV fechado."""
+        if evento_id is None:
+            return False
+        try:
+            dados = (
+                supabase.table("eventos")
+                .select("cmv_status")
+                .eq("id", int(evento_id))
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+            if not dados:
+                return False
+            return _cache_texto(dados[0].get("cmv_status")).lower() == "fechado"
+        except Exception:
+            return False
+
+    def _cache_atualizar_financeiro(registro):
+        """
+        Sincroniza o Financeiro com um cachê corrigido.
+
+        - Pendente: não deve existir saída de caixa; remove eventual saída vinculada.
+        - Pago: cria ou ATUALIZA a mesma saída usando origem='cache' + origem_id.
+        Nunca cria duplicidade para o mesmo cachê.
+        """
+        cache_id = int(registro.get("id"))
+        status = _cache_texto(registro.get("status")).lower()
+
+        if status != "pago":
+            supabase.table("Financeiro").delete()                .eq("origem", "cache")                .eq("origem_id", cache_id)                .execute()
+
+            supabase.table("pagamentos_equipe").update({
+                "financeiro_lancado": False,
+                "financeiro_id": None,
+                "financeiro_data_lancamento": None,
+            }).eq("id", cache_id).execute()
+            return None, "removido"
+
+        valor = _cache_num(registro.get("valor"))
+        nome = _cache_texto(registro.get("nome")) or "Profissional"
+        funcao = _cache_texto(registro.get("funcao"))
+        evento = _cache_texto(registro.get("evento")) or "Evento"
+        evento_id = registro.get("evento_id")
+        forma = _cache_texto(registro.get("forma_pagamento")) or "Não informado"
+        data_ref = registro.get("data_pagamento") or datetime.now().isoformat()
+
+        try:
+            data_mov = pd.to_datetime(data_ref).date().isoformat()
+        except Exception:
+            data_mov = datetime.now().date().isoformat()
+
+        payload_fin = {
+            "data": data_mov,
+            "tipo": "Saída",
+            "categoria": "Cachês / Equipe",
+            "forma_pagamento": forma,
+            "descricao": f"Cachê - {nome} ({funcao}) - {evento}",
+            "valor": float(valor),
+            "evento_id": int(evento_id)
+                if evento_id is not None and not pd.isna(evento_id)
+                else None,
+            "origem": "cache",
+            "origem_id": cache_id,
+        }
+
+        financeiro_id = _cache_financeiro_existente(cache_id)
+
+        if financeiro_id:
+            supabase.table("Financeiro").update(payload_fin)                .eq("id", int(financeiro_id))                .execute()
+            criado = False
+        else:
+            resposta = supabase.table("Financeiro").insert(payload_fin).execute()
+            financeiro_id = (
+                resposta.data[0].get("id")
+                if resposta.data
+                else None
+            )
+            criado = True
+
+        supabase.table("pagamentos_equipe").update({
+            "financeiro_lancado": True,
+            "financeiro_id": int(financeiro_id) if financeiro_id is not None else None,
+            "financeiro_data_lancamento": datetime.now().isoformat(),
+        }).eq("id", cache_id).execute()
+
+        return financeiro_id, "criado" if criado else "atualizado"
 
     # =========================================================
     # LEMBRETE DE EVENTOS REALIZADOS SEM CACHÊS
@@ -12980,6 +13071,16 @@ elif menu == "Cachês":
     elif subaba == "Histórico":
         st.subheader("📋 Histórico e Baixa de Pagamentos")
 
+        feedback_cache = st.session_state.pop("cache_feedback_gerenciamento", None)
+        if feedback_cache:
+            st.success(feedback_cache.get("mensagem", "Alteração concluída."))
+            if feedback_cache.get("cmv_fechado"):
+                st.warning(
+                    "⚠️ O evento alterado possui CMV fechado. O registro de Cachês já foi corrigido, "
+                    "mas o snapshot do fechamento precisa ser revisado: abra o evento no CMV, "
+                    "reabra o fechamento e finalize novamente para atualizar o resultado/PDF."
+                )
+
         res = supabase.table("pagamentos_equipe").select("*").execute()
         df_pagamentos = pd.DataFrame(res.data or [])
 
@@ -13187,53 +13288,325 @@ elif menu == "Cachês":
 
             st.divider()
 
-            # 🗑️ SEÇÃO DE EXCLUSÃO SIMPLIFICADA
-            with st.expander("🗑️ Área de Gerenciamento: Excluir Registro de Cachê", expanded=False):
-                opcoes_exclusao = df_pagamentos.apply(
-                    lambda x: f"ID #{x['id']} | {x['nome']} | Evento: {x['evento']} | R$ {x['valor']:.2f} ({x['status']})",
-                    axis=1,
-                )
+            # =========================================================
+            # ✏️ CORRIGIR / EXCLUIR LANÇAMENTO COM SINCRONIZAÇÃO SEGURA
+            # =========================================================
+            st.subheader("✏️ Corrigir ou excluir um lançamento")
+            st.caption(
+                "A correção atualiza o custo da equipe no CMV. Se o cachê estiver Pago, "
+                "a mesma saída vinculada no Financeiro também é atualizada, sem duplicar."
+            )
 
-                if not opcoes_exclusao.empty:
-                    item_para_excluir = st.selectbox(
-                        "Selecione o lançamento que deseja apagar:",
-                        options=opcoes_exclusao,
-                        key="select_del_cache"
+            opcoes_gerenciar = df_pagamentos.apply(
+                lambda x: (
+                    f"ID #{int(x['id'])} | {x['nome']} | "
+                    f"{x['evento']} | R$ {float(x['valor']):.2f} | {x['status']}"
+                ),
+                axis=1,
+            )
+
+            if not opcoes_gerenciar.empty:
+                item_gerenciar = st.selectbox(
+                    "Selecione o cachê que deseja corrigir",
+                    options=opcoes_gerenciar.tolist(),
+                    key="cache_gerenciar_registro",
+                )
+                idx_gerenciar = opcoes_gerenciar[opcoes_gerenciar == item_gerenciar].index[0]
+                linha_edit = df_pagamentos.loc[idx_gerenciar].copy()
+                cache_edit_id = int(linha_edit["id"])
+
+                # Eventos disponíveis para eventual correção do vínculo.
+                eventos_edicao = []
+                try:
+                    eventos_edicao = (
+                        supabase.table("eventos")
+                        .select("id, cliente, data, cmv_status")
+                        .order("data", desc=True)
+                        .execute()
+                        .data
+                        or []
+                    )
+                except Exception:
+                    eventos_edicao = []
+
+                opcoes_evento_edicao = {}
+                for ev in eventos_edicao:
+                    ev_id = int(ev.get("id"))
+                    cliente_ev = _cache_texto(ev.get("cliente")) or "Evento"
+                    data_ev = _cache_texto(ev.get("data"))
+                    rotulo_ev = f"#{ev_id} | {cliente_ev} | {data_ev}"
+                    opcoes_evento_edicao[rotulo_ev] = ev
+
+                evento_atual_id = linha_edit.get("evento_id")
+                try:
+                    evento_atual_id = int(evento_atual_id) if pd.notna(evento_atual_id) else None
+                except Exception:
+                    evento_atual_id = None
+
+                rotulos_evento = list(opcoes_evento_edicao.keys())
+                indice_evento_atual = 0
+                for pos, rotulo in enumerate(rotulos_evento):
+                    if int(opcoes_evento_edicao[rotulo].get("id")) == evento_atual_id:
+                        indice_evento_atual = pos
+                        break
+
+                cmv_fechado_atual = _cache_evento_fechado(evento_atual_id)
+                if cmv_fechado_atual:
+                    st.warning(
+                        "🔒 Este cachê pertence a um evento com CMV fechado. A correção é permitida, "
+                        "mas depois será necessário reabrir e finalizar novamente o CMV para atualizar "
+                        "o snapshot e o PDF do evento."
                     )
 
-                    linha_del = df_pagamentos[opcoes_exclusao == item_para_excluir].iloc[0]
-
-                    st.info(f"📌 **Selecionado:** ID #{linha_del['id']} — {linha_del['nome']} ({linha_del['evento']}) — **R$ {linha_del['valor']:,.2f}**")
-
-                    cache_del_id = int(linha_del["id"])
-                    fin_lancado_del = bool(linha_del.get("financeiro_lancado", False))
-                    fin_existente_del = _cache_financeiro_existente(cache_del_id)
-
-                    if fin_lancado_del or fin_existente_del:
-                        st.warning(
-                            "Este cachê já gerou uma saída no Financeiro. Para preservar a "
-                            "rastreabilidade, estorne o pagamento antes de excluir o registro."
+                with st.form(
+                    key=f"cache_form_corrigir_{cache_edit_id}"
+                ):
+                    if rotulos_evento:
+                        evento_edit_rotulo = st.selectbox(
+                            "Evento",
+                            rotulos_evento,
+                            index=indice_evento_atual,
                         )
-                        if st.button(
-                            "↩️ Estornar pagamento e remover saída do Financeiro",
-                            key=f"cache_estornar_{cache_del_id}",
-                            use_container_width=True,
-                        ):
-                            try:
-                                _cache_estornar_financeiro(cache_del_id)
-                                st.success("✅ Pagamento estornado. O cachê voltou para Pendente.")
-                                st.rerun()
-                            except Exception as erro_estorno:
-                                st.error(f"Erro ao estornar: {erro_estorno}")
+                        evento_edit_obj = opcoes_evento_edicao[evento_edit_rotulo]
+                        evento_edit_id = int(evento_edit_obj.get("id"))
+                        evento_edit_nome = (
+                            f"{_cache_texto(evento_edit_obj.get('cliente')) or 'Evento'} "
+                            f"({_cache_texto(evento_edit_obj.get('data'))})"
+                        )
                     else:
-                        if st.button("❌ Excluir Lançamento Agora", type="primary", use_container_width=True):
-                            try:
-                                supabase.table("pagamentos_equipe").delete().eq("id", cache_del_id).execute()
-                                st.toast(f"🗑️ O registro de {linha_del['nome']} foi excluído com sucesso!", icon="✅")
-                                st.success(f"✅ Registro ID #{cache_del_id} ({linha_del['nome']}) removido!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao excluir registro: {e}")
+                        evento_edit_id = evento_atual_id
+                        evento_edit_nome = st.text_input(
+                            "Evento / referência",
+                            value=_cache_texto(linha_edit.get("evento")),
+                        )
+
+                    ce1, ce2, ce3 = st.columns(3)
+                    nome_edit = ce1.text_input(
+                        "Profissional",
+                        value=_cache_texto(linha_edit.get("nome")),
+                    )
+
+                    funcoes_padrao = ["Bartender", "Barback", "Líder"]
+                    funcao_atual = _cache_texto(linha_edit.get("funcao")) or "Bartender"
+                    if funcao_atual not in funcoes_padrao:
+                        funcoes_padrao.append(funcao_atual)
+                    funcao_edit = ce2.selectbox(
+                        "Função",
+                        funcoes_padrao,
+                        index=funcoes_padrao.index(funcao_atual),
+                    )
+
+                    status_atual = (
+                        "Pago"
+                        if _cache_texto(linha_edit.get("status")).lower() == "pago"
+                        else "Pendente"
+                    )
+                    status_edit = ce3.selectbox(
+                        "Status",
+                        ["Pendente", "Pago"],
+                        index=1 if status_atual == "Pago" else 0,
+                    )
+
+                    ce4, ce5, ce6 = st.columns(3)
+                    valor_base_edit = ce4.number_input(
+                        "Cachê base",
+                        min_value=0.0,
+                        value=_cache_num(linha_edit.get("valor_base")),
+                        step=10.0,
+                        format="%.2f",
+                    )
+                    horas_edit = ce5.number_input(
+                        "Horas trabalhadas",
+                        min_value=0.0,
+                        value=_cache_num(linha_edit.get("horas")),
+                        step=0.5,
+                    )
+                    horas_extras_edit = ce6.number_input(
+                        "Horas extras",
+                        min_value=0.0,
+                        value=_cache_num(linha_edit.get("horas_extras")),
+                        step=0.5,
+                    )
+
+                    ce7, ce8, ce9 = st.columns(3)
+                    ajuda_edit = ce7.number_input(
+                        "Ajuda de custo",
+                        min_value=0.0,
+                        value=_cache_num(linha_edit.get("ajuda_custo")),
+                        step=10.0,
+                        format="%.2f",
+                    )
+                    despesas_edit = ce8.number_input(
+                        "Despesas",
+                        min_value=0.0,
+                        value=_cache_num(linha_edit.get("despesas")),
+                        step=10.0,
+                        format="%.2f",
+                    )
+                    valor_total_edit = ce9.number_input(
+                        "Valor total do cachê",
+                        min_value=0.0,
+                        value=_cache_num(linha_edit.get("valor")),
+                        step=10.0,
+                        format="%.2f",
+                        help=(
+                            "Este é o valor oficial que entra no CMV e, quando Pago, no Financeiro. "
+                            "Ajuste-o caso o lançamento original tenha sido feito incorretamente."
+                        ),
+                    )
+
+                    cp1, cp2 = st.columns(2)
+                    formas_pagamento = ["Pix", "Dinheiro", "Transferência", "Cartão"]
+                    forma_atual = _cache_texto(linha_edit.get("forma_pagamento"))
+                    if forma_atual and forma_atual not in formas_pagamento:
+                        formas_pagamento.append(forma_atual)
+                    forma_edit = cp1.selectbox(
+                        "Forma de pagamento",
+                        formas_pagamento,
+                        index=(
+                            formas_pagamento.index(forma_atual)
+                            if forma_atual in formas_pagamento
+                            else 0
+                        ),
+                        disabled=status_edit != "Pago",
+                    )
+
+                    data_pagamento_atual = pd.to_datetime(
+                        linha_edit.get("data_pagamento"), errors="coerce"
+                    )
+                    data_pagamento_padrao = (
+                        data_pagamento_atual.date()
+                        if pd.notna(data_pagamento_atual)
+                        else date.today()
+                    )
+                    data_pagamento_edit = cp2.date_input(
+                        "Data do pagamento",
+                        value=data_pagamento_padrao,
+                        disabled=status_edit != "Pago",
+                    )
+
+                    observacao_edit = st.text_area(
+                        "Observação",
+                        value=_cache_texto(linha_edit.get("observacao")),
+                    )
+
+                    confirmar_correcao = st.checkbox(
+                        "Confirmo que revisei os dados deste cachê.",
+                        key=f"cache_confirma_correcao_{cache_edit_id}",
+                    )
+
+                    salvar_correcao = st.form_submit_button(
+                        "💾 Salvar correção",
+                        use_container_width=True,
+                    )
+
+                if salvar_correcao:
+                    if not confirmar_correcao:
+                        st.warning("Confirme a revisão antes de salvar.")
+                    elif not nome_edit.strip():
+                        st.warning("Informe o nome do profissional.")
+                    elif valor_total_edit <= 0:
+                        st.warning("O valor total do cachê deve ser maior que zero.")
+                    else:
+                        try:
+                            if status_edit == "Pago":
+                                data_pagamento_iso = datetime.combine(
+                                    data_pagamento_edit,
+                                    datetime.now().time(),
+                                ).isoformat()
+                                forma_final_edit = forma_edit
+                            else:
+                                data_pagamento_iso = None
+                                forma_final_edit = None
+
+                            payload_corrigido = {
+                                "evento_id": evento_edit_id,
+                                "evento": evento_edit_nome,
+                                "nome": nome_edit.strip(),
+                                "funcao": funcao_edit,
+                                "valor": float(valor_total_edit),
+                                "valor_base": float(valor_base_edit),
+                                "horas": float(horas_edit),
+                                "horas_extras": float(horas_extras_edit),
+                                "ajuda_custo": float(ajuda_edit),
+                                "despesas": float(despesas_edit),
+                                "observacao": observacao_edit.strip(),
+                                "status": status_edit,
+                                "forma_pagamento": forma_final_edit,
+                                "data_pagamento": data_pagamento_iso,
+                            }
+
+                            supabase.table("pagamentos_equipe").update(
+                                payload_corrigido
+                            ).eq("id", cache_edit_id).execute()
+
+                            registro_corrigido = {
+                                **linha_edit.to_dict(),
+                                **payload_corrigido,
+                                "id": cache_edit_id,
+                            }
+                            _cache_atualizar_financeiro(registro_corrigido)
+
+                            evento_antigo_fechado = _cache_evento_fechado(evento_atual_id)
+                            evento_novo_fechado = _cache_evento_fechado(evento_edit_id)
+
+                            st.session_state["cache_feedback_gerenciamento"] = {
+                                "mensagem": (
+                                    f"✅ Cachê ID #{cache_edit_id} corrigido com sucesso. "
+                                    "CMV e Financeiro passam a usar os dados corrigidos conforme o status."
+                                ),
+                                "cmv_fechado": bool(
+                                    evento_antigo_fechado or evento_novo_fechado
+                                ),
+                            }
+                            st.rerun()
+
+                        except Exception as erro_correcao:
+                            st.error(f"Erro ao corrigir o cachê: {erro_correcao}")
+
+                with st.expander("🗑️ Excluir lançamento", expanded=False):
+                    st.warning(
+                        "A exclusão remove o registro de Cachês. Se ele já tiver gerado uma saída "
+                        "no Financeiro, essa mesma saída vinculada também será removida."
+                    )
+                    confirmar_exclusao = st.checkbox(
+                        f"Confirmo a exclusão definitiva do cachê ID #{cache_edit_id}.",
+                        key=f"cache_confirma_exclusao_{cache_edit_id}",
+                    )
+
+                    if st.button(
+                        "🗑️ Excluir cachê e sincronizar",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=not confirmar_exclusao,
+                        key=f"cache_excluir_seguro_{cache_edit_id}",
+                    ):
+                        try:
+                            cmv_fechado_exclusao = _cache_evento_fechado(evento_atual_id)
+
+                            # Primeiro remove somente a saída financeira originada por este cachê.
+                            supabase.table("Financeiro").delete()\
+                                .eq("origem", "cache")\
+                                .eq("origem_id", cache_edit_id)\
+                                .execute()
+
+                            # Depois remove o registro de cachê.
+                            supabase.table("pagamentos_equipe").delete()\
+                                .eq("id", cache_edit_id)\
+                                .execute()
+
+                            st.session_state["cache_feedback_gerenciamento"] = {
+                                "mensagem": (
+                                    f"✅ Cachê ID #{cache_edit_id} excluído. "
+                                    "Qualquer saída financeira vinculada a ele também foi removida."
+                                ),
+                                "cmv_fechado": bool(cmv_fechado_exclusao),
+                            }
+                            st.rerun()
+
+                        except Exception as erro_exclusao:
+                            st.error(f"Erro ao excluir o cachê: {erro_exclusao}")
+
     # =====================================
     # SUBABA 4: CONSOLIDADO & RELATÓRIOS
     # =====================================
