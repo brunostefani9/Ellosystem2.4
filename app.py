@@ -13738,6 +13738,7 @@ elif menu == "CMV":
     from datetime import datetime
 
     st.title("📊 CMV — Fechamento Real dos Eventos")
+    st.caption("Versão V4.1 — recuperação cruzada de preços antigos (inclui Artesanais).")
     st.caption(
         "Feche o evento a partir do checklist operacional: Ida, Volta e "
         "Conferência Final geram automaticamente Consumo, Divergência e Custo Real."
@@ -13996,10 +13997,14 @@ elif menu == "CMV":
 
         return bases
 
-    def _cmv_calcular_custo_atual_item(item, linha_preco):
+    def _cmv_calcular_custo_atual_item(item, linha_preco, origem_preco=None):
         """
         Converte o preço atual da Precificação para a unidade operacional
         usada pelo checklist/CMV.
+
+        V4.1: quando um item antigo está classificado na categoria errada
+        (ex.: Charope salvo como Insumos, mas cadastrado em precos_artesanais),
+        a origem real do preço tem prioridade para definir a conversão.
         """
         categoria = _cmv_norm_preco(item.get("categoria"))
         unidade = _cmv_norm_preco(item.get("unidade"))
@@ -14009,6 +14014,46 @@ elif menu == "CMV":
         if preco <= 0:
             return None
 
+        # A origem real do cadastro prevalece sobre a categoria antiga do evento.
+        if origem_preco == "precos_bebidas":
+            return {
+                "preco_unitario": preco,
+                "quantidade_base": quantidade_cadastro,
+                "custo_unitario_operacional": preco,
+            }
+
+        if origem_preco == "precos_artesanais":
+            if quantidade_cadastro <= 0:
+                return None
+            return {
+                "preco_unitario": preco,
+                "quantidade_base": quantidade_cadastro,
+                "custo_unitario_operacional": preco / quantidade_cadastro,
+            }
+
+        if origem_preco == "precos_insumos":
+            if unidade in {"g", "gr", "grama", "gramas"}:
+                # Na base de insumos o preço histórico é tratado como R$/kg.
+                return {
+                    "preco_unitario": preco,
+                    "quantidade_base": 1000.0,
+                    "custo_unitario_operacional": preco / 1000.0,
+                }
+            if unidade in {"kg", "quilo", "quilos"}:
+                return {
+                    "preco_unitario": preco,
+                    "quantidade_base": 1.0,
+                    "custo_unitario_operacional": preco,
+                }
+            if quantidade_cadastro > 0:
+                return {
+                    "preco_unitario": preco,
+                    "quantidade_base": quantidade_cadastro,
+                    "custo_unitario_operacional": preco / quantidade_cadastro,
+                }
+            return None
+
+        # Fallback compatível com eventos mais novos.
         if categoria == "bebidas":
             return {
                 "preco_unitario": preco,
@@ -14048,27 +14093,10 @@ elif menu == "CMV":
 
         return None
 
-    def _cmv_resolver_preco_atual(item, bases):
-        """
-        Procura o produto no cadastro atual sem adivinhar em caso de ambiguidade.
-        Prioridade: produto_ref_id -> nome exato normalizado -> tipo_base único.
-        """
-        categoria = _cmv_norm_preco(item.get("categoria"))
-        tabela_por_categoria = {
-            "bebidas": "precos_bebidas",
-            "frutas": "precos_insumos",
-            "insumos": "precos_insumos",
-            "gelo": "precos_insumos",
-            "artesanais": "precos_artesanais",
-            "artesanal": "precos_artesanais",
-        }
-        nome_tabela = tabela_por_categoria.get(categoria)
-        if not nome_tabela:
-            return None, "categoria sem base de preço"
-
-        base = bases.get(nome_tabela, pd.DataFrame())
-        if base.empty:
-            return None, f"{nome_tabela} sem cadastros"
+    def _cmv_filtrar_candidatos_preco(item, base, permitir_tipo=True):
+        """Retorna candidatos compatíveis dentro de uma base de preços."""
+        if base is None or base.empty:
+            return pd.DataFrame()
 
         candidatos = pd.DataFrame()
 
@@ -14087,19 +14115,20 @@ elif menu == "CMV":
             if nome_norm:
                 candidatos = base[base["_nome_norm"] == nome_norm].copy()
 
-        if candidatos.empty:
+        if candidatos.empty and permitir_tipo:
             tipo_norm = _cmv_norm_preco(item.get("tipo_base"))
             if tipo_norm:
                 por_tipo = base[base["_tipo_norm"] == tipo_norm].copy()
                 if len(por_tipo) == 1:
                     candidatos = por_tipo
 
-        if candidatos.empty:
-            return None, "produto não encontrado na Precificação atual"
+        return candidatos
 
-        # Se há mais de uma embalagem do mesmo nome, tenta usar a embalagem
-        # que já estava registrada no snapshot antigo. Sem isso, não escolhe
-        # arbitrariamente um preço diferente.
+    def _cmv_escolher_candidato_unico(item, candidatos, origem_preco):
+        """Resolve embalagem/preço sem escolher arbitrariamente."""
+        if candidatos is None or candidatos.empty:
+            return None, "produto não encontrado"
+
         if len(candidatos) > 1:
             qtd_base_antiga = _cmv_num(item.get("quantidade_base", 0))
             if qtd_base_antiga > 0 and "quantidade" in candidatos.columns:
@@ -14111,7 +14140,9 @@ elif menu == "CMV":
         if len(candidatos) > 1:
             custos = []
             for _, cand in candidatos.iterrows():
-                calc = _cmv_calcular_custo_atual_item(item, cand)
+                calc = _cmv_calcular_custo_atual_item(
+                    item, cand, origem_preco=origem_preco
+                )
                 if calc:
                     custos.append(round(calc["custo_unitario_operacional"], 10))
             if custos and max(custos) - min(custos) < 1e-9:
@@ -14120,7 +14151,9 @@ elif menu == "CMV":
                 return None, "mais de um cadastro compatível; precisa escolher a embalagem"
 
         linha_preco = candidatos.iloc[0]
-        calculo = _cmv_calcular_custo_atual_item(item, linha_preco)
+        calculo = _cmv_calcular_custo_atual_item(
+            item, linha_preco, origem_preco=origem_preco
+        )
         if not calculo or calculo["custo_unitario_operacional"] <= 0:
             return None, "cadastro encontrado, mas o preço/quantidade está inválido"
 
@@ -14129,8 +14162,84 @@ elif menu == "CMV":
             if pd.notna(linha_preco.get("id"))
             else None
         )
-        calculo["origem_preco"] = nome_tabela
+        calculo["origem_preco"] = origem_preco
         return calculo, None
+
+    def _cmv_resolver_preco_atual(item, bases):
+        """
+        Resolve preço atual sem adivinhar.
+
+        V4.1:
+        1) tenta primeiro a base esperada pela categoria do evento;
+        2) se não encontrar, procura o NOME EXATO normalizado nas outras bases;
+        3) só aceita a busca cruzada quando existe uma única origem/cadastro seguro.
+
+        Isso recupera eventos antigos em que, por exemplo, Charopes/Espumas
+        foram salvos como 'Insumos', embora o preço esteja em precos_artesanais.
+        """
+        categoria = _cmv_norm_preco(item.get("categoria"))
+        tabela_por_categoria = {
+            "bebidas": "precos_bebidas",
+            "frutas": "precos_insumos",
+            "insumos": "precos_insumos",
+            "gelo": "precos_insumos",
+            "artesanais": "precos_artesanais",
+            "artesanal": "precos_artesanais",
+        }
+        nome_tabela_primaria = tabela_por_categoria.get(categoria)
+        ordem_bases = [
+            x for x in [
+                nome_tabela_primaria,
+                "precos_bebidas",
+                "precos_insumos",
+                "precos_artesanais",
+            ] if x
+        ]
+        # Remove duplicados preservando a ordem.
+        ordem_bases = list(dict.fromkeys(ordem_bases))
+
+        # 1) Base principal: ID -> nome -> tipo_base único.
+        if nome_tabela_primaria:
+            base_principal = bases.get(nome_tabela_primaria, pd.DataFrame())
+            candidatos = _cmv_filtrar_candidatos_preco(
+                item, base_principal, permitir_tipo=True
+            )
+            if not candidatos.empty:
+                return _cmv_escolher_candidato_unico(
+                    item, candidatos, nome_tabela_primaria
+                )
+
+        # 2) Busca cruzada SOMENTE por nome exato normalizado.
+        nome_norm = _cmv_norm_preco(item.get("produto"))
+        if not nome_norm:
+            return None, "produto sem nome para pesquisa"
+
+        encontrados = []
+        for nome_base in ordem_bases:
+            if nome_base == nome_tabela_primaria:
+                continue
+            base = bases.get(nome_base, pd.DataFrame())
+            if base.empty or "_nome_norm" not in base.columns:
+                continue
+            cand = base[base["_nome_norm"] == nome_norm].copy()
+            if not cand.empty:
+                encontrados.append((nome_base, cand))
+
+        if not encontrados:
+            return None, "produto não encontrado na Precificação atual"
+
+        if len(encontrados) > 1:
+            # Se o mesmo nome existe em bases diferentes, não adivinha.
+            origens = ", ".join(x[0] for x in encontrados)
+            return None, f"produto encontrado em mais de uma base: {origens}"
+
+        origem_preco, candidatos = encontrados[0]
+        calculo, erro = _cmv_escolher_candidato_unico(
+            item, candidatos, origem_preco
+        )
+        if calculo:
+            calculo["busca_cruzada"] = True
+        return calculo, erro
 
     def _cmv_preencher_custos_zerados(evento_id, bases=None):
         """
