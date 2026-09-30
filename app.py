@@ -13730,12 +13730,1766 @@ elif menu == "Vendas":
                 "Sem dados suficientes para gerar o gráfico."
             )
 
-    else:
+elif menu == "CMV":
 
-        st.info(
-            "Sem dados ainda para o gráfico."
+    import io
+    import re
+    import unicodedata
+    from datetime import datetime
+
+    st.title("📊 CMV — Fechamento Real dos Eventos")
+    st.caption(
+        "Feche o evento a partir do checklist operacional: Ida, Volta e "
+        "Conferência Final geram automaticamente Consumo, Divergência e Custo Real."
+    )
+
+    # ============================================================
+    # CONFIGURAÇÕES
+    # ============================================================
+
+    STATUS_EVENTOS_CMV = ["aprovado", "finalizado", "concluido", "pago"]
+    CATEGORIAS_ADMIN = {"equipe", "custos", "locação", "locacao"}
+    CATEGORIAS_CUSTO_MANUAL = [
+        "Transporte",
+        "Cachê / Equipe",
+        "Locação",
+        "Compra emergencial",
+        "Avaria / Quebra",
+        "Gelo extra",
+        "Outros",
+    ]
+
+    # ============================================================
+    # FUNÇÕES AUXILIARES
+    # ============================================================
+
+    def _cmv_num(valor, padrao=0.0):
+        try:
+            if valor is None or pd.isna(valor):
+                return float(padrao)
+            return float(valor)
+        except Exception:
+            return float(padrao)
+
+    def _cmv_texto(valor):
+        if valor is None:
+            return ""
+        try:
+            if pd.isna(valor):
+                return ""
+        except Exception:
+            pass
+        texto = str(valor).strip()
+        return "" if texto.lower() in {"nan", "none", "null"} else texto
+
+    def _cmv_moeda(valor):
+        valor = _cmv_num(valor)
+        texto = f"{valor:,.2f}"
+        texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {texto}"
+
+    def _cmv_data_br(valor):
+        if not _cmv_texto(valor):
+            return "-"
+        try:
+            return pd.to_datetime(valor).strftime("%d/%m/%Y")
+        except Exception:
+            return str(valor)
+
+    def _cmv_evento_rotulo(evento):
+        return (
+            f"#{int(evento.get('id'))} | "
+            f"{_cmv_texto(evento.get('cliente')) or 'Sem cliente'} | "
+            f"{_cmv_data_br(evento.get('data'))} | "
+            f"{_cmv_texto(evento.get('cidade'))}"
         )
 
+    def _cmv_carregar_eventos():
+        dados = (
+            supabase.table("eventos")
+            .select("*")
+            .in_("status", STATUS_EVENTOS_CMV)
+            .order("data", desc=True)
+            .execute()
+            .data
+            or []
+        )
+        return pd.DataFrame(dados)
+
+    def _cmv_carregar_itens(evento_id):
+        dados = (
+            supabase.table("evento_itens")
+            .select("*")
+            .eq("evento_id", int(evento_id))
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+        return pd.DataFrame(dados)
+
+    def _cmv_carregar_custos(evento_id):
+        dados = (
+            supabase.table("evento_custos")
+            .select("*")
+            .eq("evento_id", int(evento_id))
+            .order("id", desc=True)
+            .execute()
+            .data
+            or []
+        )
+        return pd.DataFrame(dados)
+
+    def _cmv_carregar_adendos(evento_id):
+        dados = (
+            supabase.table("aditivos_evento")
+            .select("*")
+            .eq("evento_id", int(evento_id))
+            .neq("status", "Cancelado")
+            .order("id", desc=True)
+            .execute()
+            .data
+            or []
+        )
+        return pd.DataFrame(dados)
+
+    def _cmv_carregar_caches_evento(evento_id):
+        """
+        Cachês vinculados ao evento.
+        No CMV, TODO cachê registrado é custo real da equipe, independentemente
+        de já estar Pago ou Pendente. O status de pagamento pertence ao Financeiro.
+        """
+        try:
+            dados = (
+                supabase.table("pagamentos_equipe")
+                .select("*")
+                .eq("evento_id", int(evento_id))
+                .order("id", desc=True)
+                .execute()
+                .data
+                or []
+            )
+            return pd.DataFrame(dados)
+        except Exception:
+            return pd.DataFrame()
+
+    def _cmv_resumo_caches(caches):
+        if caches.empty:
+            return {
+                "total": 0.0,
+                "pago": 0.0,
+                "pendente": 0.0,
+                "qtd": 0,
+                "qtd_pendente": 0,
+            }
+
+        valores = pd.to_numeric(
+            caches.get("valor", pd.Series(dtype=float)), errors="coerce"
+        ).fillna(0)
+        if "status" in caches.columns:
+            status = caches["status"].fillna("Pendente").astype(str).str.lower()
+        else:
+            status = pd.Series("pendente", index=caches.index)
+
+        pagos_mask = status == "pago"
+        return {
+            "total": float(valores.sum()),
+            "pago": float(valores[pagos_mask].sum()),
+            "pendente": float(valores[~pagos_mask].sum()),
+            "qtd": int(len(caches)),
+            "qtd_pendente": int((~pagos_mask).sum()),
+        }
+
+    def _cmv_separar_custos_manuais(custos):
+        """Separa Cachê/Equipe dos demais custos sem alterar a tabela atual."""
+        custo_equipe = 0.0
+        outros = 0.0
+
+        if custos.empty:
+            return custo_equipe, outros
+
+        for _, linha in custos.iterrows():
+            descricao = _cmv_texto(linha.get("descricao")).lower()
+            valor = _cmv_num(linha.get("valor", 0))
+
+            # O cadastro atual salva a categoria no início da descrição.
+            # Usamos "cach" + "equipe" para aceitar Cachê/Cache/Cachês.
+            if "cach" in descricao and "equipe" in descricao:
+                custo_equipe += valor
+            else:
+                outros += valor
+
+        return custo_equipe, outros
+
+    def _cmv_itens_operacionais(itens):
+        if itens.empty:
+            return itens.copy()
+        if "categoria" not in itens.columns:
+            return itens.copy()
+        categoria_norm = itens["categoria"].fillna("").astype(str).str.strip().str.lower()
+        return itens[~categoria_norm.isin(CATEGORIAS_ADMIN)].copy()
+
+    def _cmv_custo_unitario_operacional(linha):
+        # 1) snapshot ideal gravado pelo Orçamento V10+
+        custo = _cmv_num(linha.get("custo_unitario_operacional", 0))
+        if custo > 0:
+            return custo
+
+        # 2) fallback: custo estimado / quantidade prevista
+        custo_estimado = _cmv_num(linha.get("custo_estimado", 0))
+        quantidade = _cmv_num(linha.get("quantidade", 0))
+        if custo_estimado > 0 and quantidade > 0:
+            return custo_estimado / quantidade
+
+        # 3) bebida antiga com preço unitário salvo
+        categoria = _cmv_texto(linha.get("categoria")).lower()
+        preco_unitario = _cmv_num(linha.get("preco_unitario", 0))
+        if categoria == "bebidas" and preco_unitario > 0:
+            return preco_unitario
+
+        return 0.0
+
+    def _cmv_norm_preco(valor):
+        texto = _cmv_texto(valor)
+        texto = unicodedata.normalize("NFKD", texto)
+        texto = texto.encode("ascii", "ignore").decode("ascii")
+        texto = texto.lower().strip()
+        texto = re.sub(r"[^a-z0-9]+", " ", texto)
+        return " ".join(texto.split())
+
+    def _cmv_carregar_bases_precos():
+        """Carrega os preços atuais cadastrados na Precificação."""
+        bases = {}
+        for nome_tabela in [
+            "precos_bebidas",
+            "precos_insumos",
+            "precos_artesanais",
+        ]:
+            try:
+                dados = (
+                    supabase.table(nome_tabela)
+                    .select("*")
+                    .execute()
+                    .data
+                    or []
+                )
+                df = pd.DataFrame(dados)
+            except Exception:
+                df = pd.DataFrame()
+
+            if not df.empty:
+                if "nome" in df.columns:
+                    df["_nome_norm"] = (
+                        df["nome"].fillna("").astype(str).map(_cmv_norm_preco)
+                    )
+                else:
+                    df["_nome_norm"] = ""
+
+                if "tipo" in df.columns:
+                    df["_tipo_norm"] = (
+                        df["tipo"].fillna("").astype(str).map(_cmv_norm_preco)
+                    )
+                else:
+                    df["_tipo_norm"] = ""
+
+            bases[nome_tabela] = df
+
+        return bases
+
+    def _cmv_calcular_custo_atual_item(item, linha_preco):
+        """
+        Converte o preço atual da Precificação para a unidade operacional
+        usada pelo checklist/CMV.
+        """
+        categoria = _cmv_norm_preco(item.get("categoria"))
+        unidade = _cmv_norm_preco(item.get("unidade"))
+        preco = _cmv_num(linha_preco.get("preco", 0))
+        quantidade_cadastro = _cmv_num(linha_preco.get("quantidade", 0))
+
+        if preco <= 0:
+            return None
+
+        if categoria == "bebidas":
+            return {
+                "preco_unitario": preco,
+                "quantidade_base": quantidade_cadastro,
+                "custo_unitario_operacional": preco,
+            }
+
+        if categoria in {"frutas", "insumos", "gelo"}:
+            if unidade in {"g", "gr", "grama", "gramas"}:
+                return {
+                    "preco_unitario": preco,
+                    "quantidade_base": 1000.0,
+                    "custo_unitario_operacional": preco / 1000.0,
+                }
+            if unidade in {"kg", "quilo", "quilos"}:
+                return {
+                    "preco_unitario": preco,
+                    "quantidade_base": 1.0,
+                    "custo_unitario_operacional": preco,
+                }
+            if quantidade_cadastro > 0:
+                return {
+                    "preco_unitario": preco,
+                    "quantidade_base": quantidade_cadastro,
+                    "custo_unitario_operacional": preco / quantidade_cadastro,
+                }
+            return None
+
+        if categoria in {"artesanais", "artesanal"}:
+            if quantidade_cadastro <= 0:
+                return None
+            return {
+                "preco_unitario": preco,
+                "quantidade_base": quantidade_cadastro,
+                "custo_unitario_operacional": preco / quantidade_cadastro,
+            }
+
+        return None
+
+    def _cmv_resolver_preco_atual(item, bases):
+        """
+        Procura o produto no cadastro atual sem adivinhar em caso de ambiguidade.
+        Prioridade: produto_ref_id -> nome exato normalizado -> tipo_base único.
+        """
+        categoria = _cmv_norm_preco(item.get("categoria"))
+        tabela_por_categoria = {
+            "bebidas": "precos_bebidas",
+            "frutas": "precos_insumos",
+            "insumos": "precos_insumos",
+            "gelo": "precos_insumos",
+            "artesanais": "precos_artesanais",
+            "artesanal": "precos_artesanais",
+        }
+        nome_tabela = tabela_por_categoria.get(categoria)
+        if not nome_tabela:
+            return None, "categoria sem base de preço"
+
+        base = bases.get(nome_tabela, pd.DataFrame())
+        if base.empty:
+            return None, f"{nome_tabela} sem cadastros"
+
+        candidatos = pd.DataFrame()
+
+        produto_ref_id = item.get("produto_ref_id")
+        if produto_ref_id is not None and "id" in base.columns:
+            try:
+                ref_num = int(float(produto_ref_id))
+                candidatos = base[
+                    pd.to_numeric(base["id"], errors="coerce") == ref_num
+                ].copy()
+            except Exception:
+                pass
+
+        if candidatos.empty:
+            nome_norm = _cmv_norm_preco(item.get("produto"))
+            if nome_norm:
+                candidatos = base[base["_nome_norm"] == nome_norm].copy()
+
+        if candidatos.empty:
+            tipo_norm = _cmv_norm_preco(item.get("tipo_base"))
+            if tipo_norm:
+                por_tipo = base[base["_tipo_norm"] == tipo_norm].copy()
+                if len(por_tipo) == 1:
+                    candidatos = por_tipo
+
+        if candidatos.empty:
+            return None, "produto não encontrado na Precificação atual"
+
+        # Se há mais de uma embalagem do mesmo nome, tenta usar a embalagem
+        # que já estava registrada no snapshot antigo. Sem isso, não escolhe
+        # arbitrariamente um preço diferente.
+        if len(candidatos) > 1:
+            qtd_base_antiga = _cmv_num(item.get("quantidade_base", 0))
+            if qtd_base_antiga > 0 and "quantidade" in candidatos.columns:
+                qtds = pd.to_numeric(candidatos["quantidade"], errors="coerce")
+                proximos = candidatos[(qtds - qtd_base_antiga).abs() < 1e-6]
+                if len(proximos) == 1:
+                    candidatos = proximos
+
+        if len(candidatos) > 1:
+            custos = []
+            for _, cand in candidatos.iterrows():
+                calc = _cmv_calcular_custo_atual_item(item, cand)
+                if calc:
+                    custos.append(round(calc["custo_unitario_operacional"], 10))
+            if custos and max(custos) - min(custos) < 1e-9:
+                candidatos = candidatos.iloc[[0]].copy()
+            else:
+                return None, "mais de um cadastro compatível; precisa escolher a embalagem"
+
+        linha_preco = candidatos.iloc[0]
+        calculo = _cmv_calcular_custo_atual_item(item, linha_preco)
+        if not calculo or calculo["custo_unitario_operacional"] <= 0:
+            return None, "cadastro encontrado, mas o preço/quantidade está inválido"
+
+        calculo["produto_ref_id"] = (
+            int(linha_preco.get("id"))
+            if pd.notna(linha_preco.get("id"))
+            else None
+        )
+        calculo["origem_preco"] = nome_tabela
+        return calculo, None
+
+    def _cmv_preencher_custos_zerados(evento_id, bases=None):
+        """
+        Grava um snapshot dos PREÇOS ATUAIS somente nos itens cujo custo
+        operacional está zerado. Não altera itens que já possuem preço salvo.
+        """
+        if bases is None:
+            bases = _cmv_carregar_bases_precos()
+
+        itens_evento = _cmv_itens_operacionais(_cmv_carregar_itens(evento_id))
+        atualizados = 0
+        ignorados = 0
+        pendencias = []
+
+        for _, item in itens_evento.iterrows():
+            if _cmv_custo_unitario_operacional(item) > 0:
+                ignorados += 1
+                continue
+
+            resolvido, erro = _cmv_resolver_preco_atual(item, bases)
+            if not resolvido:
+                pendencias.append({
+                    "Item": _cmv_texto(item.get("produto")),
+                    "Categoria": _cmv_texto(item.get("categoria")),
+                    "Motivo": erro,
+                })
+                continue
+
+            quantidade_prevista = _cmv_num(item.get("quantidade", 0))
+            custo_unit = _cmv_num(resolvido.get("custo_unitario_operacional", 0))
+            custo_estimado = quantidade_prevista * custo_unit
+
+            consumo_salvo = _cmv_num(item.get("cmv_consumo_real", 0))
+            if consumo_salvo == 0:
+                ida = _cmv_num(item.get("quantidade_ida", 0))
+                final = _cmv_num(item.get("quantidade_estoquista", 0))
+                consumo_salvo = ida - final
+
+            payload = {
+                "produto_ref_id": resolvido.get("produto_ref_id"),
+                "quantidade_base": _cmv_num(resolvido.get("quantidade_base", 0)),
+                "preco_unitario": _cmv_num(resolvido.get("preco_unitario", 0)),
+                "custo_unitario_operacional": custo_unit,
+                "custo_estimado": custo_estimado,
+                "cmv_custo_real": consumo_salvo * custo_unit,
+            }
+
+            supabase.table("evento_itens").update(payload).eq(
+                "id", int(item.get("id"))
+            ).execute()
+            atualizados += 1
+
+        return {
+            "atualizados": atualizados,
+            "ignorados": ignorados,
+            "pendencias": pendencias,
+        }
+
+    def _cmv_calcular_item(linha, ida=None, volta=None, final=None):
+        ida = _cmv_num(linha.get("quantidade_ida", 0) if ida is None else ida)
+        volta = _cmv_num(linha.get("quantidade_volta", 0) if volta is None else volta)
+        final = _cmv_num(linha.get("quantidade_estoquista", 0) if final is None else final)
+
+        consumo = ida - final
+        divergencia = volta - final
+        custo_unit = _cmv_custo_unitario_operacional(linha)
+        custo_real = consumo * custo_unit
+
+        return {
+            "ida": ida,
+            "volta": volta,
+            "final": final,
+            "consumo": consumo,
+            "divergencia": divergencia,
+            "custo_unitario": custo_unit,
+            "custo_real": custo_real,
+        }
+
+    def _cmv_resumo_financeiro(evento, itens, custos, adendos, caches):
+        venda_original = _cmv_num(evento.get("venda", 0))
+        custo_previsto = _cmv_num(evento.get("custo", 0))
+
+        adendos_cliente = 0.0
+        adendos_equipe = 0.0
+        if not adendos.empty:
+            adendos_cliente = pd.to_numeric(
+                adendos.get("valor_cliente", pd.Series(dtype=float)),
+                errors="coerce",
+            ).fillna(0).sum()
+            adendos_equipe = pd.to_numeric(
+                adendos.get("valor_equipe", pd.Series(dtype=float)),
+                errors="coerce",
+            ).fillna(0).sum()
+
+        # Custos manuais antigos de equipe ficam como fallback.
+        custo_equipe_manual, outros_custos_manuais = _cmv_separar_custos_manuais(custos)
+        resumo_caches = _cmv_resumo_caches(caches)
+
+        # Regra anti-duplicidade:
+        # se houver ao menos um cachê vinculado ao evento, a aba Cachês é a fonte
+        # oficial do custo real de equipe e os lançamentos manuais de Cachê/Equipe
+        # em evento_custos são ignorados.
+        if resumo_caches["qtd"] > 0:
+            custo_equipe = resumo_caches["total"]
+            fonte_equipe = "Cachês"
+            custo_equipe_manual_ignorado = float(custo_equipe_manual)
+        else:
+            custo_equipe = float(custo_equipe_manual)
+            fonte_equipe = "Manual" if custo_equipe > 0 else "Não informado"
+            custo_equipe_manual_ignorado = 0.0
+
+        custo_produtos = 0.0
+        itens_operacionais = _cmv_itens_operacionais(itens)
+        if not itens_operacionais.empty:
+            if "cmv_custo_real" in itens_operacionais.columns:
+                custo_produtos = pd.to_numeric(
+                    itens_operacionais["cmv_custo_real"], errors="coerce"
+                ).fillna(0).sum()
+            else:
+                for _, item in itens_operacionais.iterrows():
+                    custo_produtos += _cmv_calcular_item(item)["custo_real"]
+
+        faturamento_real = venda_original + float(adendos_cliente)
+        custo_total = (
+            float(custo_produtos)
+            + float(custo_equipe)
+            + float(outros_custos_manuais)
+            + float(adendos_equipe)
+        )
+        lucro_real = faturamento_real - custo_total
+        cmv_percentual = (
+            custo_total / faturamento_real * 100
+            if faturamento_real > 0
+            else 0.0
+        )
+
+        return {
+            "venda_original": venda_original,
+            "adendos_cliente": float(adendos_cliente),
+            "faturamento_real": faturamento_real,
+            "custo_previsto": custo_previsto,
+            "custo_produtos": float(custo_produtos),
+            "custo_equipe": float(custo_equipe),
+            "fonte_equipe": fonte_equipe,
+            "custo_equipe_pago": float(resumo_caches["pago"]),
+            "custo_equipe_pendente": float(resumo_caches["pendente"]),
+            "qtd_caches": int(resumo_caches["qtd"]),
+            "qtd_caches_pendentes": int(resumo_caches["qtd_pendente"]),
+            "custo_equipe_manual_ignorado": custo_equipe_manual_ignorado,
+            "outros_custos_manuais": float(outros_custos_manuais),
+            "custos_manuais": float(custo_equipe + outros_custos_manuais),
+            "custo_adendos": float(adendos_equipe),
+            "custo_total": float(custo_total),
+            "lucro_real": float(lucro_real),
+            "cmv_percentual": float(cmv_percentual),
+            "diferenca_previsto": float(custo_previsto - custo_total),
+        }
+
+    def _cmv_resumo_snapshot(evento, resumo_calculado):
+        if _cmv_texto(evento.get("cmv_status")).lower() != "fechado":
+            return resumo_calculado
+
+        resumo = dict(resumo_calculado)
+        resumo["custo_produtos"] = _cmv_num(
+            evento.get("cmv_custo_produtos"), resumo["custo_produtos"]
+        )
+
+        # V3 separa equipe de outros custos. Fechamentos antigos podem ter
+        # cmv_custo_equipe NULL; nesse caso preservamos o detalhamento calculado
+        # e respeitamos o custo total congelado do evento.
+        snap_equipe = evento.get("cmv_custo_equipe")
+        if snap_equipe is not None:
+            try:
+                if not pd.isna(snap_equipe):
+                    resumo["custo_equipe"] = _cmv_num(snap_equipe)
+                    resumo["outros_custos_manuais"] = _cmv_num(
+                        evento.get("cmv_custos_extras"),
+                        resumo["outros_custos_manuais"],
+                    )
+                    resumo["custos_manuais"] = (
+                        resumo["custo_equipe"] + resumo["outros_custos_manuais"]
+                    )
+            except Exception:
+                pass
+
+        resumo["custo_adendos"] = _cmv_num(
+            evento.get("cmv_custo_adendos"), resumo["custo_adendos"]
+        )
+        resumo["custo_total"] = _cmv_num(
+            evento.get("cmv_custo_total"), resumo["custo_total"]
+        )
+        resumo["faturamento_real"] = _cmv_num(
+            evento.get("cmv_faturamento_total"), resumo["faturamento_real"]
+        )
+        resumo["cmv_percentual"] = _cmv_num(
+            evento.get("cmv_percentual"), resumo["cmv_percentual"]
+        )
+        resumo["lucro_real"] = _cmv_num(
+            evento.get("cmv_lucro_real"), resumo["lucro_real"]
+        )
+        resumo["diferenca_previsto"] = resumo["custo_previsto"] - resumo["custo_total"]
+        return resumo
+
+    def _cmv_pdf_fechamento(evento, itens, custos, adendos, caches, resumo):
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.units import mm
+            from reportlab.platypus import (
+                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+            )
+        except Exception:
+            return None, (
+                "A biblioteca reportlab não está disponível. "
+                "Mantenha 'reportlab' no requirements.txt e reinicie o app."
+            )
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            rightMargin=12 * mm,
+            leftMargin=12 * mm,
+            topMargin=12 * mm,
+            bottomMargin=12 * mm,
+        )
+
+        styles = getSampleStyleSheet()
+        titulo = ParagraphStyle(
+            "TituloCMV",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=18,
+            leading=22,
+            alignment=TA_CENTER,
+            spaceAfter=10,
+        )
+        subtitulo = ParagraphStyle(
+            "SubtituloCMV",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=15,
+            spaceBefore=8,
+            spaceAfter=6,
+        )
+        normal = ParagraphStyle(
+            "NormalCMV",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            leading=11,
+        )
+
+        story = [Paragraph("RELATORIO DE FECHAMENTO E CMV", titulo)]
+
+        info = [
+            ["Evento #", str(int(evento.get("id"))), "Cliente", _cmv_texto(evento.get("cliente"))],
+            ["Data", _cmv_data_br(evento.get("data")), "Tipo", _cmv_texto(evento.get("tipo_evento"))],
+            ["Cidade", _cmv_texto(evento.get("cidade")), "Convidados", str(int(_cmv_num(evento.get("convidados", 0))))],
+            ["Responsável", _cmv_texto(evento.get("cmv_responsavel")), "Fechado em", _cmv_data_br(evento.get("cmv_data_fechamento"))],
+        ]
+        t_info = Table(info, colWidths=[32*mm, 75*mm, 38*mm, 100*mm])
+        t_info.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#EEF1F5")),
+            ("BACKGROUND", (2,0), (2,-1), colors.HexColor("#EEF1F5")),
+            ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+            ("FONTNAME", (2,0), (2,-1), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8.5),
+            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#BFC6D0")),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 5),
+            ("RIGHTPADDING", (0,0), (-1,-1), 5),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ]))
+        story += [t_info, Spacer(1, 8)]
+
+        story.append(Paragraph("Resumo financeiro", subtitulo))
+        fin = [
+            ["Venda original", _cmv_moeda(resumo["venda_original"]),
+             "Adendos cliente", _cmv_moeda(resumo["adendos_cliente"]),
+             "Faturamento total", _cmv_moeda(resumo["faturamento_real"])],
+            ["Custo real produtos", _cmv_moeda(resumo["custo_produtos"]),
+             "Cachês / equipe", _cmv_moeda(resumo.get("custo_equipe", 0)),
+             "Outros custos", _cmv_moeda(resumo.get("outros_custos_manuais", 0))],
+            ["Custo de adendos", _cmv_moeda(resumo["custo_adendos"]),
+             "Custo total evento", _cmv_moeda(resumo["custo_total"]),
+             "CMV", f"{resumo['cmv_percentual']:.2f}%"],
+            ["Custo previsto", _cmv_moeda(resumo["custo_previsto"]),
+             "Lucro real", _cmv_moeda(resumo["lucro_real"]),
+             "Dif. previsto x real", _cmv_moeda(resumo["diferenca_previsto"])],
+        ]
+        t_fin = Table(fin, colWidths=[38*mm, 40*mm, 42*mm, 40*mm, 42*mm, 40*mm])
+        t_fin.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#F7F8FA")),
+            ("FONTNAME", (0,0), (-1,-1), "Helvetica"),
+            ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+            ("FONTNAME", (2,0), (2,-1), "Helvetica-Bold"),
+            ("FONTNAME", (4,0), (4,-1), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8.5),
+            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#BFC6D0")),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING", (0,0), (-1,-1), 5),
+            ("RIGHTPADDING", (0,0), (-1,-1), 5),
+            ("TOPPADDING", (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ]))
+        story += [t_fin, Spacer(1, 8)]
+
+        if not caches.empty:
+            story.append(Paragraph("Equipe / Cachês registrados", subtitulo))
+            dados_eq = [["Profissional", "Função", "Horas", "Valor", "Status", "Pagamento"]]
+            for _, reg in caches.iterrows():
+                dados_eq.append([
+                    _cmv_texto(reg.get("nome")),
+                    _cmv_texto(reg.get("funcao")),
+                    f"{_cmv_num(reg.get('horas')):.1f}",
+                    _cmv_moeda(reg.get("valor")),
+                    _cmv_texto(reg.get("status")),
+                    _cmv_texto(reg.get("forma_pagamento")),
+                ])
+            t_eq = Table(dados_eq, colWidths=[55*mm, 35*mm, 22*mm, 30*mm, 28*mm, 40*mm], repeatRows=1)
+            t_eq.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 8),
+                ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#BFC6D0")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ]))
+            story += [t_eq, Spacer(1, 8)]
+
+        itens_op = _cmv_itens_operacionais(itens)
+        if not itens_op.empty:
+            story.append(Paragraph("Consumo real por item", subtitulo))
+            dados = [[
+                "Categoria", "Item", "Sistema", "Ida", "Volta",
+                "Conf. Final", "Consumo", "Diverg.", "Custo Real"
+            ]]
+            for _, item in itens_op.iterrows():
+                calculo = _cmv_calcular_item(item)
+                consumo = _cmv_num(item.get("cmv_consumo_real"), calculo["consumo"])
+                diverg = _cmv_num(item.get("cmv_divergencia"), calculo["divergencia"])
+                custo_real = _cmv_num(item.get("cmv_custo_real"), calculo["custo_real"])
+                unidade = _cmv_texto(item.get("unidade"))
+                dados.append([
+                    _cmv_texto(item.get("categoria")),
+                    _cmv_texto(item.get("produto")),
+                    f"{_cmv_num(item.get('quantidade')):.3f} {unidade}",
+                    f"{_cmv_num(item.get('quantidade_ida')):.3f}",
+                    f"{_cmv_num(item.get('quantidade_volta')):.3f}",
+                    f"{_cmv_num(item.get('quantidade_estoquista')):.3f}",
+                    f"{consumo:.3f}",
+                    f"{diverg:.3f}",
+                    _cmv_moeda(custo_real),
+                ])
+
+            t_itens = Table(
+                dados,
+                repeatRows=1,
+                colWidths=[25*mm, 55*mm, 28*mm, 22*mm, 22*mm, 26*mm, 25*mm, 25*mm, 30*mm],
+            )
+            t_itens.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 7.2),
+                ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#BFC6D0")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("LEFTPADDING", (0,0), (-1,-1), 3),
+                ("RIGHTPADDING", (0,0), (-1,-1), 3),
+                ("TOPPADDING", (0,0), (-1,-1), 4),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ]))
+            story += [t_itens, Spacer(1, 8)]
+
+        if not custos.empty:
+            story.append(Paragraph("Custos reais lançados", subtitulo))
+            dados_c = [["Descrição", "Valor"]]
+            for _, c in custos.iterrows():
+                dados_c.append([
+                    _cmv_texto(c.get("descricao")),
+                    _cmv_moeda(c.get("valor")),
+                ])
+            t_c = Table(dados_c, repeatRows=1, colWidths=[180*mm, 45*mm])
+            t_c.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 8),
+                ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#BFC6D0")),
+            ]))
+            story += [t_c, Spacer(1, 8)]
+
+        if not adendos.empty:
+            story.append(Paragraph("Adendos", subtitulo))
+            dados_a = [["Tipo", "Descrição", "Cliente", "Custo equipe", "Status"]]
+            for _, a in adendos.iterrows():
+                dados_a.append([
+                    _cmv_texto(a.get("tipo")),
+                    _cmv_texto(a.get("descricao")),
+                    _cmv_moeda(a.get("valor_cliente")),
+                    _cmv_moeda(a.get("valor_equipe")),
+                    _cmv_texto(a.get("status")),
+                ])
+            t_a = Table(dados_a, repeatRows=1, colWidths=[42*mm, 105*mm, 35*mm, 35*mm, 35*mm])
+            t_a.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
+                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 7.5),
+                ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#BFC6D0")),
+            ]))
+            story += [t_a, Spacer(1, 8)]
+
+        story.append(Spacer(1, 5))
+        story.append(Paragraph(
+            f"Relatório gerado pelo Ellosystem em {datetime.now().strftime('%d/%m/%Y %H:%M')}.",
+            normal,
+        ))
+
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue(), None
+
+    def _cmv_mostrar_metricas(resumo):
+        linha1 = st.columns(4)
+        linha1[0].metric("💰 Venda Original", _cmv_moeda(resumo["venda_original"]))
+        linha1[1].metric("➕ Adendos Cliente", _cmv_moeda(resumo["adendos_cliente"]))
+        linha1[2].metric("💵 Faturamento Real", _cmv_moeda(resumo["faturamento_real"]))
+        linha1[3].metric("📦 Custo Produtos", _cmv_moeda(resumo["custo_produtos"]))
+
+        linha2 = st.columns(4)
+        linha2[0].metric("👥 Cachês / Equipe", _cmv_moeda(resumo.get("custo_equipe", 0)))
+        linha2[1].metric("🧾 Outros Custos", _cmv_moeda(resumo.get("outros_custos_manuais", 0)))
+        linha2[2].metric("➕ Custo Adendos", _cmv_moeda(resumo["custo_adendos"]))
+        linha2[3].metric("📊 Custo Total", _cmv_moeda(resumo["custo_total"]))
+
+        linha3 = st.columns(3)
+        linha3[0].metric("📈 CMV", f"{resumo['cmv_percentual']:.2f}%")
+        linha3[1].metric("💎 Lucro Real", _cmv_moeda(resumo["lucro_real"]))
+        linha3[2].metric("↔️ Previsto x Real", _cmv_moeda(resumo["diferenca_previsto"]))
+
+        if resumo.get("qtd_caches", 0) > 0:
+            st.caption(
+                f"👥 Equipe: {resumo.get('qtd_caches', 0)} registro(s) | "
+                f"Pago {_cmv_moeda(resumo.get('custo_equipe_pago', 0))} | "
+                f"Pendente {_cmv_moeda(resumo.get('custo_equipe_pendente', 0))}. "
+                "Pagamento pendente afeta contas a pagar, mas o custo já pertence ao CMV do evento."
+            )
+
+    # ============================================================
+    # CARREGAMENTO BASE
+    # ============================================================
+
+    try:
+        df_eventos_cmv = _cmv_carregar_eventos()
+    except Exception as erro:
+        st.error(f"Erro ao carregar eventos do CMV: {erro}")
+        df_eventos_cmv = pd.DataFrame()
+
+    tab_fechamento, tab_resultado, tab_historico, tab_adendos = st.tabs([
+        "🧾 Fechamento do Evento",
+        "📊 Resultado Real",
+        "📚 Histórico de Consumo",
+        "➕ Adendos",
+    ])
+
+    # ============================================================
+    # 1 — FECHAMENTO DO EVENTO
+    # ============================================================
+
+    with tab_fechamento:
+
+        st.subheader("🧾 Fechamento Operacional")
+        st.caption(
+            "Transcreva o checklist físico. O sistema calcula Consumo, "
+            "Divergência e Custo Real sem alterar o orçamento original."
+        )
+
+        if df_eventos_cmv.empty:
+            st.info("Nenhum evento aprovado/finalizado disponível.")
+        else:
+            opcoes = {
+                _cmv_evento_rotulo(row): int(row.get("id"))
+                for _, row in df_eventos_cmv.iterrows()
+            }
+            escolha = st.selectbox(
+                "Selecione o evento",
+                list(opcoes.keys()),
+                key="cmv_evento_fechamento",
+            )
+            evento_id = opcoes[escolha]
+            evento = df_eventos_cmv[
+                pd.to_numeric(df_eventos_cmv["id"], errors="coerce") == evento_id
+            ].iloc[0]
+
+            itens = _cmv_carregar_itens(evento_id)
+            custos = _cmv_carregar_custos(evento_id)
+            adendos = _cmv_carregar_adendos(evento_id)
+            caches_registro = _cmv_carregar_caches_evento(evento_id)
+            itens_op = _cmv_itens_operacionais(itens)
+
+            status_cmv = _cmv_texto(evento.get("cmv_status")) or "aberto"
+            fechado = status_cmv.lower() == "fechado"
+
+            st.markdown(
+                f"### 🍸 {_cmv_texto(evento.get('cliente')) or 'Evento sem cliente'}"
+            )
+            st.caption(
+                f"📅 {_cmv_data_br(evento.get('data'))} | "
+                f"📍 {_cmv_texto(evento.get('cidade'))} | "
+                f"🆔 Evento #{evento_id} | "
+                f"CMV: {'🟢 FECHADO' if fechado else '🟡 ABERTO'}"
+            )
+
+            info1, info2, info3, info4 = st.columns(4)
+            info1.metric("Convidados", int(_cmv_num(evento.get("convidados", 0))))
+            info2.metric("Venda", _cmv_moeda(evento.get("venda", 0)))
+            info3.metric("Custo Previsto", _cmv_moeda(evento.get("custo", 0)))
+            info4.metric("Itens Checklist", len(itens_op))
+
+            # ----------------------------------------------------
+            # RECUPERAÇÃO DE PREÇOS PARA EVENTOS ANTIGOS
+            # ----------------------------------------------------
+            if not fechado and not itens_op.empty:
+                sem_custo = []
+                for _, item_tmp in itens_op.iterrows():
+                    if _cmv_custo_unitario_operacional(item_tmp) <= 0:
+                        sem_custo.append(_cmv_texto(item_tmp.get("produto")))
+
+                if sem_custo:
+                    st.warning(
+                        f"💲 {len(sem_custo)} item(ns) deste evento ainda estão sem custo unitário. "
+                        "Isso acontece principalmente em eventos criados antes do snapshot de preços."
+                    )
+                    st.caption(
+                        "O botão abaixo usa os preços que estão cadastrados AGORA em Precificação, "
+                        "grava esse valor no evento e não sobrescreve itens que já possuem custo. "
+                        "Assim, reajustes futuros de preço não mudam este fechamento."
+                    )
+
+                    col_preco1, col_preco2 = st.columns([2, 1])
+                    if col_preco1.button(
+                        "💲 Preencher custos zerados com os preços atuais",
+                        key=f"cmv_preencher_precos_{evento_id}",
+                        use_container_width=True,
+                    ):
+                        resultado_preco = _cmv_preencher_custos_zerados(evento_id)
+                        st.session_state["cmv_resultado_precos"] = {
+                            "evento_id": evento_id,
+                            **resultado_preco,
+                        }
+                        st.rerun()
+
+                    with col_preco2:
+                        with st.expander("⚙️ Demais eventos"):
+                            st.caption(
+                                "Use uma única vez antes de reajustar a Precificação. "
+                                "Somente eventos com CMV aberto e itens zerados serão atualizados."
+                            )
+                            confirmar_todos = st.checkbox(
+                                "Confirmo usar os preços atuais",
+                                key=f"cmv_confirmar_precos_todos_{evento_id}",
+                            )
+                            if st.button(
+                                "Aplicar aos eventos abertos",
+                                key=f"cmv_precos_todos_{evento_id}",
+                                disabled=not confirmar_todos,
+                                use_container_width=True,
+                            ):
+                                bases_precos = _cmv_carregar_bases_precos()
+                                total_atualizados = 0
+                                total_pendencias = []
+                                eventos_processados = 0
+
+                                for _, ev_tmp in df_eventos_cmv.iterrows():
+                                    if (_cmv_texto(ev_tmp.get("cmv_status")) or "aberto").lower() == "fechado":
+                                        continue
+                                    ev_id_tmp = int(ev_tmp.get("id"))
+                                    res_tmp = _cmv_preencher_custos_zerados(
+                                        ev_id_tmp,
+                                        bases=bases_precos,
+                                    )
+                                    if res_tmp["atualizados"] > 0 or res_tmp["pendencias"]:
+                                        eventos_processados += 1
+                                    total_atualizados += res_tmp["atualizados"]
+                                    for pend in res_tmp["pendencias"]:
+                                        total_pendencias.append({
+                                            "Evento": ev_id_tmp,
+                                            **pend,
+                                        })
+
+                                st.session_state["cmv_resultado_precos_todos"] = {
+                                    "eventos": eventos_processados,
+                                    "atualizados": total_atualizados,
+                                    "pendencias": total_pendencias,
+                                }
+                                st.rerun()
+
+            msg_preco = st.session_state.pop("cmv_resultado_precos", None)
+            if msg_preco and msg_preco.get("evento_id") == evento_id:
+                st.success(
+                    f"✅ {msg_preco.get('atualizados', 0)} item(ns) receberam o preço atual da Precificação."
+                )
+                if msg_preco.get("pendencias"):
+                    st.warning(
+                        f"{len(msg_preco['pendencias'])} item(ns) não puderam ser associados automaticamente."
+                    )
+                    st.dataframe(
+                        pd.DataFrame(msg_preco["pendencias"]),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+            msg_todos = st.session_state.pop("cmv_resultado_precos_todos", None)
+            if msg_todos:
+                st.success(
+                    f"✅ Atualização concluída: {msg_todos.get('atualizados', 0)} item(ns) "
+                    f"atualizados em {msg_todos.get('eventos', 0)} evento(s) aberto(s)."
+                )
+                if msg_todos.get("pendencias"):
+                    st.warning(
+                        f"{len(msg_todos['pendencias'])} associação(ões) ficaram pendentes para revisão."
+                    )
+                    st.dataframe(
+                        pd.DataFrame(msg_todos["pendencias"]),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+            # ----------------------------------------------------
+            # CACHÊS — CUSTO REAL DE EQUIPE
+            # ----------------------------------------------------
+            try:
+                data_evento_dt = pd.to_datetime(evento.get("data"), errors="coerce")
+                evento_ja_ocorreu = (
+                    pd.notna(data_evento_dt)
+                    and data_evento_dt.date() <= datetime.now().date()
+                )
+            except Exception:
+                evento_ja_ocorreu = False
+
+            resumo_cache_evento = _cmv_resumo_caches(caches_registro)
+            if resumo_cache_evento["qtd"] > 0:
+                st.success(
+                    f"👥 Custo real de equipe vindo da aba Cachês: "
+                    f"{_cmv_moeda(resumo_cache_evento['total'])} | "
+                    f"Pago: {_cmv_moeda(resumo_cache_evento['pago'])} | "
+                    f"Pendente: {_cmv_moeda(resumo_cache_evento['pendente'])}. "
+                    "O CMV considera o total registrado; o Financeiro considera somente o que foi pago."
+                )
+            elif evento_ja_ocorreu:
+                st.warning(
+                    "👥 Este evento já ocorreu e ainda não possui cachês registrados. "
+                    "Você pode usar o custo manual de equipe como fallback, mas o ideal é "
+                    "lançar os profissionais na aba Cachês para formar o histórico real."
+                )
+
+            if fechado:
+                st.success(
+                    "Este evento já possui fechamento de CMV. "
+                    "Reabra somente se precisar corrigir alguma conferência."
+                )
+
+                col_reabrir, _ = st.columns([1, 3])
+                if col_reabrir.button(
+                    "🔓 Reabrir fechamento",
+                    key=f"cmv_reabrir_{evento_id}",
+                    use_container_width=True,
+                ):
+                    supabase.table("eventos").update({
+                        "cmv_status": "aberto",
+                        "cmv_data_fechamento": None,
+                    }).eq("id", evento_id).execute()
+                    st.success("Fechamento reaberto.")
+                    st.rerun()
+
+            if itens_op.empty:
+                st.info(
+                    "👷 Evento sem consumo de produtos no checklist. "
+                    "O fechamento será financeiro. Se houver cachês registrados, o custo de equipe "
+                    "já será puxado automaticamente; lance abaixo apenas os demais custos reais."
+                )
+            else:
+                base = pd.DataFrame({
+                    "_id": itens_op["id"].tolist(),
+                    "Categoria": itens_op.get("categoria", "").fillna("").astype(str).tolist(),
+                    "Item": itens_op.get("produto", "").fillna("").astype(str).tolist(),
+                    "Sistema": pd.to_numeric(
+                        itens_op.get("quantidade", 0), errors="coerce"
+                    ).fillna(0).tolist(),
+                    "Ida": pd.to_numeric(
+                        itens_op.get("quantidade_ida", 0), errors="coerce"
+                    ).fillna(0).tolist()
+                    if "quantidade_ida" in itens_op.columns else [0.0] * len(itens_op),
+                    "Volta": pd.to_numeric(
+                        itens_op.get("quantidade_volta", 0), errors="coerce"
+                    ).fillna(0).tolist()
+                    if "quantidade_volta" in itens_op.columns else [0.0] * len(itens_op),
+                    "Conferência Final": pd.to_numeric(
+                        itens_op.get("quantidade_estoquista", 0), errors="coerce"
+                    ).fillna(0).tolist()
+                    if "quantidade_estoquista" in itens_op.columns else [0.0] * len(itens_op),
+                    "Unidade": itens_op.get("unidade", "un").fillna("un").astype(str).tolist(),
+                })
+
+                st.markdown("### 📋 Checklist de Fechamento")
+                editor = st.data_editor(
+                    base[[
+                        "Categoria", "Item", "Sistema", "Ida", "Volta",
+                        "Conferência Final", "Unidade",
+                    ]],
+                    use_container_width=True,
+                    hide_index=True,
+                    num_rows="fixed",
+                    disabled=(
+                        ["Categoria", "Item", "Sistema", "Ida", "Volta", "Conferência Final", "Unidade"]
+                        if fechado
+                        else ["Categoria", "Item", "Sistema", "Unidade"]
+                    ),
+                    column_config={
+                        "Sistema": st.column_config.NumberColumn(format="%.3f"),
+                        "Ida": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
+                        "Volta": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
+                        "Conferência Final": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
+                    },
+                    key=f"cmv_editor_fechamento_{evento_id}",
+                )
+
+                preview = editor.copy()
+                preview["Consumo"] = (
+                    pd.to_numeric(preview["Ida"], errors="coerce").fillna(0)
+                    - pd.to_numeric(preview["Conferência Final"], errors="coerce").fillna(0)
+                )
+                preview["Divergência"] = (
+                    pd.to_numeric(preview["Volta"], errors="coerce").fillna(0)
+                    - pd.to_numeric(preview["Conferência Final"], errors="coerce").fillna(0)
+                )
+
+                custos_unit = []
+                custos_reais = []
+                for indice, linha in preview.iterrows():
+                    original = itens_op.iloc[indice]
+                    custo_unit = _cmv_custo_unitario_operacional(original)
+                    custo_real = _cmv_num(linha["Consumo"]) * custo_unit
+                    custos_unit.append(custo_unit)
+                    custos_reais.append(custo_real)
+
+                preview["Custo Unit."] = custos_unit
+                preview["Custo Real"] = custos_reais
+
+                st.markdown("#### 🔎 Resultado calculado")
+                st.dataframe(
+                    preview[[
+                        "Categoria", "Item", "Sistema", "Ida", "Volta",
+                        "Conferência Final", "Consumo", "Divergência",
+                        "Custo Unit.", "Custo Real", "Unidade",
+                    ]],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Sistema": st.column_config.NumberColumn(format="%.3f"),
+                        "Ida": st.column_config.NumberColumn(format="%.3f"),
+                        "Volta": st.column_config.NumberColumn(format="%.3f"),
+                        "Conferência Final": st.column_config.NumberColumn(format="%.3f"),
+                        "Consumo": st.column_config.NumberColumn(format="%.3f"),
+                        "Divergência": st.column_config.NumberColumn(format="%.3f"),
+                        "Custo Unit.": st.column_config.NumberColumn(format="R$ %.4f"),
+                        "Custo Real": st.column_config.NumberColumn(format="R$ %.2f"),
+                    },
+                )
+
+                erros = []
+                avisos = []
+                for indice, linha in preview.iterrows():
+                    ida = _cmv_num(linha["Ida"])
+                    volta = _cmv_num(linha["Volta"])
+                    final = _cmv_num(linha["Conferência Final"])
+                    sistema = _cmv_num(linha["Sistema"])
+                    categoria = _cmv_texto(linha["Categoria"])
+                    item_nome = _cmv_texto(linha["Item"])
+
+                    if volta > ida:
+                        erros.append(f"{item_nome}: Volta maior que Ida.")
+                    if final > ida:
+                        erros.append(f"{item_nome}: Conferência Final maior que Ida.")
+                    if sistema > 0 and ida == 0:
+                        avisos.append(f"{item_nome}: previsto {sistema:g}, mas Ida está zerada.")
+                    if categoria.lower() == "bebidas":
+                        for valor_nome, valor in [
+                            ("Ida", ida), ("Volta", volta), ("Conferência Final", final)
+                        ]:
+                            if abs(valor * 2 - round(valor * 2)) > 1e-7:
+                                erros.append(
+                                    f"{item_nome}: {valor_nome} deve usar passos de 0,5 garrafa."
+                                )
+
+                for erro in sorted(set(erros)):
+                    st.error(erro)
+                if avisos and not fechado:
+                    with st.expander(f"⚠️ {len(avisos)} aviso(s) de conferência", expanded=False):
+                        for aviso in avisos:
+                            st.write(f"• {aviso}")
+
+                if not fechado:
+                    confirmar = st.checkbox(
+                        "Confirmo que os valores acima foram transcritos do checklist físico do evento.",
+                        key=f"cmv_confirmar_check_{evento_id}",
+                    )
+
+                    if st.button(
+                        "💾 Salvar conferência no CMV",
+                        key=f"cmv_salvar_conferencia_{evento_id}",
+                        use_container_width=True,
+                    ):
+                        if erros:
+                            st.error("Corrija os erros de conferência antes de salvar.")
+                        elif not confirmar:
+                            st.warning("Marque a confirmação do checklist antes de salvar.")
+                        else:
+                            for indice, linha in preview.iterrows():
+                                item_id = int(base.iloc[indice]["_id"])
+                                supabase.table("evento_itens").update({
+                                    "quantidade_ida": _cmv_num(linha["Ida"]),
+                                    "quantidade_volta": _cmv_num(linha["Volta"]),
+                                    "quantidade_estoquista": _cmv_num(linha["Conferência Final"]),
+                                    "cmv_conferido": True,
+                                    "cmv_consumo_real": _cmv_num(linha["Consumo"]),
+                                    "cmv_divergencia": _cmv_num(linha["Divergência"]),
+                                    "cmv_custo_real": _cmv_num(linha["Custo Real"]),
+                                }).eq("id", item_id).execute()
+
+                            st.success("✅ Conferência salva no CMV.")
+                            st.rerun()
+
+            st.divider()
+            st.markdown("### 💸 Custos Reais do Evento")
+            st.caption(
+                "O custo de produtos vem do checklist e o custo de equipe vem automaticamente "
+                "da aba Cachês quando houver registros vinculados. Use esta área para transporte, "
+                "locação, compras emergenciais, avarias e outros custos reais. O custo previsto "
+                "do orçamento é apenas comparação e nunca é somado novamente."
+            )
+
+            if not fechado:
+                with st.form(f"cmv_form_custo_{evento_id}", clear_on_submit=True):
+                    c1, c2 = st.columns([2, 1])
+                    categorias_disponiveis = list(CATEGORIAS_CUSTO_MANUAL)
+                    if resumo_cache_evento["qtd"] > 0:
+                        categorias_disponiveis = [
+                            c for c in categorias_disponiveis if c != "Cachê / Equipe"
+                        ]
+                        indice_categoria_padrao = 0
+                    else:
+                        indice_categoria_padrao = (
+                            categorias_disponiveis.index("Cachê / Equipe")
+                            if itens_op.empty and "Cachê / Equipe" in categorias_disponiveis
+                            else 0
+                        )
+                    categoria_custo = c1.selectbox(
+                        "Categoria",
+                        categorias_disponiveis,
+                        index=indice_categoria_padrao,
+                        key=f"cmv_cat_custo_{evento_id}",
+                    )
+                    valor_custo = c2.number_input(
+                        "Valor",
+                        min_value=0.0,
+                        step=0.01,
+                        format="%.2f",
+                        key=f"cmv_valor_custo_{evento_id}",
+                    )
+                    descricao_custo = st.text_input(
+                        "Descrição",
+                        key=f"cmv_desc_custo_{evento_id}",
+                    )
+                    salvar_custo = st.form_submit_button("➕ Lançar custo real")
+
+                    if salvar_custo:
+                        if valor_custo <= 0:
+                            st.warning("Informe um valor maior que zero.")
+                        elif not descricao_custo.strip():
+                            st.warning("Informe uma descrição.")
+                        else:
+                            supabase.table("evento_custos").insert({
+                                "evento_id": int(evento_id),
+                                "descricao": f"{categoria_custo} - {descricao_custo.strip()}",
+                                "valor": float(valor_custo),
+                            }).execute()
+                            st.success("Custo real lançado.")
+                            st.rerun()
+
+            if not custos.empty:
+                for _, custo in custos.iterrows():
+                    cc1, cc2, cc3 = st.columns([6, 2, 1])
+                    cc1.write(_cmv_texto(custo.get("descricao")))
+                    cc2.write(_cmv_moeda(custo.get("valor")))
+                    if not fechado:
+                        if cc3.button("🗑️", key=f"cmv_del_custo_{custo.get('id')}"):
+                            supabase.table("evento_custos").delete().eq(
+                                "id", int(custo.get("id"))
+                            ).execute()
+                            st.rerun()
+
+            # Recarrega os dados antes do fechamento financeiro.
+            itens_atual = _cmv_carregar_itens(evento_id)
+            custos_atual = _cmv_carregar_custos(evento_id)
+            adendos_atual = _cmv_carregar_adendos(evento_id)
+            caches_atual = _cmv_carregar_caches_evento(evento_id)
+            resumo = _cmv_resumo_financeiro(
+                evento, itens_atual, custos_atual, adendos_atual, caches_atual
+            )
+
+            st.divider()
+            st.markdown("### 📊 Prévia do Resultado Real")
+            _cmv_mostrar_metricas(resumo)
+
+            if resumo["diferenca_previsto"] >= 0:
+                st.success(
+                    f"💚 Custo real abaixo do previsto em "
+                    f"{_cmv_moeda(resumo['diferenca_previsto'])}."
+                )
+            else:
+                st.warning(
+                    f"🟠 Custo real acima do previsto em "
+                    f"{_cmv_moeda(abs(resumo['diferenca_previsto']))}."
+                )
+
+            if not fechado:
+                itens_op_atual = _cmv_itens_operacionais(itens_atual)
+                # Evento somente de mão de obra/serviço pode ser fechado sem checklist de produtos.
+                todos_conferidos = itens_op_atual.empty
+                if not itens_op_atual.empty and "cmv_conferido" in itens_op_atual.columns:
+                    todos_conferidos = itens_op_atual["cmv_conferido"].fillna(False).astype(bool).all()
+
+                responsavel = st.text_input(
+                    "Responsável pelo fechamento",
+                    value=_cmv_texto(evento.get("cmv_responsavel")),
+                    key=f"cmv_responsavel_{evento_id}",
+                )
+
+                if itens_op_atual.empty:
+                    st.info(
+                        "✅ Este evento não possui itens de consumo para conferir. "
+                        "Revise os custos reais lançados e finalize normalmente."
+                    )
+                elif not todos_conferidos:
+                    st.warning(
+                        "O evento ainda possui itens sem conferência salva no CMV. "
+                        "Salve o checklist antes de finalizar."
+                    )
+
+                if resumo.get("custo_equipe_manual_ignorado", 0) > 0:
+                    st.warning(
+                        "⚠️ Há lançamento manual antigo de Cachê / Equipe neste evento, mas ele "
+                        "está sendo IGNORADO porque já existem registros na aba Cachês. Isso evita "
+                        "duplicidade no custo real."
+                    )
+
+                equipe_sem_custo_confirmada = True
+                if resumo.get("custo_equipe", 0) <= 0:
+                    st.warning(
+                        "⚠️ Nenhum custo real de equipe foi encontrado. Para evitar esquecer cachês, "
+                        "o fechamento só será liberado se você confirmar explicitamente que este "
+                        "evento realmente não teve custo de equipe."
+                    )
+                    equipe_sem_custo_confirmada = st.checkbox(
+                        "Confirmo que este evento realmente NÃO teve custo de equipe / cachês.",
+                        key=f"cmv_sem_custo_equipe_{evento_id}",
+                    )
+
+                confirmar_fechamento = st.checkbox(
+                    "Confirmo o fechamento financeiro e operacional deste evento.",
+                    key=f"cmv_confirmar_fechamento_{evento_id}",
+                )
+
+                if st.button(
+                    "🔒 Finalizar CMV do Evento",
+                    key=f"cmv_finalizar_{evento_id}",
+                    use_container_width=True,
+                ):
+                    if not todos_conferidos:
+                        st.error("Existem itens ainda não conferidos.")
+                    elif not equipe_sem_custo_confirmada:
+                        st.error(
+                            "Lance os cachês da equipe ou confirme explicitamente que o evento "
+                            "não teve custo de equipe."
+                        )
+                    elif not responsavel.strip():
+                        st.warning("Informe o responsável pelo fechamento.")
+                    elif not confirmar_fechamento:
+                        st.warning("Confirme o fechamento antes de finalizar.")
+                    else:
+                        supabase.table("eventos").update({
+                            "cmv_status": "fechado",
+                            "cmv_data_fechamento": datetime.now().isoformat(),
+                            "cmv_responsavel": responsavel.strip(),
+                            "cmv_custo_produtos": float(resumo["custo_produtos"]),
+                            "cmv_custo_equipe": float(resumo["custo_equipe"]),
+                            "cmv_custos_extras": float(resumo["outros_custos_manuais"]),
+                            "cmv_custo_adendos": float(resumo["custo_adendos"]),
+                            "cmv_custo_total": float(resumo["custo_total"]),
+                            "cmv_faturamento_total": float(resumo["faturamento_real"]),
+                            "cmv_percentual": float(resumo["cmv_percentual"]),
+                            "cmv_lucro_real": float(resumo["lucro_real"]),
+                        }).eq("id", evento_id).execute()
+
+                        st.success("✅ CMV do evento fechado e congelado com sucesso!")
+                        st.rerun()
+
+    # ============================================================
+    # 2 — RESULTADO REAL
+    # ============================================================
+
+    with tab_resultado:
+
+        st.subheader("📊 Resultado Real por Evento")
+
+        if df_eventos_cmv.empty:
+            st.info("Nenhum evento disponível.")
+        else:
+            opcoes_resultado = {
+                _cmv_evento_rotulo(row): int(row.get("id"))
+                for _, row in df_eventos_cmv.iterrows()
+            }
+            escolha_r = st.selectbox(
+                "Evento para análise",
+                list(opcoes_resultado.keys()),
+                key="cmv_evento_resultado",
+            )
+            evento_id_r = opcoes_resultado[escolha_r]
+            evento_r = df_eventos_cmv[
+                pd.to_numeric(df_eventos_cmv["id"], errors="coerce") == evento_id_r
+            ].iloc[0]
+
+            itens_r = _cmv_carregar_itens(evento_id_r)
+            custos_r = _cmv_carregar_custos(evento_id_r)
+            adendos_r = _cmv_carregar_adendos(evento_id_r)
+            caches_r = _cmv_carregar_caches_evento(evento_id_r)
+            resumo_calc = _cmv_resumo_financeiro(
+                evento_r, itens_r, custos_r, adendos_r, caches_r
+            )
+            resumo_r = _cmv_resumo_snapshot(evento_r, resumo_calc)
+
+            fechado_r = _cmv_texto(evento_r.get("cmv_status")).lower() == "fechado"
+            st.markdown(
+                f"### {_cmv_texto(evento_r.get('cliente')) or 'Evento sem cliente'}"
+            )
+            st.caption(
+                f"📅 {_cmv_data_br(evento_r.get('data'))} | "
+                f"📍 {_cmv_texto(evento_r.get('cidade'))} | "
+                f"🆔 #{evento_id_r} | "
+                f"{'🟢 CMV FECHADO' if fechado_r else '🟡 CMV EM ABERTO'}"
+            )
+
+            _cmv_mostrar_metricas(resumo_r)
+
+            st.markdown("### 📦 Consumo e Retorno Gravados")
+            itens_op_r = _cmv_itens_operacionais(itens_r)
+            if itens_op_r.empty:
+                st.info("Nenhum item operacional encontrado.")
+            else:
+                linhas = []
+                for _, item in itens_op_r.iterrows():
+                    calc = _cmv_calcular_item(item)
+                    linhas.append({
+                        "Categoria": _cmv_texto(item.get("categoria")),
+                        "Item": _cmv_texto(item.get("produto")),
+                        "Sistema": _cmv_num(item.get("quantidade")),
+                        "Ida": _cmv_num(item.get("quantidade_ida")),
+                        "Volta": _cmv_num(item.get("quantidade_volta")),
+                        "Conferência Final": _cmv_num(item.get("quantidade_estoquista")),
+                        "Consumo": _cmv_num(item.get("cmv_consumo_real"), calc["consumo"]),
+                        "Divergência": _cmv_num(item.get("cmv_divergencia"), calc["divergencia"]),
+                        "Custo Real": _cmv_num(item.get("cmv_custo_real"), calc["custo_real"]),
+                        "Unidade": _cmv_texto(item.get("unidade")),
+                    })
+                df_detalhe = pd.DataFrame(linhas)
+                st.dataframe(
+                    df_detalhe,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Sistema": st.column_config.NumberColumn(format="%.3f"),
+                        "Ida": st.column_config.NumberColumn(format="%.3f"),
+                        "Volta": st.column_config.NumberColumn(format="%.3f"),
+                        "Conferência Final": st.column_config.NumberColumn(format="%.3f"),
+                        "Consumo": st.column_config.NumberColumn(format="%.3f"),
+                        "Divergência": st.column_config.NumberColumn(format="%.3f"),
+                        "Custo Real": st.column_config.NumberColumn(format="R$ %.2f"),
+                    },
+                )
+
+            if not caches_r.empty:
+                with st.expander("👥 Equipe / Cachês do evento", expanded=False):
+                    cols_cache = [
+                        c for c in [
+                            "nome", "funcao", "horas", "horas_extras", "valor",
+                            "status", "forma_pagamento", "data_pagamento"
+                        ] if c in caches_r.columns
+                    ]
+                    st.dataframe(
+                        caches_r[cols_cache],
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "valor": st.column_config.NumberColumn(format="R$ %.2f"),
+                        },
+                    )
+
+            if not custos_r.empty:
+                with st.expander("💸 Outros custos reais", expanded=False):
+                    st.dataframe(custos_r, use_container_width=True, hide_index=True)
+
+            if not adendos_r.empty:
+                with st.expander("➕ Adendos do evento", expanded=False):
+                    cols_a = [
+                        c for c in [
+                            "tipo", "descricao", "valor_cliente", "valor_equipe",
+                            "status", "forma_pagamento", "data_pagamento"
+                        ] if c in adendos_r.columns
+                    ]
+                    st.dataframe(adendos_r[cols_a], use_container_width=True, hide_index=True)
+
+            if fechado_r:
+                pdf_cmv, erro_pdf = _cmv_pdf_fechamento(
+                    evento_r, itens_r, custos_r, adendos_r, caches_r, resumo_r
+                )
+                if pdf_cmv:
+                    st.download_button(
+                        "📄 Baixar Relatório de Fechamento / CMV",
+                        data=pdf_cmv,
+                        file_name=f"CMV_evento_{evento_id_r}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key=f"cmv_pdf_{evento_id_r}",
+                    )
+                elif erro_pdf:
+                    st.warning(erro_pdf)
+            else:
+                st.info(
+                    "Finalize o CMV na primeira aba para liberar o relatório PDF definitivo."
+                )
+
+    # ============================================================
+    # 3 — HISTÓRICO DE CONSUMO
+    # ============================================================
+
+    with tab_historico:
+
+        st.subheader("📚 Histórico de Consumo")
+        st.caption(
+            "Base real dos eventos já fechados. Use esta visão para descobrir "
+            "médias de consumo, comportamento por item e divergências recorrentes."
+        )
+
+        if df_eventos_cmv.empty or "cmv_status" not in df_eventos_cmv.columns:
+            st.info("Ainda não existem fechamentos de CMV registrados.")
+        else:
+            fechados = df_eventos_cmv[
+                df_eventos_cmv["cmv_status"].fillna("").astype(str).str.lower() == "fechado"
+            ].copy()
+
+            if fechados.empty:
+                st.info("Finalize pelo menos um evento para formar o histórico de consumo.")
+            else:
+                todos_itens = pd.DataFrame(
+                    supabase.table("evento_itens").select("*").execute().data or []
+                )
+                ids_fechados = set(
+                    pd.to_numeric(fechados["id"], errors="coerce").dropna().astype(int).tolist()
+                )
+                todos_itens = todos_itens[
+                    pd.to_numeric(todos_itens["evento_id"], errors="coerce")
+                    .isin(ids_fechados)
+                ].copy()
+                todos_itens = _cmv_itens_operacionais(todos_itens)
+
+                if todos_itens.empty:
+                    st.info("Os eventos fechados ainda não possuem consumo operacional gravado.")
+                else:
+                    meta_eventos = fechados[[
+                        c for c in ["id", "cliente", "data", "tipo_evento", "convidados"]
+                        if c in fechados.columns
+                    ]].copy()
+                    meta_eventos.rename(columns={"id": "evento_id"}, inplace=True)
+
+                    hist = todos_itens.merge(meta_eventos, on="evento_id", how="left")
+                    hist["Consumo"] = pd.to_numeric(
+                        hist.get("cmv_consumo_real", 0), errors="coerce"
+                    ).fillna(0)
+                    hist["Divergência"] = pd.to_numeric(
+                        hist.get("cmv_divergencia", 0), errors="coerce"
+                    ).fillna(0)
+                    hist["Custo Real"] = pd.to_numeric(
+                        hist.get("cmv_custo_real", 0), errors="coerce"
+                    ).fillna(0)
+                    hist["convidados"] = pd.to_numeric(
+                        hist.get("convidados", 0), errors="coerce"
+                    ).fillna(0)
+                    hist["Consumo / Convidado"] = hist.apply(
+                        lambda x: x["Consumo"] / x["convidados"]
+                        if x["convidados"] > 0 else 0.0,
+                        axis=1,
+                    )
+
+                    categorias = sorted(
+                        hist.get("categoria", pd.Series(dtype=str)).fillna("").astype(str).unique()
+                    )
+                    filtro_cat = st.selectbox(
+                        "Categoria",
+                        ["Todas"] + [c for c in categorias if c],
+                        key="cmv_hist_cat",
+                    )
+                    hist_filtrado = hist.copy()
+                    if filtro_cat != "Todas":
+                        hist_filtrado = hist_filtrado[
+                            hist_filtrado["categoria"].astype(str) == filtro_cat
+                        ]
+
+                    itens_filtro = sorted(
+                        hist_filtrado.get("produto", pd.Series(dtype=str)).fillna("").astype(str).unique()
+                    )
+                    filtro_item = st.selectbox(
+                        "Item",
+                        ["Todos"] + [i for i in itens_filtro if i],
+                        key="cmv_hist_item",
+                    )
+                    if filtro_item != "Todos":
+                        hist_filtrado = hist_filtrado[
+                            hist_filtrado["produto"].astype(str) == filtro_item
+                        ]
+
+                    h1, h2, h3, h4 = st.columns(4)
+                    h1.metric("Eventos Fechados", fechados["id"].nunique())
+                    h2.metric("Registros de Consumo", len(hist_filtrado))
+                    h3.metric("Custo Real Produtos", _cmv_moeda(hist_filtrado["Custo Real"].sum()))
+                    h4.metric("Divergências", int((hist_filtrado["Divergência"].abs() > 1e-9).sum()))
+
+                    st.markdown("### 📊 Média por Item")
+                    agrupado = (
+                        hist_filtrado.groupby(
+                            ["categoria", "produto", "unidade"],
+                            dropna=False,
+                        )
+                        .agg(
+                            Eventos=("evento_id", "nunique"),
+                            Consumo_Total=("Consumo", "sum"),
+                            Consumo_Medio_Evento=("Consumo", "mean"),
+                            Custo_Real_Total=("Custo Real", "sum"),
+                            Divergencia_Total=("Divergência", "sum"),
+                        )
+                        .reset_index()
+                        .rename(columns={
+                            "categoria": "Categoria",
+                            "produto": "Item",
+                            "unidade": "Unidade",
+                            "Consumo_Total": "Consumo Total",
+                            "Consumo_Medio_Evento": "Consumo Médio / Evento",
+                            "Custo_Real_Total": "Custo Real Total",
+                            "Divergencia_Total": "Divergência Total",
+                        })
+                    )
+                    st.dataframe(
+                        agrupado,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Consumo Total": st.column_config.NumberColumn(format="%.3f"),
+                            "Consumo Médio / Evento": st.column_config.NumberColumn(format="%.3f"),
+                            "Custo Real Total": st.column_config.NumberColumn(format="R$ %.2f"),
+                            "Divergência Total": st.column_config.NumberColumn(format="%.3f"),
+                        },
+                    )
+
+                    with st.expander("🔎 Ver histórico evento por evento", expanded=False):
+                        detalhe_hist = hist_filtrado.copy()
+                        detalhe_hist["Data"] = detalhe_hist.get("data", "").apply(_cmv_data_br)
+                        colunas = [
+                            c for c in [
+                                "evento_id", "cliente", "Data", "tipo_evento",
+                                "categoria", "produto", "Consumo", "unidade",
+                                "Divergência", "Custo Real", "Consumo / Convidado"
+                            ] if c in detalhe_hist.columns
+                        ]
+                        detalhe_hist = detalhe_hist[colunas].rename(columns={
+                            "evento_id": "Evento #",
+                            "cliente": "Cliente",
+                            "tipo_evento": "Tipo Evento",
+                            "categoria": "Categoria",
+                            "produto": "Item",
+                            "unidade": "Unidade",
+                        })
+                        st.dataframe(
+                            detalhe_hist,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Consumo": st.column_config.NumberColumn(format="%.3f"),
+                                "Divergência": st.column_config.NumberColumn(format="%.3f"),
+                                "Custo Real": st.column_config.NumberColumn(format="R$ %.2f"),
+                                "Consumo / Convidado": st.column_config.NumberColumn(format="%.4f"),
+                            },
+                        )
+
+    # ============================================================
+    # 4 — ADENDOS
+    # ============================================================
+
+    with tab_adendos:
+
+        st.subheader("➕ Adendos dos Eventos")
+        st.caption(
+            "Valores adicionais cobrados do cliente ou custos adicionais "
+            "ligados ao evento. Eles entram automaticamente no fechamento do CMV."
+        )
+
+        if df_eventos_cmv.empty:
+            st.info("Nenhum evento disponível para adendos.")
+        else:
+            opcoes_a = {
+                _cmv_evento_rotulo(row): int(row.get("id"))
+                for _, row in df_eventos_cmv.iterrows()
+            }
+            escolha_a = st.selectbox(
+                "Evento",
+                list(opcoes_a.keys()),
+                key="cmv_evento_adendo",
+            )
+            evento_id_a = opcoes_a[escolha_a]
+
+            with st.expander("➕ Cadastrar novo adendo", expanded=False):
+                with st.form("cmv_form_adendo", clear_on_submit=True):
+                    ca1, ca2 = st.columns(2)
+                    tipo_adendo = ca1.selectbox(
+                        "Tipo",
+                        [
+                            "Hora Extra", "Venda de Garrafa", "Quebra de Copo/Taça",
+                            "Serviço Adicional", "Custo Adicional", "Outros"
+                        ],
+                    )
+                    status_adendo = ca2.selectbox(
+                        "Status", ["Pendente", "Pago", "Cancelado"]
+                    )
+                    descricao_adendo = st.text_input("Descrição")
+                    ca3, ca4 = st.columns(2)
+                    valor_cliente = ca3.number_input(
+                        "Valor cobrado do cliente",
+                        min_value=0.0,
+                        step=0.01,
+                        format="%.2f",
+                    )
+                    valor_equipe = ca4.number_input(
+                        "Custo adicional / equipe",
+                        min_value=0.0,
                         step=0.01,
                         format="%.2f",
                     )
@@ -13837,6 +15591,7 @@ elif menu == "Vendas":
                         ).execute()
                         st.success("Adendo excluído.")
                         st.rerun()
+
 
 elif menu == "Financeiro":
 
