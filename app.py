@@ -8798,14 +8798,77 @@ elif menu == "Orçamentos":
 
         return list(consolidados.values())
 
+    def _orc_info_unidade_operacional(item):
+        """
+        Unidade usada pela equipe no checklist, sem alterar a unidade técnica
+        que permanece gravada no banco para manter os cálculos das receitas.
+        """
+        categoria_raw = str(item.get("categoria", "") or "").strip()
+        categoria = _norm_orcamento(categoria_raw)
+        unidade_raw = str(item.get("unidade", "") or "un").strip()
+        unidade = _norm_orcamento(unidade_raw)
+        quantidade_base = float(item.get("quantidade_base", 0) or 0)
+
+        if categoria in {"artesanais", "artesanal"} and quantidade_base > 0:
+            if quantidade_base >= 1000:
+                litros = quantidade_base / 1000.0
+                litros_txt = (
+                    str(int(round(litros)))
+                    if abs(litros - round(litros)) < 1e-9
+                    else f"{litros:.1f}".rstrip("0").rstrip(".")
+                )
+                unidade_exibicao = f"garrafas {litros_txt}L"
+            else:
+                unidade_exibicao = f"garrafas {int(round(quantidade_base))}ml"
+            return {
+                "fator": quantidade_base,
+                "unidade": unidade_exibicao,
+                "categoria": "Artesanais",
+                "passo": 0.5,
+            }
+
+        if unidade in {"g", "gr", "grama", "gramas"}:
+            return {
+                "fator": 1000.0,
+                "unidade": "kg",
+                "categoria": categoria_raw,
+                "passo": 0.1,
+            }
+
+        if categoria == "bebidas" or "garrafa" in unidade:
+            return {
+                "fator": 1.0,
+                "unidade": unidade_raw or "garrafas",
+                "categoria": categoria_raw,
+                "passo": 0.5,
+            }
+
+        return {
+            "fator": 1.0,
+            "unidade": unidade_raw,
+            "categoria": categoria_raw,
+            "passo": 0.1,
+        }
+
+    def _orc_item_checklist_operacional(item):
+        info = _orc_info_unidade_operacional(item)
+        fator = max(float(info.get("fator", 1.0) or 1.0), 1e-12)
+        novo = dict(item)
+        novo["categoria_exibicao"] = info.get("categoria") or item.get("categoria", "")
+        novo["quantidade_exibicao"] = round(float(item.get("quantidade", 0) or 0) / fator, 1)
+        novo["unidade_exibicao"] = info.get("unidade") or item.get("unidade", "un")
+        novo["fator_operacional"] = fator
+        novo["passo_operacional"] = float(info.get("passo", 0.1) or 0.1)
+        return novo
+
     def _fmt_qtd_pdf(valor):
         try:
-            valor = float(valor or 0)
+            valor = round(float(valor or 0), 1)
         except Exception:
             return ""
         if abs(valor - round(valor)) < 1e-9:
             return str(int(round(valor)))
-        return f"{valor:.3f}".rstrip("0").rstrip(".")
+        return f"{valor:.1f}".replace(".", ",")
 
     def _gerar_pdf_checklist_operacional(evento, itens):
         """
@@ -8952,11 +9015,12 @@ elif menu == "Orçamentos":
         ]
         linhas = [cab]
         for item in dados_itens:
-            unidade = str(item.get("unidade", "") or "").strip()
-            qtd = _fmt_qtd_pdf(item.get("quantidade", 0))
+            item_op = _orc_item_checklist_operacional(item)
+            unidade = str(item_op.get("unidade_exibicao", "") or "").strip()
+            qtd = _fmt_qtd_pdf(item_op.get("quantidade_exibicao", 0))
             qtd_sistema = f"{qtd} {unidade}".strip()
             linhas.append([
-                str(item.get("categoria", "") or ""),
+                str(item_op.get("categoria_exibicao", item.get("categoria", "")) or ""),
                 str(item.get("produto", "") or ""),
                 qtd_sistema,
                 "",
@@ -9132,8 +9196,8 @@ elif menu == "Orçamentos":
 
     def _renderizar_checklist_evento(evento_id, itens, prefixo, evento=None):
         """
-        Checklist digital oficial. O PDF operacional usa os mesmos itens,
-        mas não exibe Consumo (indicador gerencial calculado pelo sistema).
+        Checklist digital oficial em unidade operacional.
+        A base continua gravada em unidade técnica; a equipe vê kg/garrafas.
         """
         if itens.empty:
             st.info("Nenhum item foi salvo para este evento.")
@@ -9165,29 +9229,23 @@ elif menu == "Orçamentos":
 
             st.markdown(f"### {categoria}")
 
-            base = pd.DataFrame({
-                "_id": df_cat["id"].tolist(),
-                "Item": df_cat["produto"].fillna("").astype(str).tolist(),
-                "Sistema": pd.to_numeric(
-                    df_cat["quantidade"], errors="coerce"
-                ).fillna(0).tolist(),
-                "Ida": pd.to_numeric(
-                    df_cat.get("quantidade_ida", 0), errors="coerce"
-                ).fillna(0).tolist()
-                if "quantidade_ida" in df_cat.columns
-                else [0.0] * len(df_cat),
-                "Volta": pd.to_numeric(
-                    df_cat.get("quantidade_volta", 0), errors="coerce"
-                ).fillna(0).tolist()
-                if "quantidade_volta" in df_cat.columns
-                else [0.0] * len(df_cat),
-                "Conferência Final": pd.to_numeric(
-                    df_cat.get("quantidade_estoquista", 0), errors="coerce"
-                ).fillna(0).tolist()
-                if "quantidade_estoquista" in df_cat.columns
-                else [0.0] * len(df_cat),
-                "Unidade": df_cat["unidade"].fillna("un").astype(str).tolist(),
-            })
+            linhas_base = []
+            for _, reg in df_cat.reset_index(drop=True).iterrows():
+                info = _orc_info_unidade_operacional(reg)
+                fator = max(float(info.get("fator", 1.0) or 1.0), 1e-12)
+                linhas_base.append({
+                    "_id": int(reg.get("id")),
+                    "_fator": fator,
+                    "_passo": float(info.get("passo", 0.1) or 0.1),
+                    "Item": str(reg.get("produto", "") or ""),
+                    "Sistema": round(float(reg.get("quantidade", 0) or 0) / fator, 1),
+                    "Ida": round(float(reg.get("quantidade_ida", 0) or 0) / fator, 1),
+                    "Volta": round(float(reg.get("quantidade_volta", 0) or 0) / fator, 1),
+                    "Conferência Final": round(float(reg.get("quantidade_estoquista", 0) or 0) / fator, 1),
+                    "Unidade": info.get("unidade") or str(reg.get("unidade", "un") or "un"),
+                })
+
+            base = pd.DataFrame(linhas_base)
 
             editor = st.data_editor(
                 base[[
@@ -9200,16 +9258,16 @@ elif menu == "Orçamentos":
                 column_config={
                     "Item": st.column_config.TextColumn("📦 Item"),
                     "Sistema": st.column_config.NumberColumn(
-                        "📊 Sistema", format="%.3f"
+                        "📊 Sistema", format="%.1f"
                     ),
                     "Ida": st.column_config.NumberColumn(
-                        "🚚 Ida", min_value=0.0, format="%.3f"
+                        "🚚 Ida", min_value=0.0, step=0.1, format="%.1f"
                     ),
                     "Volta": st.column_config.NumberColumn(
-                        "↩️ Volta", min_value=0.0, format="%.3f"
+                        "↩️ Volta", min_value=0.0, step=0.1, format="%.1f"
                     ),
                     "Conferência Final": st.column_config.NumberColumn(
-                        "🔎 Conferência Final", min_value=0.0, format="%.3f"
+                        "🔎 Conferência Final", min_value=0.0, step=0.1, format="%.1f"
                     ),
                     "Unidade": st.column_config.TextColumn("Unidade"),
                 },
@@ -9230,16 +9288,15 @@ elif menu == "Orçamentos":
             if (final > ida).any():
                 erros.append(f"{categoria}: há Conferência Final maior que Ida.")
 
-            # Para garrafas, mantém a regra operacional de meio em meio.
-            if categoria == "Bebidas":
-                for col in ["Ida", "Volta", "Conferência Final"]:
-                    serie = pd.to_numeric(editor[col], errors="coerce").fillna(0)
-                    if ((serie * 2 - (serie * 2).round()).abs() > 1e-7).any():
-                        erros.append(
-                            "Bebidas: use quantidades em passos de 0,5 "
-                            "para Ida, Volta e Conferência Final."
-                        )
-                        break
+            for indice, linha in editor.iterrows():
+                passo = float(base.iloc[indice]["_passo"] or 0.1)
+                if abs(passo - 0.5) < 1e-9:
+                    for col in ["Ida", "Volta", "Conferência Final"]:
+                        valor = float(linha.get(col, 0) or 0)
+                        if abs(valor * 2 - round(valor * 2)) > 1e-7:
+                            erros.append(
+                                f"{linha.get('Item', 'Item')}: use quantidades em passos de 0,5 garrafa."
+                            )
 
             st.dataframe(
                 resumo[[
@@ -9249,12 +9306,12 @@ elif menu == "Orçamentos":
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Sistema": st.column_config.NumberColumn(format="%.3f"),
+                    "Sistema": st.column_config.NumberColumn(format="%.1f"),
                     "Consumo": st.column_config.NumberColumn(
-                        "🔥 Consumo", format="%.3f"
+                        "🔥 Consumo", format="%.1f"
                     ),
                     "Divergência": st.column_config.NumberColumn(
-                        "⚠️ Divergência", format="%.3f"
+                        "⚠️ Divergência", format="%.1f"
                     ),
                 },
             )
@@ -9311,16 +9368,18 @@ elif menu == "Orçamentos":
                         if volta > ida or conferencia > ida:
                             continue
 
-                        if categoria == "Bebidas":
+                        passo = float(base.iloc[indice]["_passo"] or 0.1)
+                        if abs(passo - 0.5) < 1e-9:
                             valores = [ida, volta, conferencia]
                             if any(abs(v * 2 - round(v * 2)) > 1e-7 for v in valores):
                                 continue
 
+                        fator = float(base.iloc[indice]["_fator"] or 1.0)
                         item_id = int(base.iloc[indice]["_id"])
                         supabase.table("evento_itens").update({
-                            "quantidade_ida": ida,
-                            "quantidade_volta": volta,
-                            "quantidade_estoquista": conferencia,
+                            "quantidade_ida": ida * fator,
+                            "quantidade_volta": volta * fator,
+                            "quantidade_estoquista": conferencia * fator,
                         }).eq("id", item_id).execute()
 
                 st.success("✅ Checklist salvo com sucesso!")
@@ -10857,29 +10916,36 @@ elif menu == "Orçamentos":
                         _subsecao_orcamento("📋 Checklist Previsto do Evento")
 
                         if itens_orcamento:
-                            df_check_previsto = pd.DataFrame(itens_orcamento)
+                            itens_check = [
+                                _orc_item_checklist_operacional(item)
+                                for item in itens_orcamento
+                            ]
                             df_check_sistema = pd.DataFrame({
-                                "Categoria": df_check_previsto["categoria"],
-                                "Item": df_check_previsto["produto"],
-                                "Sistema": df_check_previsto["quantidade"],
+                                "Categoria": [x.get("categoria_exibicao", x.get("categoria", "")) for x in itens_check],
+                                "Item": [x.get("produto", "") for x in itens_check],
+                                "Sistema": [x.get("quantidade_exibicao", 0) for x in itens_check],
                                 "Ida": 0.0,
                                 "Volta": 0.0,
                                 "Conferência Final": 0.0,
                                 "Consumo": 0.0,
                                 "Divergência": 0.0,
-                                "Unidade": df_check_previsto["unidade"],
+                                "Unidade": [x.get("unidade_exibicao", "un") for x in itens_check],
                             })
+                            st.caption(
+                                "Checklist em unidade operacional: frutas/insumos em kg e "
+                                "artesanais em garrafas conforme a embalagem cadastrada."
+                            )
                             st.dataframe(
                                 df_check_sistema,
                                 use_container_width=True,
                                 hide_index=True,
                                 column_config={
-                                    "Sistema": st.column_config.NumberColumn(format="%.3f"),
-                                    "Ida": st.column_config.NumberColumn(format="%.3f"),
-                                    "Volta": st.column_config.NumberColumn(format="%.3f"),
-                                    "Conferência Final": st.column_config.NumberColumn(format="%.3f"),
-                                    "Consumo": st.column_config.NumberColumn(format="%.3f"),
-                                    "Divergência": st.column_config.NumberColumn(format="%.3f"),
+                                    "Sistema": st.column_config.NumberColumn(format="%.1f"),
+                                    "Ida": st.column_config.NumberColumn(format="%.1f"),
+                                    "Volta": st.column_config.NumberColumn(format="%.1f"),
+                                    "Conferência Final": st.column_config.NumberColumn(format="%.1f"),
+                                    "Consumo": st.column_config.NumberColumn(format="%.1f"),
+                                    "Divergência": st.column_config.NumberColumn(format="%.1f"),
                                 },
                             )
 
@@ -11741,7 +11807,7 @@ elif menu == "Orçamentos":
         
                 st.success("✅ Orçamento salvo com sucesso!")
 
-        # =========================================================
+# =========================================================
         # ABA 2 - PENDENTES / CHECKLIST
         # =========================================================
         with tab2:
@@ -14113,7 +14179,7 @@ elif menu == "CMV":
     from datetime import datetime
 
     st.title("📊 CMV — Fechamento Real dos Eventos")
-    st.caption("Versão V4.4 — layout executivo limpo, sem linhas de separação e com avisos padronizados.")
+    st.caption("Versão V4.5 — unidades operacionais simplificadas no checklist e no fechamento.")
     st.caption(
         "Feche o evento a partir do checklist operacional: Ida, Volta e "
         "Conferência Final geram automaticamente Consumo, Divergência e Custo Real."
@@ -14442,6 +14508,99 @@ elif menu == "CMV":
             bases[nome_tabela] = df
 
         return bases
+
+    def _cmv_qtd_operacional_texto(valor):
+        """Exibe quantidade com no máximo uma casa decimal."""
+        valor = round(_cmv_num(valor), 1)
+        if abs(valor - round(valor)) < 1e-9:
+            return str(int(round(valor)))
+        return f"{valor:.1f}".replace(".", ",")
+
+    def _cmv_info_unidade_operacional(item, bases=None):
+        """
+        Converte a unidade técnica salva no banco para a unidade que a equipe
+        realmente usa no checklist, sem alterar a base histórica.
+
+        Regras:
+        - Artesanais cadastrados em embalagem (ex.: 1000 ml) -> garrafas da embalagem.
+        - Itens salvos em gramas -> quilogramas.
+        - Bebidas continuam em garrafas.
+
+        O fator sempre indica quantas unidades técnicas existem em 1 unidade
+        operacional. Ex.: 1000 g = 1 kg; 1000 ml = 1 garrafa de 1 L.
+        """
+        categoria_raw = _cmv_texto(item.get("categoria"))
+        categoria = _cmv_norm_preco(categoria_raw)
+        unidade_raw = _cmv_texto(item.get("unidade")) or "un"
+        unidade = _cmv_norm_preco(unidade_raw)
+        nome_norm = _cmv_norm_preco(item.get("produto"))
+
+        quantidade_base = _cmv_num(item.get("quantidade_base", 0))
+        preco_embalagem = _cmv_num(item.get("preco_unitario", 0))
+        custo_unit_raw = _cmv_custo_unitario_operacional(item)
+
+        linha_artesanal = None
+        if bases is not None:
+            df_art = bases.get("precos_artesanais", pd.DataFrame())
+            if not df_art.empty and "_nome_norm" in df_art.columns and nome_norm:
+                cand = df_art[df_art["_nome_norm"] == nome_norm]
+                if len(cand) == 1:
+                    linha_artesanal = cand.iloc[0]
+
+        eh_artesanal = categoria in {"artesanais", "artesanal"} or linha_artesanal is not None
+
+        if eh_artesanal:
+            if quantidade_base <= 0 and linha_artesanal is not None:
+                quantidade_base = _cmv_num(linha_artesanal.get("quantidade", 0))
+            if preco_embalagem <= 0 and linha_artesanal is not None:
+                preco_embalagem = _cmv_num(linha_artesanal.get("preco", 0))
+
+            if quantidade_base > 0:
+                if quantidade_base >= 1000:
+                    litros = quantidade_base / 1000.0
+                    litros_txt = _cmv_qtd_operacional_texto(litros)
+                    unidade_exibicao = f"garrafas {litros_txt}L"
+                else:
+                    unidade_exibicao = f"garrafas {int(round(quantidade_base))}ml"
+
+                custo_exibicao = (
+                    preco_embalagem
+                    if preco_embalagem > 0
+                    else custo_unit_raw * quantidade_base
+                )
+                return {
+                    "fator": float(quantidade_base),
+                    "unidade": unidade_exibicao,
+                    "categoria": "Artesanais",
+                    "passo": 0.5,
+                    "custo_unitario_exibicao": float(custo_exibicao),
+                }
+
+        if unidade in {"g", "gr", "grama", "gramas"}:
+            return {
+                "fator": 1000.0,
+                "unidade": "kg",
+                "categoria": categoria_raw or "Insumos",
+                "passo": 0.1,
+                "custo_unitario_exibicao": float(custo_unit_raw * 1000.0),
+            }
+
+        if categoria == "bebidas" or "garrafa" in unidade:
+            return {
+                "fator": 1.0,
+                "unidade": unidade_raw or "garrafas",
+                "categoria": categoria_raw or "Bebidas",
+                "passo": 0.5,
+                "custo_unitario_exibicao": float(custo_unit_raw),
+            }
+
+        return {
+            "fator": 1.0,
+            "unidade": unidade_raw,
+            "categoria": categoria_raw,
+            "passo": 0.1,
+            "custo_unitario_exibicao": float(custo_unit_raw),
+        }
 
     def _cmv_calcular_custo_atual_item(item, linha_preco, origem_preco=None):
         """
@@ -15028,21 +15187,23 @@ elif menu == "CMV":
                 "Categoria", "Item", "Sistema", "Ida", "Volta",
                 "Conf. Final", "Consumo", "Diverg.", "Custo Real"
             ]]
+            bases_pdf = _cmv_carregar_bases_precos()
             for _, item in itens_op.iterrows():
                 calculo = _cmv_calcular_item(item)
-                consumo = _cmv_num(item.get("cmv_consumo_real"), calculo["consumo"])
-                diverg = _cmv_num(item.get("cmv_divergencia"), calculo["divergencia"])
+                info_op = _cmv_info_unidade_operacional(item, bases_pdf)
+                fator = max(_cmv_num(info_op.get("fator"), 1.0), 1e-12)
+                consumo_raw = _cmv_num(item.get("cmv_consumo_real"), calculo["consumo"])
+                diverg_raw = _cmv_num(item.get("cmv_divergencia"), calculo["divergencia"])
                 custo_real = _cmv_num(item.get("cmv_custo_real"), calculo["custo_real"])
-                unidade = _cmv_texto(item.get("unidade"))
                 dados.append([
-                    _cmv_texto(item.get("categoria")),
+                    info_op.get("categoria") or _cmv_texto(item.get("categoria")),
                     _cmv_texto(item.get("produto")),
-                    f"{_cmv_num(item.get('quantidade')):.3f} {unidade}",
-                    f"{_cmv_num(item.get('quantidade_ida')):.3f}",
-                    f"{_cmv_num(item.get('quantidade_volta')):.3f}",
-                    f"{_cmv_num(item.get('quantidade_estoquista')):.3f}",
-                    f"{consumo:.3f}",
-                    f"{diverg:.3f}",
+                    f"{_cmv_qtd_operacional_texto(_cmv_num(item.get('quantidade')) / fator)} {info_op.get('unidade')}",
+                    _cmv_qtd_operacional_texto(_cmv_num(item.get("quantidade_ida")) / fator),
+                    _cmv_qtd_operacional_texto(_cmv_num(item.get("quantidade_volta")) / fator),
+                    _cmv_qtd_operacional_texto(_cmv_num(item.get("quantidade_estoquista")) / fator),
+                    _cmv_qtd_operacional_texto(consumo_raw / fator),
+                    _cmv_qtd_operacional_texto(diverg_raw / fator),
                     _cmv_moeda(custo_real),
                 ])
 
@@ -15429,29 +15590,43 @@ elif menu == "CMV":
                     "info",
                 )
             else:
-                base = pd.DataFrame({
-                    "_id": itens_op["id"].tolist(),
-                    "Categoria": itens_op.get("categoria", "").fillna("").astype(str).tolist(),
-                    "Item": itens_op.get("produto", "").fillna("").astype(str).tolist(),
-                    "Sistema": pd.to_numeric(
-                        itens_op.get("quantidade", 0), errors="coerce"
-                    ).fillna(0).tolist(),
-                    "Ida": pd.to_numeric(
-                        itens_op.get("quantidade_ida", 0), errors="coerce"
-                    ).fillna(0).tolist()
-                    if "quantidade_ida" in itens_op.columns else [0.0] * len(itens_op),
-                    "Volta": pd.to_numeric(
-                        itens_op.get("quantidade_volta", 0), errors="coerce"
-                    ).fillna(0).tolist()
-                    if "quantidade_volta" in itens_op.columns else [0.0] * len(itens_op),
-                    "Conferência Final": pd.to_numeric(
-                        itens_op.get("quantidade_estoquista", 0), errors="coerce"
-                    ).fillna(0).tolist()
-                    if "quantidade_estoquista" in itens_op.columns else [0.0] * len(itens_op),
-                    "Unidade": itens_op.get("unidade", "un").fillna("un").astype(str).tolist(),
-                })
+                # ----------------------------------------------------
+                # UNIDADES OPERACIONAIS DO CHECKLIST
+                # Mantém o banco em unidade técnica e mostra para a equipe
+                # kg / garrafas conforme a Precificação.
+                # ----------------------------------------------------
+                bases_unidades = _cmv_carregar_bases_precos()
+                linhas_base = []
+
+                for _, item_op in itens_op.reset_index(drop=True).iterrows():
+                    info_op = _cmv_info_unidade_operacional(item_op, bases_unidades)
+                    fator = max(_cmv_num(info_op.get("fator"), 1.0), 1e-12)
+
+                    linhas_base.append({
+                        "_id": int(item_op.get("id")),
+                        "_fator": fator,
+                        "_passo": _cmv_num(info_op.get("passo"), 0.1),
+                        "_custo_unit_exibicao": _cmv_num(
+                            info_op.get("custo_unitario_exibicao"), 0
+                        ),
+                        "Categoria": info_op.get("categoria") or _cmv_texto(item_op.get("categoria")),
+                        "Item": _cmv_texto(item_op.get("produto")),
+                        "Sistema": round(_cmv_num(item_op.get("quantidade")) / fator, 1),
+                        "Ida": round(_cmv_num(item_op.get("quantidade_ida")) / fator, 1),
+                        "Volta": round(_cmv_num(item_op.get("quantidade_volta")) / fator, 1),
+                        "Conferência Final": round(
+                            _cmv_num(item_op.get("quantidade_estoquista")) / fator, 1
+                        ),
+                        "Unidade": info_op.get("unidade") or "un",
+                    })
+
+                base = pd.DataFrame(linhas_base)
 
                 st.markdown("### 📋 Checklist de Fechamento")
+                st.caption(
+                    "Quantidades exibidas na unidade operacional: frutas/insumos em kg e "
+                    "produções artesanais em garrafas conforme a embalagem cadastrada na Precificação."
+                )
                 editor = st.data_editor(
                     base[[
                         "Categoria", "Item", "Sistema", "Ida", "Volta",
@@ -15466,10 +15641,10 @@ elif menu == "CMV":
                         else ["Categoria", "Item", "Sistema", "Unidade"]
                     ),
                     column_config={
-                        "Sistema": st.column_config.NumberColumn(format="%.3f"),
-                        "Ida": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
-                        "Volta": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
-                        "Conferência Final": st.column_config.NumberColumn(min_value=0.0, format="%.3f"),
+                        "Sistema": st.column_config.NumberColumn(format="%.1f"),
+                        "Ida": st.column_config.NumberColumn(min_value=0.0, step=0.1, format="%.1f"),
+                        "Volta": st.column_config.NumberColumn(min_value=0.0, step=0.1, format="%.1f"),
+                        "Conferência Final": st.column_config.NumberColumn(min_value=0.0, step=0.1, format="%.1f"),
                     },
                     key=f"cmv_editor_fechamento_{evento_id}",
                 )
@@ -15487,10 +15662,9 @@ elif menu == "CMV":
                 custos_unit = []
                 custos_reais = []
                 for indice, linha in preview.iterrows():
-                    original = itens_op.iloc[indice]
-                    custo_unit = _cmv_custo_unitario_operacional(original)
-                    custo_real = _cmv_num(linha["Consumo"]) * custo_unit
-                    custos_unit.append(custo_unit)
+                    custo_unit_exib = _cmv_num(base.iloc[indice]["_custo_unit_exibicao"])
+                    custo_real = _cmv_num(linha["Consumo"]) * custo_unit_exib
+                    custos_unit.append(custo_unit_exib)
                     custos_reais.append(custo_real)
 
                 preview["Custo Unit."] = custos_unit
@@ -15506,13 +15680,13 @@ elif menu == "CMV":
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "Sistema": st.column_config.NumberColumn(format="%.3f"),
-                        "Ida": st.column_config.NumberColumn(format="%.3f"),
-                        "Volta": st.column_config.NumberColumn(format="%.3f"),
-                        "Conferência Final": st.column_config.NumberColumn(format="%.3f"),
-                        "Consumo": st.column_config.NumberColumn(format="%.3f"),
-                        "Divergência": st.column_config.NumberColumn(format="%.3f"),
-                        "Custo Unit.": st.column_config.NumberColumn(format="R$ %.4f"),
+                        "Sistema": st.column_config.NumberColumn(format="%.1f"),
+                        "Ida": st.column_config.NumberColumn(format="%.1f"),
+                        "Volta": st.column_config.NumberColumn(format="%.1f"),
+                        "Conferência Final": st.column_config.NumberColumn(format="%.1f"),
+                        "Consumo": st.column_config.NumberColumn(format="%.1f"),
+                        "Divergência": st.column_config.NumberColumn(format="%.1f"),
+                        "Custo Unit.": st.column_config.NumberColumn(format="R$ %.2f"),
                         "Custo Real": st.column_config.NumberColumn(format="R$ %.2f"),
                     },
                 )
@@ -15524,8 +15698,8 @@ elif menu == "CMV":
                     volta = _cmv_num(linha["Volta"])
                     final = _cmv_num(linha["Conferência Final"])
                     sistema = _cmv_num(linha["Sistema"])
-                    categoria = _cmv_texto(linha["Categoria"])
                     item_nome = _cmv_texto(linha["Item"])
+                    passo = _cmv_num(base.iloc[indice]["_passo"], 0.1)
 
                     if volta > ida:
                         erros.append(f"{item_nome}: Volta maior que Ida.")
@@ -15533,7 +15707,8 @@ elif menu == "CMV":
                         erros.append(f"{item_nome}: Conferência Final maior que Ida.")
                     if sistema > 0 and ida == 0:
                         avisos.append(f"{item_nome}: previsto {sistema:g}, mas Ida está zerada.")
-                    if categoria.lower() == "bebidas":
+
+                    if abs(passo - 0.5) < 1e-9:
                         for valor_nome, valor in [
                             ("Ida", ida), ("Volta", volta), ("Conferência Final", final)
                         ]:
@@ -15567,13 +15742,20 @@ elif menu == "CMV":
                         else:
                             for indice, linha in preview.iterrows():
                                 item_id = int(base.iloc[indice]["_id"])
+                                fator = _cmv_num(base.iloc[indice]["_fator"], 1.0)
+                                ida_raw = _cmv_num(linha["Ida"]) * fator
+                                volta_raw = _cmv_num(linha["Volta"]) * fator
+                                final_raw = _cmv_num(linha["Conferência Final"]) * fator
+                                consumo_raw = (_cmv_num(linha["Ida"]) - _cmv_num(linha["Conferência Final"])) * fator
+                                diverg_raw = (_cmv_num(linha["Volta"]) - _cmv_num(linha["Conferência Final"])) * fator
+
                                 supabase.table("evento_itens").update({
-                                    "quantidade_ida": _cmv_num(linha["Ida"]),
-                                    "quantidade_volta": _cmv_num(linha["Volta"]),
-                                    "quantidade_estoquista": _cmv_num(linha["Conferência Final"]),
+                                    "quantidade_ida": ida_raw,
+                                    "quantidade_volta": volta_raw,
+                                    "quantidade_estoquista": final_raw,
                                     "cmv_conferido": True,
-                                    "cmv_consumo_real": _cmv_num(linha["Consumo"]),
-                                    "cmv_divergencia": _cmv_num(linha["Divergência"]),
+                                    "cmv_consumo_real": consumo_raw,
+                                    "cmv_divergencia": diverg_raw,
                                     "cmv_custo_real": _cmv_num(linha["Custo Real"]),
                                 }).eq("id", item_id).execute()
 
@@ -15808,19 +15990,22 @@ elif menu == "CMV":
                 st.info("Nenhum item operacional encontrado.")
             else:
                 linhas = []
+                bases_detalhe = _cmv_carregar_bases_precos()
                 for _, item in itens_op_r.iterrows():
                     calc = _cmv_calcular_item(item)
+                    info_op = _cmv_info_unidade_operacional(item, bases_detalhe)
+                    fator = max(_cmv_num(info_op.get("fator"), 1.0), 1e-12)
                     linhas.append({
-                        "Categoria": _cmv_texto(item.get("categoria")),
+                        "Categoria": info_op.get("categoria") or _cmv_texto(item.get("categoria")),
                         "Item": _cmv_texto(item.get("produto")),
-                        "Sistema": _cmv_num(item.get("quantidade")),
-                        "Ida": _cmv_num(item.get("quantidade_ida")),
-                        "Volta": _cmv_num(item.get("quantidade_volta")),
-                        "Conferência Final": _cmv_num(item.get("quantidade_estoquista")),
-                        "Consumo": _cmv_num(item.get("cmv_consumo_real"), calc["consumo"]),
-                        "Divergência": _cmv_num(item.get("cmv_divergencia"), calc["divergencia"]),
+                        "Sistema": round(_cmv_num(item.get("quantidade")) / fator, 1),
+                        "Ida": round(_cmv_num(item.get("quantidade_ida")) / fator, 1),
+                        "Volta": round(_cmv_num(item.get("quantidade_volta")) / fator, 1),
+                        "Conferência Final": round(_cmv_num(item.get("quantidade_estoquista")) / fator, 1),
+                        "Consumo": round(_cmv_num(item.get("cmv_consumo_real"), calc["consumo"]) / fator, 1),
+                        "Divergência": round(_cmv_num(item.get("cmv_divergencia"), calc["divergencia"]) / fator, 1),
                         "Custo Real": _cmv_num(item.get("cmv_custo_real"), calc["custo_real"]),
-                        "Unidade": _cmv_texto(item.get("unidade")),
+                        "Unidade": info_op.get("unidade") or _cmv_texto(item.get("unidade")),
                     })
                 df_detalhe = pd.DataFrame(linhas)
                 st.dataframe(
@@ -15828,12 +16013,12 @@ elif menu == "CMV":
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "Sistema": st.column_config.NumberColumn(format="%.3f"),
-                        "Ida": st.column_config.NumberColumn(format="%.3f"),
-                        "Volta": st.column_config.NumberColumn(format="%.3f"),
-                        "Conferência Final": st.column_config.NumberColumn(format="%.3f"),
-                        "Consumo": st.column_config.NumberColumn(format="%.3f"),
-                        "Divergência": st.column_config.NumberColumn(format="%.3f"),
+                        "Sistema": st.column_config.NumberColumn(format="%.1f"),
+                        "Ida": st.column_config.NumberColumn(format="%.1f"),
+                        "Volta": st.column_config.NumberColumn(format="%.1f"),
+                        "Conferência Final": st.column_config.NumberColumn(format="%.1f"),
+                        "Consumo": st.column_config.NumberColumn(format="%.1f"),
+                        "Divergência": st.column_config.NumberColumn(format="%.1f"),
                         "Custo Real": st.column_config.NumberColumn(format="R$ %.2f"),
                     },
                 )
@@ -16200,6 +16385,7 @@ elif menu == "CMV":
                         ).execute()
                         st.success("Adendo excluído.")
                         st.rerun()
+
 
 elif menu == "Financeiro":
 
