@@ -13738,7 +13738,7 @@ elif menu == "CMV":
     from datetime import datetime
 
     st.title("📊 CMV — Fechamento Real dos Eventos")
-    st.caption("Versão V4.2 — adendos são somente receita; custos reais vêm de produtos, cachês e outros gastos.")
+    st.caption("Versão V4.3 — layout executivo organizado; adendos continuam somente como receita.")
     st.caption(
         "Feche o evento a partir do checklist operacional: Ida, Volta e "
         "Conferência Final geram automaticamente Consumo, Divergência e Custo Real."
@@ -14670,30 +14670,82 @@ elif menu == "CMV":
         return buffer.getvalue(), None
 
     def _cmv_mostrar_metricas(resumo):
-        linha1 = st.columns(4)
-        linha1[0].metric("💰 Venda Original", _cmv_moeda(resumo["venda_original"]))
-        linha1[1].metric("➕ Adendos Cliente", _cmv_moeda(resumo["adendos_cliente"]))
-        linha1[2].metric("💵 Faturamento Real", _cmv_moeda(resumo["faturamento_real"]))
-        linha1[3].metric("📦 Custo Produtos", _cmv_moeda(resumo["custo_produtos"]))
+        # ========================================================
+        # LAYOUT EXECUTIVO DO RESULTADO
+        # Mantém a mesma regra de cálculo da V4.2; muda somente a apresentação.
+        # ========================================================
 
-        linha2 = st.columns(4)
-        linha2[0].metric("👥 Cachês / Equipe", _cmv_moeda(resumo.get("custo_equipe", 0)))
-        linha2[1].metric("🧾 Outros Custos", _cmv_moeda(resumo.get("outros_custos_manuais", 0)))
-        linha2[2].metric("📊 Custo Total", _cmv_moeda(resumo["custo_total"]))
-        linha2[3].metric("↗️ Adendos = Receita", _cmv_moeda(resumo["adendos_cliente"]))
+        with st.container(border=True):
+            st.markdown("#### 💰 Receita do Evento")
+            c1, c2, c3 = st.columns(3)
+            c1.metric(
+                "Venda Original",
+                _cmv_moeda(resumo["venda_original"]),
+            )
+            c2.metric(
+                "Adendos / Receita Extra",
+                _cmv_moeda(resumo["adendos_cliente"]),
+            )
+            c3.metric(
+                "Faturamento Real",
+                _cmv_moeda(resumo["faturamento_real"]),
+            )
 
-        linha3 = st.columns(3)
-        linha3[0].metric("📈 CMV", f"{resumo['cmv_percentual']:.2f}%")
-        linha3[1].metric("💎 Lucro Real", _cmv_moeda(resumo["lucro_real"]))
-        linha3[2].metric("↔️ Previsto x Real", _cmv_moeda(resumo["diferenca_previsto"]))
+        with st.container(border=True):
+            st.markdown("#### 📦 Composição do Custo Real")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric(
+                "Produtos Consumidos",
+                _cmv_moeda(resumo["custo_produtos"]),
+            )
+            c2.metric(
+                "Cachês / Equipe",
+                _cmv_moeda(resumo.get("custo_equipe", 0)),
+            )
+            c3.metric(
+                "Outros Custos",
+                _cmv_moeda(resumo.get("outros_custos_manuais", 0)),
+            )
+            c4.metric(
+                "Custo Total",
+                _cmv_moeda(resumo["custo_total"]),
+            )
+
+        with st.container(border=True):
+            st.markdown("#### 📊 Resultado do Evento")
+            c1, c2, c3 = st.columns(3)
+            c1.metric(
+                "Lucro Real",
+                _cmv_moeda(resumo["lucro_real"]),
+            )
+            c2.metric(
+                "CMV",
+                f"{resumo['cmv_percentual']:.2f}%",
+            )
+            c3.metric(
+                "Previsto x Real",
+                _cmv_moeda(resumo["diferenca_previsto"]),
+            )
 
         if resumo.get("qtd_caches", 0) > 0:
-            st.caption(
-                f"👥 Equipe: {resumo.get('qtd_caches', 0)} registro(s) | "
-                f"Pago {_cmv_moeda(resumo.get('custo_equipe_pago', 0))} | "
-                f"Pendente {_cmv_moeda(resumo.get('custo_equipe_pendente', 0))}. "
-                "Pagamento pendente afeta contas a pagar, mas o custo já pertence ao CMV do evento."
-            )
+            with st.expander("👥 Detalhes dos cachês / equipe", expanded=False):
+                ce1, ce2, ce3 = st.columns(3)
+                ce1.metric(
+                    "Registros",
+                    int(resumo.get("qtd_caches", 0)),
+                )
+                ce2.metric(
+                    "Pago",
+                    _cmv_moeda(resumo.get("custo_equipe_pago", 0)),
+                )
+                ce3.metric(
+                    "Pendente",
+                    _cmv_moeda(resumo.get("custo_equipe_pendente", 0)),
+                )
+                st.caption(
+                    "O custo da equipe já pertence ao CMV quando o cachê é registrado. "
+                    "O Financeiro considera como saída somente o que estiver marcado como pago."
+                )
 
     # ============================================================
     # CARREGAMENTO BASE
@@ -15080,7 +15132,7 @@ elif menu == "CMV":
                             st.success("✅ Conferência salva no CMV.")
                             st.rerun()
 
-            st.divider()
+            st.markdown("<div style=\"height: 0.9rem;\"></div>", unsafe_allow_html=True)
             st.markdown("### 💸 Custos Reais do Evento")
             st.caption(
                 "O custo de produtos vem do checklist e o custo de equipe vem automaticamente "
@@ -15158,7 +15210,7 @@ elif menu == "CMV":
                 evento, itens_atual, custos_atual, adendos_atual, caches_atual
             )
 
-            st.divider()
+            st.markdown("<div style=\"height: 1.2rem;\"></div>", unsafe_allow_html=True)
             st.markdown("### 📊 Prévia do Resultado Real")
             _cmv_mostrar_metricas(resumo)
 
@@ -15700,6 +15752,7 @@ elif menu == "CMV":
                         ).execute()
                         st.success("Adendo excluído.")
                         st.rerun()
+
 
 elif menu == "Financeiro":
 
