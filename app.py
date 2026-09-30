@@ -13730,18 +13730,76 @@ elif menu == "Vendas":
                 "Sem dados suficientes para gerar o gráfico."
             )
 
+
 elif menu == "CMV":
 
     import io
     import re
+    import html
     import unicodedata
     from datetime import datetime
 
     st.title("📊 CMV — Fechamento Real dos Eventos")
-    st.caption("Versão V4.3 — layout executivo organizado; adendos continuam somente como receita.")
+    st.caption("Versão V4.4 — layout executivo limpo, sem linhas de separação e com avisos padronizados.")
     st.caption(
         "Feche o evento a partir do checklist operacional: Ida, Volta e "
         "Conferência Final geram automaticamente Consumo, Divergência e Custo Real."
+    )
+
+    # ============================================================
+    # AJUSTES VISUAIS DO CMV
+    # ============================================================
+    st.markdown(
+        """
+        <style>
+        /* Remove a linha horizontal longa que o Streamlit coloca sob as abas. */
+        .stTabs [data-baseweb="tab-list"] {
+            border-bottom: none !important;
+            box-shadow: none !important;
+        }
+        .stTabs [data-baseweb="tab-border"] {
+            display: none !important;
+        }
+
+        /* Mantém somente o destaque da aba ativa, sem o trilho cinza. */
+        .stTabs [data-baseweb="tab-highlight"] {
+            height: 3px !important;
+            border-radius: 999px !important;
+        }
+
+        /* Avisos do CMV com tipografia única.
+           Também evita que o símbolo $ seja interpretado como fórmula. */
+        .cmv-aviso {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 16px 18px;
+            margin: 10px 0 14px 0;
+            border-radius: 10px;
+            font-size: 15px !important;
+            line-height: 1.45 !important;
+            font-weight: 500 !important;
+            letter-spacing: 0 !important;
+        }
+        .cmv-aviso * {
+            font-size: 15px !important;
+            line-height: 1.45 !important;
+            font-weight: 500 !important;
+        }
+        .cmv-aviso-sucesso {
+            background: rgba(20, 83, 45, 0.72);
+            border: 1px solid rgba(74, 222, 128, 0.20);
+        }
+        .cmv-aviso-alerta {
+            background: rgba(92, 77, 16, 0.70);
+            border: 1px solid rgba(250, 204, 21, 0.18);
+        }
+        .cmv-aviso-info {
+            background: rgba(30, 64, 95, 0.70);
+            border: 1px solid rgba(96, 165, 250, 0.18);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
     # ============================================================
@@ -13790,6 +13848,19 @@ elif menu == "CMV":
         texto = f"{valor:,.2f}"
         texto = texto.replace(",", "X").replace(".", ",").replace("X", ".")
         return f"R$ {texto}"
+
+    def _cmv_aviso(texto, tipo="sucesso"):
+        """Aviso visual do CMV com fonte uniforme e sem interpretação Markdown de R$."""
+        classe = {
+            "sucesso": "cmv-aviso-sucesso",
+            "alerta": "cmv-aviso-alerta",
+            "info": "cmv-aviso-info",
+        }.get(tipo, "cmv-aviso-info")
+        texto_seguro = html.escape(str(texto))
+        st.markdown(
+            f'<div class="cmv-aviso {classe}">{texto_seguro}</div>',
+            unsafe_allow_html=True,
+        )
 
     def _cmv_data_br(valor):
         if not _cmv_texto(valor):
@@ -14941,24 +15012,27 @@ elif menu == "CMV":
 
             resumo_cache_evento = _cmv_resumo_caches(caches_registro)
             if resumo_cache_evento["qtd"] > 0:
-                st.success(
+                _cmv_aviso(
                     f"👥 Custo real de equipe vindo da aba Cachês: "
                     f"{_cmv_moeda(resumo_cache_evento['total'])} | "
                     f"Pago: {_cmv_moeda(resumo_cache_evento['pago'])} | "
                     f"Pendente: {_cmv_moeda(resumo_cache_evento['pendente'])}. "
-                    "O CMV considera o total registrado; o Financeiro considera somente o que foi pago."
+                    "O CMV considera o total registrado; o Financeiro considera somente o que foi pago.",
+                    "sucesso",
                 )
             elif evento_ja_ocorreu:
-                st.warning(
+                _cmv_aviso(
                     "👥 Este evento já ocorreu e ainda não possui cachês registrados. "
                     "Você pode usar o custo manual de equipe como fallback, mas o ideal é "
-                    "lançar os profissionais na aba Cachês para formar o histórico real."
+                    "lançar os profissionais na aba Cachês para formar o histórico real.",
+                    "alerta",
                 )
 
             if fechado:
-                st.success(
-                    "Este evento já possui fechamento de CMV. "
-                    "Reabra somente se precisar corrigir alguma conferência."
+                _cmv_aviso(
+                    "✅ Este evento já possui fechamento de CMV. "
+                    "Reabra somente se precisar corrigir alguma conferência.",
+                    "sucesso",
                 )
 
                 col_reabrir, _ = st.columns([1, 3])
@@ -14975,10 +15049,11 @@ elif menu == "CMV":
                     st.rerun()
 
             if itens_op.empty:
-                st.info(
+                _cmv_aviso(
                     "👷 Evento sem consumo de produtos no checklist. "
                     "O fechamento será financeiro. Se houver cachês registrados, o custo de equipe "
-                    "já será puxado automaticamente; lance abaixo apenas os demais custos reais."
+                    "já será puxado automaticamente; lance abaixo apenas os demais custos reais.",
+                    "info",
                 )
             else:
                 base = pd.DataFrame({
@@ -15752,7 +15827,6 @@ elif menu == "CMV":
                         ).execute()
                         st.success("Adendo excluído.")
                         st.rerun()
-
 
 elif menu == "Financeiro":
 
