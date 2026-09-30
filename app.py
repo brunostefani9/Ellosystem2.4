@@ -13738,7 +13738,7 @@ elif menu == "CMV":
     from datetime import datetime
 
     st.title("📊 CMV — Fechamento Real dos Eventos")
-    st.caption("Versão V4.1 — recuperação cruzada de preços antigos (inclui Artesanais).")
+    st.caption("Versão V4.2 — adendos são somente receita; custos reais vêm de produtos, cachês e outros gastos.")
     st.caption(
         "Feche o evento a partir do checklist operacional: Ida, Volta e "
         "Conferência Final geram automaticamente Consumo, Divergência e Custo Real."
@@ -13752,9 +13752,11 @@ elif menu == "CMV":
     CATEGORIAS_ADMIN = {"equipe", "custos", "locação", "locacao"}
     CATEGORIAS_CUSTO_MANUAL = [
         "Transporte",
-        "Cachê / Equipe",
         "Locação",
         "Compra emergencial",
+        "Alimentação",
+        "Pedágio",
+        "Hotel / Hospedagem",
         "Avaria / Quebra",
         "Gelo extra",
         "Outros",
@@ -14322,15 +14324,13 @@ elif menu == "CMV":
         venda_original = _cmv_num(evento.get("venda", 0))
         custo_previsto = _cmv_num(evento.get("custo", 0))
 
+        # Adendos representam SOMENTE receita adicional cobrada do cliente.
+        # Qualquer custo real decorrente do evento deve vir da aba Cachês
+        # (equipe) ou de Outros Custos (transporte, alimentação, pedágio etc.).
         adendos_cliente = 0.0
-        adendos_equipe = 0.0
         if not adendos.empty:
             adendos_cliente = pd.to_numeric(
                 adendos.get("valor_cliente", pd.Series(dtype=float)),
-                errors="coerce",
-            ).fillna(0).sum()
-            adendos_equipe = pd.to_numeric(
-                adendos.get("valor_equipe", pd.Series(dtype=float)),
                 errors="coerce",
             ).fillna(0).sum()
 
@@ -14367,7 +14367,6 @@ elif menu == "CMV":
             float(custo_produtos)
             + float(custo_equipe)
             + float(outros_custos_manuais)
-            + float(adendos_equipe)
         )
         lucro_real = faturamento_real - custo_total
         cmv_percentual = (
@@ -14391,7 +14390,7 @@ elif menu == "CMV":
             "custo_equipe_manual_ignorado": custo_equipe_manual_ignorado,
             "outros_custos_manuais": float(outros_custos_manuais),
             "custos_manuais": float(custo_equipe + outros_custos_manuais),
-            "custo_adendos": float(adendos_equipe),
+            "custo_adendos": 0.0,
             "custo_total": float(custo_total),
             "lucro_real": float(lucro_real),
             "cmv_percentual": float(cmv_percentual),
@@ -14425,20 +14424,23 @@ elif menu == "CMV":
             except Exception:
                 pass
 
-        resumo["custo_adendos"] = _cmv_num(
-            evento.get("cmv_custo_adendos"), resumo["custo_adendos"]
-        )
-        resumo["custo_total"] = _cmv_num(
-            evento.get("cmv_custo_total"), resumo["custo_total"]
-        )
+        # V4.2: adendos nunca são custo. Fechamentos feitos em versões
+        # anteriores podem ter congelado valor_equipe como custo de adendo;
+        # por isso corrigimos o snapshot em leitura sem apagar o histórico.
+        resumo["custo_adendos"] = 0.0
         resumo["faturamento_real"] = _cmv_num(
             evento.get("cmv_faturamento_total"), resumo["faturamento_real"]
         )
-        resumo["cmv_percentual"] = _cmv_num(
-            evento.get("cmv_percentual"), resumo["cmv_percentual"]
+
+        resumo["custo_total"] = (
+            _cmv_num(resumo.get("custo_produtos"))
+            + _cmv_num(resumo.get("custo_equipe"))
+            + _cmv_num(resumo.get("outros_custos_manuais"))
         )
-        resumo["lucro_real"] = _cmv_num(
-            evento.get("cmv_lucro_real"), resumo["lucro_real"]
+        resumo["lucro_real"] = resumo["faturamento_real"] - resumo["custo_total"]
+        resumo["cmv_percentual"] = (
+            resumo["custo_total"] / resumo["faturamento_real"] * 100
+            if resumo["faturamento_real"] > 0 else 0.0
         )
         resumo["diferenca_previsto"] = resumo["custo_previsto"] - resumo["custo_total"]
         return resumo
@@ -14528,12 +14530,12 @@ elif menu == "CMV":
             ["Custo real produtos", _cmv_moeda(resumo["custo_produtos"]),
              "Cachês / equipe", _cmv_moeda(resumo.get("custo_equipe", 0)),
              "Outros custos", _cmv_moeda(resumo.get("outros_custos_manuais", 0))],
-            ["Custo de adendos", _cmv_moeda(resumo["custo_adendos"]),
-             "Custo total evento", _cmv_moeda(resumo["custo_total"]),
-             "CMV", f"{resumo['cmv_percentual']:.2f}%"],
+            ["Custo total evento", _cmv_moeda(resumo["custo_total"]),
+             "CMV", f"{resumo['cmv_percentual']:.2f}%",
+             "Lucro real", _cmv_moeda(resumo["lucro_real"])],
             ["Custo previsto", _cmv_moeda(resumo["custo_previsto"]),
-             "Lucro real", _cmv_moeda(resumo["lucro_real"]),
-             "Dif. previsto x real", _cmv_moeda(resumo["diferenca_previsto"])],
+             "Dif. previsto x real", _cmv_moeda(resumo["diferenca_previsto"]),
+             "Adendos = receita", _cmv_moeda(resumo["adendos_cliente"])],
         ]
         t_fin = Table(fin, colWidths=[38*mm, 40*mm, 42*mm, 40*mm, 42*mm, 40*mm])
         t_fin.setStyle(TableStyle([
@@ -14639,16 +14641,15 @@ elif menu == "CMV":
 
         if not adendos.empty:
             story.append(Paragraph("Adendos", subtitulo))
-            dados_a = [["Tipo", "Descrição", "Cliente", "Custo equipe", "Status"]]
+            dados_a = [["Tipo", "Descrição", "Valor cobrado", "Status"]]
             for _, a in adendos.iterrows():
                 dados_a.append([
                     _cmv_texto(a.get("tipo")),
                     _cmv_texto(a.get("descricao")),
                     _cmv_moeda(a.get("valor_cliente")),
-                    _cmv_moeda(a.get("valor_equipe")),
                     _cmv_texto(a.get("status")),
                 ])
-            t_a = Table(dados_a, repeatRows=1, colWidths=[42*mm, 105*mm, 35*mm, 35*mm, 35*mm])
+            t_a = Table(dados_a, repeatRows=1, colWidths=[50*mm, 135*mm, 40*mm, 35*mm])
             t_a.setStyle(TableStyle([
                 ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
                 ("TEXTCOLOR", (0,0), (-1,0), colors.white),
@@ -14678,8 +14679,8 @@ elif menu == "CMV":
         linha2 = st.columns(4)
         linha2[0].metric("👥 Cachês / Equipe", _cmv_moeda(resumo.get("custo_equipe", 0)))
         linha2[1].metric("🧾 Outros Custos", _cmv_moeda(resumo.get("outros_custos_manuais", 0)))
-        linha2[2].metric("➕ Custo Adendos", _cmv_moeda(resumo["custo_adendos"]))
-        linha2[3].metric("📊 Custo Total", _cmv_moeda(resumo["custo_total"]))
+        linha2[2].metric("📊 Custo Total", _cmv_moeda(resumo["custo_total"]))
+        linha2[3].metric("↗️ Adendos = Receita", _cmv_moeda(resumo["adendos_cliente"]))
 
         linha3 = st.columns(3)
         linha3[0].metric("📈 CMV", f"{resumo['cmv_percentual']:.2f}%")
@@ -15244,7 +15245,7 @@ elif menu == "CMV":
                             "cmv_custo_produtos": float(resumo["custo_produtos"]),
                             "cmv_custo_equipe": float(resumo["custo_equipe"]),
                             "cmv_custos_extras": float(resumo["outros_custos_manuais"]),
-                            "cmv_custo_adendos": float(resumo["custo_adendos"]),
+                            "cmv_custo_adendos": 0.0,
                             "cmv_custo_total": float(resumo["custo_total"]),
                             "cmv_faturamento_total": float(resumo["faturamento_real"]),
                             "cmv_percentual": float(resumo["cmv_percentual"]),
@@ -15362,7 +15363,7 @@ elif menu == "CMV":
                 with st.expander("➕ Adendos do evento", expanded=False):
                     cols_a = [
                         c for c in [
-                            "tipo", "descricao", "valor_cliente", "valor_equipe",
+                            "tipo", "descricao", "valor_cliente",
                             "status", "forma_pagamento", "data_pagamento"
                         ] if c in adendos_r.columns
                     ]
@@ -15557,8 +15558,9 @@ elif menu == "CMV":
 
         st.subheader("➕ Adendos dos Eventos")
         st.caption(
-            "Valores adicionais cobrados do cliente ou custos adicionais "
-            "ligados ao evento. Eles entram automaticamente no fechamento do CMV."
+            "Adendos são receitas extras cobradas do cliente. Eles aumentam somente o "
+            "faturamento do evento e nunca entram como custo. Custos reais devem ser "
+            "registrados em Cachês ou em Outros Custos do CMV."
         )
 
         if df_eventos_cmv.empty:
@@ -15582,25 +15584,23 @@ elif menu == "CMV":
                         "Tipo",
                         [
                             "Hora Extra", "Venda de Garrafa", "Quebra de Copo/Taça",
-                            "Serviço Adicional", "Custo Adicional", "Outros"
+                            "Serviço Adicional", "Outros"
                         ],
                     )
                     status_adendo = ca2.selectbox(
                         "Status", ["Pendente", "Pago", "Cancelado"]
                     )
                     descricao_adendo = st.text_input("Descrição")
-                    ca3, ca4 = st.columns(2)
-                    valor_cliente = ca3.number_input(
+                    valor_cliente = st.number_input(
                         "Valor cobrado do cliente",
                         min_value=0.0,
                         step=0.01,
                         format="%.2f",
                     )
-                    valor_equipe = ca4.number_input(
-                        "Custo adicional / equipe",
-                        min_value=0.0,
-                        step=0.01,
-                        format="%.2f",
+                    st.caption(
+                        "Adendo aumenta somente o faturamento. Custos de equipe devem ser "
+                        "lançados em Cachês; transporte, alimentação, pedágio, hotel e demais "
+                        "gastos entram em Outros Custos do CMV."
                     )
                     forma_pagamento = st.selectbox(
                         "Forma de pagamento",
@@ -15611,8 +15611,8 @@ elif menu == "CMV":
                 if salvar_adendo:
                     if not descricao_adendo.strip():
                         st.warning("Informe a descrição do adendo.")
-                    elif valor_cliente <= 0 and valor_equipe <= 0:
-                        st.warning("Informe pelo menos um valor.")
+                    elif valor_cliente <= 0:
+                        st.warning("Informe o valor cobrado do cliente.")
                     else:
                         evento_a = df_eventos_cmv[
                             pd.to_numeric(df_eventos_cmv["id"], errors="coerce") == evento_id_a
@@ -15623,7 +15623,7 @@ elif menu == "CMV":
                             "tipo": tipo_adendo,
                             "descricao": descricao_adendo.strip(),
                             "valor_cliente": float(valor_cliente),
-                            "valor_equipe": float(valor_equipe),
+                            "valor_equipe": 0.0,
                             "status": status_adendo,
                             "forma_pagamento": forma_pagamento,
                             "data_pagamento": None,
@@ -15638,7 +15638,7 @@ elif menu == "CMV":
                 st.markdown("### 📋 Adendos do evento")
                 colunas_a = [
                     c for c in [
-                        "id", "tipo", "descricao", "valor_cliente", "valor_equipe",
+                        "id", "tipo", "descricao", "valor_cliente",
                         "status", "forma_pagamento", "data_pagamento"
                     ] if c in adendos_a.columns
                 ]
@@ -15651,7 +15651,6 @@ elif menu == "CMV":
                     disabled=["id"],
                     column_config={
                         "valor_cliente": st.column_config.NumberColumn(format="R$ %.2f"),
-                        "valor_equipe": st.column_config.NumberColumn(format="R$ %.2f"),
                     },
                     key=f"cmv_editor_adendos_{evento_id_a}",
                 )
@@ -15672,9 +15671,10 @@ elif menu == "CMV":
                         ]:
                             if campo in linha.index:
                                 update[campo] = _cmv_texto(linha.get(campo))
-                        for campo in ["valor_cliente", "valor_equipe"]:
-                            if campo in linha.index:
-                                update[campo] = _cmv_num(linha.get(campo))
+                        if "valor_cliente" in linha.index:
+                            update["valor_cliente"] = _cmv_num(linha.get("valor_cliente"))
+                        # V4.2: valor_equipe não compõe adendos; limpa ao editar.
+                        update["valor_equipe"] = 0.0
                         supabase.table("aditivos_evento").update(update).eq(
                             "id", int(adendo_id)
                         ).execute()
@@ -15700,7 +15700,6 @@ elif menu == "CMV":
                         ).execute()
                         st.success("Adendo excluído.")
                         st.rerun()
-
 
 elif menu == "Financeiro":
 
