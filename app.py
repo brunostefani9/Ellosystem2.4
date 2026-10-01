@@ -16606,13 +16606,8 @@ elif menu == "Financeiro":
 
     st.title("💰 Financeiro")
     st.caption(
-        "Caixa realizado: entradas recebidas e saídas efetivamente pagas. "
-        "Custos previstos do orçamento não são tratados como saída de caixa."
+        "Caixa realizado separado do resultado econômico. O caixa mostra dinheiro que efetivamente entrou/saiu; lucro, CMV e reserva vêm dos fechamentos oficiais do CMV."
     )
-
-    # =========================================================
-    # INTEGRAÇÃO COM CACHÊS
-    # =========================================================
 
     def _fin_num(valor, padrao=0.0):
         try:
@@ -16622,83 +16617,13 @@ elif menu == "Financeiro":
         except Exception:
             return float(padrao)
 
-    def _fin_texto(valor):
-        if valor is None:
-            return ""
-        try:
-            if pd.isna(valor):
-                return ""
-        except Exception:
-            pass
-        texto = str(valor).strip()
-        return "" if texto.lower() in {"nan", "none", "null"} else texto
+    def _fin_moeda(valor):
+        txt = f"{_fin_num(valor):,.2f}"
+        txt = txt.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {txt}"
 
-    def _fin_cache_existente(cache_id):
-        try:
-            dados = (
-                supabase.table("Financeiro")
-                .select("id")
-                .eq("origem", "cache")
-                .eq("origem_id", int(cache_id))
-                .limit(1)
-                .execute()
-                .data
-                or []
-            )
-            return dados[0].get("id") if dados else None
-        except Exception:
-            return None
-
-    def _fin_registrar_cache_pago(registro, forma_pagamento, data_pagamento):
-        """Confirma pagamento e cria uma única saída de caixa."""
-        cache_id = int(registro.get("id"))
-        existente = _fin_cache_existente(cache_id)
-
-        if existente:
-            supabase.table("pagamentos_equipe").update({
-                "status": "Pago",
-                "forma_pagamento": forma_pagamento,
-                "data_pagamento": data_pagamento,
-                "financeiro_lancado": True,
-                "financeiro_id": int(existente),
-                "financeiro_data_lancamento": datetime.now().isoformat(),
-            }).eq("id", cache_id).execute()
-            return int(existente), False
-
-        evento_id = registro.get("evento_id")
-        try:
-            data_mov = pd.to_datetime(data_pagamento).date().isoformat()
-        except Exception:
-            data_mov = date.today().isoformat()
-
-        payload = {
-            "data": data_mov,
-            "tipo": "Saída",
-            "categoria": "Cachês / Equipe",
-            "forma_pagamento": forma_pagamento,
-            "descricao": (
-                f"Cachê - {_fin_texto(registro.get('nome')) or 'Profissional'} "
-                f"({_fin_texto(registro.get('funcao'))}) - "
-                f"{_fin_texto(registro.get('evento')) or 'Evento'}"
-            ),
-            "valor": _fin_num(registro.get("valor")),
-            "evento_id": int(evento_id) if evento_id is not None and not pd.isna(evento_id) else None,
-            "origem": "cache",
-            "origem_id": cache_id,
-        }
-        resp = supabase.table("Financeiro").insert(payload).execute()
-        financeiro_id = resp.data[0].get("id") if resp.data else None
-
-        supabase.table("pagamentos_equipe").update({
-            "status": "Pago",
-            "forma_pagamento": forma_pagamento,
-            "data_pagamento": data_pagamento,
-            "financeiro_lancado": True,
-            "financeiro_id": int(financeiro_id) if financeiro_id is not None else None,
-            "financeiro_data_lancamento": datetime.now().isoformat(),
-        }).eq("id", cache_id).execute()
-
-        return financeiro_id, True
+    def _fin_pct(valor):
+        return f"{_fin_num(valor):.2f}%".replace(".", ",")
 
     tab1, tab_pendentes, tab2, tab4, tab5 = st.tabs([
         "📊 Resumo",
@@ -16713,458 +16638,298 @@ elif menu == "Financeiro":
     # =========================================================
     with tab1:
 
-        # -----------------------------------------------------
-        # DATA PADRÃO
-        # -----------------------------------------------------
-        data_inicial = date(date.today().year, 1, 1)
-        data_final = date.today()
-
-        # -----------------------------------------------------
-        # BUSCAR FINANCEIRO
-        # -----------------------------------------------------
-        response_fin = (
-            supabase
-            .table("Financeiro")
-            .select("*")
-            .execute()
-        )
-
-        df_fin = pd.DataFrame(response_fin.data or [])
-
-        # -----------------------------------------------------
-        # BUSCAR EVENTOS
-        # -----------------------------------------------------
-        response_eventos = (
-            supabase
-            .table("eventos")
-            .select("*")
-            .in_(
-                "status",
-                ["aprovado", "finalizado", "concluido", "pago"]
+        # =====================================================
+        # BASES
+        # =====================================================
+        try:
+            df_fin = pd.DataFrame(
+                supabase.table("Financeiro").select("*").execute().data or []
             )
-            .execute()
-        )
+        except Exception:
+            df_fin = pd.DataFrame()
 
-        df_eventos = pd.DataFrame(response_eventos.data or [])
+        try:
+            df_eventos = pd.DataFrame(
+                supabase.table("eventos")
+                .select("*")
+                .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
+                .execute().data or []
+            )
+        except Exception:
+            df_eventos = pd.DataFrame()
 
-        # -----------------------------------------------------
-        # BUSCAR ADITIVOS
-        # -----------------------------------------------------
-        response_aditivos = (
-            supabase
-            .table("aditivos_evento")
-            .select("*")
-            .execute()
-        )
+        try:
+            df_aditivos = pd.DataFrame(
+                supabase.table("aditivos_evento").select("*").execute().data or []
+            )
+        except Exception:
+            df_aditivos = pd.DataFrame()
 
-        df_aditivos = pd.DataFrame(
-            response_aditivos.data or []
-        )
+        try:
+            recebimentos = pd.DataFrame(
+                supabase.table("recebimentos_eventos").select("*").execute().data or []
+            )
+        except Exception:
+            recebimentos = pd.DataFrame()
 
         # =====================================================
-        # PREPARAÇÃO FINANCEIRO
+        # CAIXA REALIZADO — SOMENTE MOVIMENTAÇÕES DO FINANCEIRO
         # =====================================================
-
-        entrada_manual = 0.0
-        saida_manual = 0.0
+        entradas_realizadas = 0.0
+        saidas_realizadas = 0.0
 
         if not df_fin.empty:
-
-            if "valor" in df_fin.columns:
-
-                df_fin["valor"] = pd.to_numeric(
-                    df_fin["valor"],
-                    errors="coerce"
-                ).fillna(0)
-
-            else:
-
+            if "valor" not in df_fin.columns:
                 df_fin["valor"] = 0.0
+            df_fin["valor"] = pd.to_numeric(df_fin["valor"], errors="coerce").fillna(0)
+            if "tipo" not in df_fin.columns:
+                df_fin["tipo"] = ""
+            tipo_norm = df_fin["tipo"].fillna("").astype(str).str.lower()
+            entradas_realizadas = float(df_fin.loc[tipo_norm == "entrada", "valor"].sum())
+            saidas_realizadas = float(df_fin.loc[tipo_norm.isin(["saída", "saida"]), "valor"].sum())
 
-            # -------------------------------------------------
-            # ENTRADAS
-            # -------------------------------------------------
-            entrada_manual = (
-                df_fin[
-                    df_fin["tipo"] == "Entrada"
-                ]["valor"].sum()
+        saldo_caixa = entradas_realizadas - saidas_realizadas
+
+        # =====================================================
+        # EVENTOS + ADENDOS
+        # =====================================================
+        if not df_eventos.empty:
+            for col in [
+                "venda", "custo", "cmv_status", "cmv_faturamento_total",
+                "cmv_custo_total", "cmv_lucro_real", "cmv_percentual"
+            ]:
+                if col not in df_eventos.columns:
+                    df_eventos[col] = None
+
+            df_eventos["venda_base"] = pd.to_numeric(df_eventos["venda"], errors="coerce").fillna(0)
+            df_eventos["custo_previsto"] = pd.to_numeric(df_eventos["custo"], errors="coerce").fillna(0)
+
+            if not df_aditivos.empty and "evento_id" in df_aditivos.columns and "valor_cliente" in df_aditivos.columns:
+                adit_ativos = df_aditivos.copy()
+                if "status" in adit_ativos.columns:
+                    adit_ativos = adit_ativos[
+                        adit_ativos["status"].fillna("").astype(str).str.lower() != "cancelado"
+                    ].copy()
+                adit_ativos["valor_cliente"] = pd.to_numeric(
+                    adit_ativos["valor_cliente"], errors="coerce"
+                ).fillna(0)
+                adit_agr = adit_ativos.groupby("evento_id", as_index=False)["valor_cliente"].sum()
+                adit_agr.rename(columns={"valor_cliente": "aditivos_total"}, inplace=True)
+                df_eventos = df_eventos.merge(
+                    adit_agr, left_on="id", right_on="evento_id", how="left"
+                )
+                df_eventos["aditivos_total"] = pd.to_numeric(
+                    df_eventos["aditivos_total"], errors="coerce"
+                ).fillna(0)
+            else:
+                df_eventos["aditivos_total"] = 0.0
+
+            df_eventos["faturamento_calculado"] = (
+                df_eventos["venda_base"] + df_eventos["aditivos_total"]
+            )
+            df_eventos["cmv_fechado"] = (
+                df_eventos["cmv_status"].fillna("aberto").astype(str).str.lower() == "fechado"
             )
 
-            # -------------------------------------------------
-            # SAÍDAS REALIZADAS
-            # -------------------------------------------------
-            # Tudo que está em Financeiro como Saída representa caixa
-            # efetivamente pago. Cachês pagos entram aqui UMA vez pela
-            # integração com pagamentos_equipe.
-            # -------------------------------------------------
-            saida_manual = (
-                df_fin[df_fin["tipo"] == "Saída"]["valor"].sum()
+            fat_snap = pd.to_numeric(df_eventos["cmv_faturamento_total"], errors="coerce")
+            custo_snap = pd.to_numeric(df_eventos["cmv_custo_total"], errors="coerce")
+            lucro_snap = pd.to_numeric(df_eventos["cmv_lucro_real"], errors="coerce")
+
+            df_eventos["faturamento_real"] = df_eventos["faturamento_calculado"].astype(float)
+            mask = df_eventos["cmv_fechado"] & fat_snap.notna()
+            df_eventos.loc[mask, "faturamento_real"] = fat_snap[mask]
+
+            df_eventos["custo_real"] = df_eventos["custo_previsto"].astype(float)
+            mask = df_eventos["cmv_fechado"] & custo_snap.notna()
+            df_eventos.loc[mask, "custo_real"] = custo_snap[mask]
+
+            df_eventos["lucro_real"] = df_eventos["faturamento_real"] - df_eventos["custo_real"]
+            mask = df_eventos["cmv_fechado"] & lucro_snap.notna()
+            df_eventos.loc[mask, "lucro_real"] = lucro_snap[mask]
+
+            df_fechados = df_eventos[df_eventos["cmv_fechado"]].copy()
+        else:
+            df_fechados = pd.DataFrame()
+
+        if not df_fechados.empty:
+            faturamento_real = float(df_fechados["faturamento_real"].sum())
+            custo_real = float(df_fechados["custo_real"].sum())
+            lucro_real = float(df_fechados["lucro_real"].sum())
+            reserva_emergencia = float(
+                df_fechados["lucro_real"].apply(lambda x: max(0.0, _fin_num(x)) * 0.35).sum()
             )
+        else:
+            faturamento_real = 0.0
+            custo_real = 0.0
+            lucro_real = 0.0
+            reserva_emergencia = 0.0
 
-        # =====================================================
-        # RESULTADO FINANCEIRO / CAIXA REALIZADO
-        # =====================================================
-        # IMPORTANTE: eventos.custo é custo PREVISTO do orçamento.
-        # Ele não é saída de caixa e não deve ser somado novamente.
-
-        entrada = entrada_manual
-        saida = saida_manual
-
-        saldo = entrada - saida
-
-        # Mantém a lógica existente
-        lucro = max(0.0, saldo)
-
-        # =====================================================
-        # RESERVA DE EMERGÊNCIA — 35%
-        # =====================================================
-
-        reserva_emergencia = lucro * 0.35
-
-        # =====================================================
-        # CAIXA DISPONÍVEL — 65%
-        # =====================================================
-
-        caixa_disponivel = (
-            lucro -
-            reserva_emergencia
-        )
-
-        # =====================================================
-        # CARDS PRINCIPAIS
-        # =====================================================
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-
-        c1.metric(
-            "💰 Entradas Realizadas",
-            f"R$ {entrada:,.2f}"
-        )
-
-        c2.metric(
-            "💸 Saídas Realizadas",
-            f"R$ {saida:,.2f}"
-        )
-
-        c3.metric(
-            "📈 Lucro",
-            f"R$ {lucro:,.2f}",
-            help="Resultado financeiro antes da separação dos 35% para a Reserva de Emergência."
-        )
-
-        c4.metric(
-            "🛡️ Reserva de Emergência",
-            f"R$ {reserva_emergencia:,.2f}",
-            help="35% do lucro destinados à Reserva de Emergência."
-        )
-
-        c5.metric(
-            "💵 Caixa Disponível",
-            f"R$ {caixa_disponivel:,.2f}",
-            help="65% restantes do lucro após separar os 35% da Reserva de Emergência."
-        )
-
-        st.divider()
+        disponivel_economico = lucro_real - reserva_emergencia
+        margem_real = (lucro_real / faturamento_real * 100) if faturamento_real > 0 else 0.0
+        cmv_real = (custo_real / faturamento_real * 100) if faturamento_real > 0 else 0.0
 
         # =====================================================
         # CONTAS A RECEBER
-        # FATURAMENTO REAL = CONTRATO + ADITIVOS
         # =====================================================
+        total_recebido_contratos = 0.0
+        if not recebimentos.empty and "valor" in recebimentos.columns:
+            recebimentos["valor"] = pd.to_numeric(recebimentos["valor"], errors="coerce").fillna(0)
+            total_recebido_contratos = float(recebimentos["valor"].sum())
 
-        try:
+        total_aditivos_pagos = 0.0
+        if not df_aditivos.empty and "valor_cliente" in df_aditivos.columns:
+            adit_pago = df_aditivos.copy()
+            adit_pago["valor_cliente"] = pd.to_numeric(adit_pago["valor_cliente"], errors="coerce").fillna(0)
+            if "status" in adit_pago.columns:
+                adit_pago = adit_pago[
+                    adit_pago["status"].fillna("").astype(str).str.lower() == "pago"
+                ]
+            total_aditivos_pagos = float(adit_pago["valor_cliente"].sum()) if not adit_pago.empty else 0.0
 
-            recebimentos = pd.DataFrame(
-                supabase
-                .table("recebimentos_eventos")
-                .select("*")
-                .execute()
-                .data or []
-            )
+        total_recebido = total_recebido_contratos + total_aditivos_pagos
+        faturamento_contratado = float(df_eventos["faturamento_real"].sum()) if not df_eventos.empty else 0.0
+        total_a_receber = max(0.0, faturamento_contratado - total_recebido)
 
-            # -------------------------------------------------
-            # CONTRATADO / FATURAMENTO REAL
-            # -------------------------------------------------
-
-            total_contratado = 0.0
-
-            if not df_eventos.empty:
-
-                df_eventos["venda"] = pd.to_numeric(
-                    df_eventos["venda"],
-                    errors="coerce"
-                ).fillna(0)
-
-                total_contratado = (
-                    df_eventos["venda"].sum()
-                )
-
-            # -------------------------------------------------
-            # ADITIVOS
-            # -------------------------------------------------
-
-            total_aditivos = 0.0
-            total_aditivos_pagos = 0.0
-
-            if not df_aditivos.empty:
-
-                if "valor_cliente" in df_aditivos.columns:
-
-                    df_aditivos["valor_cliente"] = pd.to_numeric(
-                        df_aditivos["valor_cliente"],
-                        errors="coerce"
-                    ).fillna(0)
-
-                    # Todos os aditivos cobrados
-                    total_aditivos = (
-                        df_aditivos["valor_cliente"].sum()
-                    )
-
-                    # Apenas aditivos pagos
-                    if "status" in df_aditivos.columns:
-
-                        aditivos_pagos = df_aditivos[
-                            df_aditivos["status"]
-                            .astype(str)
-                            .str.lower()
-                            == "pago"
-                        ]
-
-                        total_aditivos_pagos = (
-                            aditivos_pagos[
-                                "valor_cliente"
-                            ].sum()
-                        )
-
-            # -------------------------------------------------
-            # FATURAMENTO REAL
-            # -------------------------------------------------
-
-            total_faturamento_real = (
-                total_contratado +
-                total_aditivos
-            )
-
-            # -------------------------------------------------
-            # RECEBIMENTOS DOS CONTRATOS
-            # -------------------------------------------------
-
-            total_recebido_contratos = 0.0
-
-            if not recebimentos.empty:
-
-                if "valor" in recebimentos.columns:
-
-                    recebimentos["valor"] = pd.to_numeric(
-                        recebimentos["valor"],
-                        errors="coerce"
-                    ).fillna(0)
-
-                    total_recebido_contratos = (
-                        recebimentos["valor"].sum()
-                    )
-
-            # -------------------------------------------------
-            # TOTAL RECEBIDO
-            # -------------------------------------------------
-
-            total_recebido = (
-                total_recebido_contratos +
-                total_aditivos_pagos
-            )
-
-            # -------------------------------------------------
-            # TOTAL A RECEBER
-            # -------------------------------------------------
-
-            total_a_receber = max(
-                0.0,
-                total_faturamento_real -
-                total_recebido
-            )
-
-            # -------------------------------------------------
-            # EXIBIÇÃO
-            # -------------------------------------------------
-
-            st.subheader(
-                "📋 Contas a Receber — Faturamento Real"
-            )
-
-            st.caption(
-                "O valor contratado considera o contrato base "
-                "mais todos os aditivos cobrados do cliente."
-            )
-
+        # =====================================================
+        # PAINEL — CAIXA REALIZADO
+        # =====================================================
+        st.markdown("## 🏦 Caixa Realizado")
+        with st.container(border=True):
             c1, c2, c3 = st.columns(3)
-
-            c1.metric(
-                "🎉 Faturamento Total",
-                f"R$ {total_faturamento_real:,.2f}"
-            )
-
-            c2.metric(
-                "💰 Recebido",
-                f"R$ {total_recebido:,.2f}"
-            )
-
+            c1.metric("💰 Entradas Realizadas", _fin_moeda(entradas_realizadas))
+            c2.metric("💸 Saídas Realizadas", _fin_moeda(saidas_realizadas))
             c3.metric(
-                "🟡 A Receber",
-                f"R$ {total_a_receber:,.2f}"
+                "🏦 Saldo de Caixa",
+                _fin_moeda(saldo_caixa),
+                help="Dinheiro que efetivamente entrou menos dinheiro que efetivamente saiu. Não é o mesmo que lucro."
             )
 
-        except Exception as e:
+        st.markdown("## 📊 Resultado Econômico dos Eventos")
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Faturamento Real", _fin_moeda(faturamento_real))
+            c2.metric("Custo Real", _fin_moeda(custo_real))
+            c3.metric("Lucro Real", _fin_moeda(lucro_real))
+            c4.metric("Margem Real", _fin_pct(margem_real))
 
-            st.info(
-                "Controle de recebimentos ainda não disponível."
-            )
+        with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("CMV Consolidado", _fin_pct(cmv_real))
+            c2.metric("🛡️ Reserva Gerada — 35%", _fin_moeda(reserva_emergencia))
+            c3.metric("💵 Disponível Econômico — 65%", _fin_moeda(disponivel_economico))
 
-        st.divider()
+        st.markdown("## 📋 Contas a Receber")
+        with st.container(border=True):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Faturamento Contratado", _fin_moeda(faturamento_contratado))
+            c2.metric("Recebido", _fin_moeda(total_recebido))
+            c3.metric("A Receber", _fin_moeda(total_a_receber))
 
         # =====================================================
-        # GRÁFICOS DE ACOMPANHAMENTO
+        # RECONCILIAÇÃO — ADENDOS PAGOS QUE AINDA NÃO ESTÃO NO CAIXA
         # =====================================================
+        adendos_sem_caixa = pd.DataFrame()
 
-        if not df_fin.empty:
+        if not df_aditivos.empty and "id" in df_aditivos.columns and "status" in df_aditivos.columns:
+            pagos = df_aditivos[
+                df_aditivos["status"].fillna("").astype(str).str.lower() == "pago"
+            ].copy()
 
-            df_fin["data"] = pd.to_datetime(
-                df_fin["data"],
-                errors="coerce"
+            ids_sincronizados = set()
+            if not df_fin.empty and "origem" in df_fin.columns and "origem_id" in df_fin.columns:
+                fin_adendos = df_fin[
+                    df_fin["origem"].fillna("").astype(str).str.lower() == "adendo"
+                ]
+                ids_sincronizados = set(
+                    pd.to_numeric(fin_adendos["origem_id"], errors="coerce")
+                    .dropna().astype(int).tolist()
+                )
+
+            if not pagos.empty:
+                adendos_sem_caixa = pagos[
+                    ~pd.to_numeric(pagos["id"], errors="coerce")
+                    .fillna(-1).astype(int).isin(ids_sincronizados)
+                ].copy()
+
+        if not adendos_sem_caixa.empty:
+            valor_pendente_sync = float(
+                pd.to_numeric(adendos_sem_caixa["valor_cliente"], errors="coerce").fillna(0).sum()
             )
 
-            df_fin = df_fin.dropna(
-                subset=["data"]
+            st.warning(
+                f"⚠️ {len(adendos_sem_caixa)} adendo(s) marcado(s) como Pago ainda não possuem entrada rastreada no caixa. "
+                f"Total: {_fin_moeda(valor_pendente_sync)}."
             )
 
-            if not df_fin.empty:
-
-                # -------------------------------------------------
-                # MÊS
-                # -------------------------------------------------
-
-                df_fin["mes"] = (
-                    df_fin["data"]
-                    .dt.to_period("M")
+            with st.expander("🔄 Reconciliar adendos pagos com o caixa", expanded=False):
+                cols = [c for c in ["id", "evento_id", "evento", "tipo", "descricao", "valor_cliente", "forma_pagamento", "data_pagamento"] if c in adendos_sem_caixa.columns]
+                st.dataframe(
+                    adendos_sem_caixa[cols],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "valor_cliente": st.column_config.NumberColumn("Valor", format="R$ %.2f")
+                    }
                 )
 
-                mensal = (
-                    df_fin
-                    .groupby(
-                        ["mes", "tipo"]
-                    )["valor"]
-                    .sum()
-                    .unstack()
-                    .fillna(0)
+                confirma = st.checkbox(
+                    "Confirmo que estes adendos marcados como pagos representam valores realmente recebidos.",
+                    key="fin_sync_adendos_confirma"
                 )
 
-                st.subheader(
-                    "📊 Resultado Mensal"
-                )
+                if st.button(
+                    "🔄 Sincronizar entradas dos adendos",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=not confirma,
+                    key="fin_sync_adendos_btn"
+                ):
+                    try:
+                        criados = 0
+                        for _, adt in adendos_sem_caixa.iterrows():
+                            adendo_id = int(_fin_num(adt.get("id")))
+                            valor = _fin_num(adt.get("valor_cliente"))
+                            evento_id = int(_fin_num(adt.get("evento_id"))) if _fin_num(adt.get("evento_id")) > 0 else None
+                            data_ref = adt.get("data_pagamento") or datetime.now().isoformat()
+                            try:
+                                data_mov = pd.to_datetime(data_ref).date().isoformat()
+                            except Exception:
+                                data_mov = datetime.now().date().isoformat()
 
-                st.bar_chart(
-                    mensal
-                )
+                            payload = {
+                                "data": data_mov,
+                                "tipo": "Entrada",
+                                "categoria": "Adendo / Receita Extra",
+                                "forma_pagamento": _fin_txt(adt.get("forma_pagamento")) or "Não informado",
+                                "descricao": f"Adendo - {_fin_txt(adt.get('tipo')) or 'Receita extra'} - {_fin_txt(adt.get('evento')) or 'Evento'}",
+                                "valor": float(valor),
+                                "evento_id": evento_id,
+                                "origem": "adendo",
+                                "origem_id": adendo_id,
+                            }
 
-                # -------------------------------------------------
-                # GASTOS POR CATEGORIA
-                # -------------------------------------------------
+                            supabase.table("Financeiro").insert(payload).execute()
+                            criados += 1
 
-                st.subheader(
-                    "💸 Gastos por Categoria"
-                )
+                        st.success(f"✅ {criados} entrada(s) de adendo sincronizada(s) com o caixa.")
+                        st.rerun()
+                    except Exception as erro:
+                        st.error(f"Erro ao sincronizar adendos: {erro}")
 
-                if "categoria" in df_fin.columns:
-
-                    gastos = (
-                        df_fin[
-                            df_fin["tipo"] == "Saída"
-                        ]
-                        .groupby("categoria")["valor"]
-                        .sum()
-                        .sort_values(
-                            ascending=False
-                        )
-                    )
-
-                    if not gastos.empty:
-
-                        st.dataframe(
-                            gastos,
-                            use_container_width=True
-                        )
-
-                # -------------------------------------------------
-                # ENTRADAS POR CATEGORIA
-                # -------------------------------------------------
-
-                st.subheader(
-                    "💳 Entradas por Categoria"
-                )
-
-                if "categoria" in df_fin.columns:
-
-                    entradas_cat = (
-                        df_fin[
-                            df_fin["tipo"] == "Entrada"
-                        ]
-                        .groupby("categoria")["valor"]
-                        .sum()
-                        .sort_values(
-                            ascending=False
-                        )
-                    )
-
-                    if not entradas_cat.empty:
-
-                        st.dataframe(
-                            entradas_cat,
-                            use_container_width=True
-                        )
-
-                # -------------------------------------------------
-                # EVOLUÇÃO DO CAIXA
-                # -------------------------------------------------
-
-                df_ordenado = (
-                    df_fin
-                    .sort_values("data")
-                    .copy()
-                )
-
-                df_ordenado["fluxo"] = df_ordenado.apply(
-                    lambda x:
-                    (
-                        x["valor"]
-                        if x["tipo"] == "Entrada"
-                        else -x["valor"]
-                    ),
+        # =====================================================
+        # GRÁFICO DO CAIXA
+        # =====================================================
+        if not df_fin.empty and "data_dt" in df_fin.columns:
+            graf = df_fin.dropna(subset=["data_dt"]).copy()
+            if not graf.empty:
+                graf["fluxo"] = graf.apply(
+                    lambda x: x["valor"] if str(x.get("tipo", "")).lower() == "entrada" else -x["valor"],
                     axis=1
                 )
-
-                df_ordenado["saldo_acumulado"] = (
-                    df_ordenado["fluxo"].cumsum()
-                )
-
-                st.subheader(
-                    "🏦 Evolução do Caixa"
-                )
-
-                st.line_chart(
-                    df_ordenado
-                    .set_index("data")[
-                        "saldo_acumulado"
-                    ]
-                )
-
-            # -------------------------------------------------
-            # ALERTA DE CAIXA NEGATIVO
-            # -------------------------------------------------
-
-            if saida > entrada:
-
-                st.error(
-                    "⚠️ Atenção: as saídas e custos totais "
-                    "superaram as entradas no período!"
-                )
+                graf = graf.sort_values("data_dt")
+                graf["saldo_acumulado"] = graf["fluxo"].cumsum()
+                st.markdown("### 📈 Evolução do Caixa")
+                st.line_chart(graf.set_index("data_dt")["saldo_acumulado"])
 
     # =========================================================
     # 🔔 TAB 2: PENDÊNCIAS / A RECEBER
@@ -17177,124 +16942,9 @@ elif menu == "Financeiro":
         )
 
         st.caption(
-            "Central de ações para recebimentos de clientes e pagamentos pendentes da equipe."
+            "Central de ações para lançar pagamentos "
+            "e aditivos de eventos em aberto."
         )
-
-        # =====================================================
-        # CACHÊS / CONTAS A PAGAR
-        # =====================================================
-        try:
-            df_caches_fin = pd.DataFrame(
-                supabase.table("pagamentos_equipe")
-                .select("*")
-                .order("id", desc=True)
-                .execute()
-                .data or []
-            )
-        except Exception:
-            df_caches_fin = pd.DataFrame()
-
-        st.markdown("### 👥 Cachês / Contas a Pagar")
-
-        if df_caches_fin.empty:
-            st.info("Nenhum cachê registrado.")
-        else:
-            df_caches_fin["valor"] = pd.to_numeric(
-                df_caches_fin.get("valor", 0), errors="coerce"
-            ).fillna(0)
-            status_norm = df_caches_fin.get(
-                "status", pd.Series("Pendente", index=df_caches_fin.index)
-            ).fillna("Pendente").astype(str).str.lower()
-            pend_cache = df_caches_fin[status_norm != "pago"].copy()
-
-            if "financeiro_lancado" in df_caches_fin.columns:
-                flag_fin = df_caches_fin["financeiro_lancado"].fillna(False).astype(bool)
-            else:
-                flag_fin = pd.Series(False, index=df_caches_fin.index)
-            pagos_sem_sync = df_caches_fin[(status_norm == "pago") & (~flag_fin)].copy()
-
-            p1, p2, p3 = st.columns(3)
-            p1.metric("🟡 Cachês Pendentes", len(pend_cache))
-            p2.metric("💸 Total a Pagar", f"R$ {pend_cache['valor'].sum():,.2f}")
-            p3.metric("⚠️ Pagos sem Sincronizar", len(pagos_sem_sync))
-
-            if not pend_cache.empty:
-                opcoes_cache = {
-                    (
-                        f"ID #{int(r.get('id'))} | {_fin_texto(r.get('nome'))} | "
-                        f"{_fin_texto(r.get('evento'))} | R$ {_fin_num(r.get('valor')):,.2f}"
-                    ): r.to_dict()
-                    for _, r in pend_cache.iterrows()
-                }
-                cache_escolha = st.selectbox(
-                    "Pagamento de equipe para confirmar",
-                    list(opcoes_cache.keys()),
-                    key="fin_cache_pendente_sel",
-                )
-                cache_reg = opcoes_cache[cache_escolha]
-                fc1, fc2 = st.columns(2)
-                forma_cache = fc1.selectbox(
-                    "Forma de pagamento do cachê",
-                    ["Pix", "Dinheiro", "Transferência", "Cartão"],
-                    key="fin_cache_forma",
-                )
-                data_cache = fc2.date_input(
-                    "Data do pagamento do cachê",
-                    value=date.today(),
-                    key="fin_cache_data",
-                )
-                if st.button(
-                    "✅ Confirmar pagamento e registrar saída",
-                    key="fin_cache_confirmar",
-                    use_container_width=True,
-                ):
-                    try:
-                        data_iso = datetime.combine(
-                            data_cache, datetime.min.time()
-                        ).isoformat()
-                        _fin_registrar_cache_pago(cache_reg, forma_cache, data_iso)
-                        st.success(
-                            "✅ Cachê pago. A saída foi registrada uma única vez no Financeiro."
-                        )
-                        st.rerun()
-                    except Exception as erro_cache:
-                        st.error(f"Erro ao confirmar cachê: {erro_cache}")
-            else:
-                st.success("✅ Não existem cachês pendentes de pagamento.")
-
-            if not pagos_sem_sync.empty:
-                st.warning(
-                    "Existem cachês antigos marcados como Pago sem vínculo rastreável com o "
-                    "Financeiro. Sincronize somente se eles ainda não tiverem sido lançados manualmente."
-                )
-                conf_legacy = st.checkbox(
-                    "Confirmo que os pagamentos acima não foram lançados manualmente no Financeiro.",
-                    key="fin_confirmar_sync_cache_legado",
-                )
-                if st.button(
-                    "🔄 Sincronizar pagos antigos",
-                    disabled=not conf_legacy,
-                    key="fin_sync_cache_legado",
-                    use_container_width=True,
-                ):
-                    erros = []
-                    feitos = 0
-                    for _, reg in pagos_sem_sync.iterrows():
-                        try:
-                            forma = _fin_texto(reg.get("forma_pagamento")) or "Não informado"
-                            data_pg = reg.get("data_pagamento") or datetime.now().isoformat()
-                            _fin_registrar_cache_pago(reg.to_dict(), forma, data_pg)
-                            feitos += 1
-                        except Exception as exc:
-                            erros.append(f"ID {reg.get('id')}: {exc}")
-                    if feitos:
-                        st.success(f"✅ {feitos} pagamento(s) sincronizado(s).")
-                    if erros:
-                        st.error(" | ".join(erros[:5]))
-                    st.rerun()
-
-        st.divider()
-        st.markdown("### 💰 Eventos com Saldo a Receber")
 
         eventos = pd.DataFrame(
             supabase
@@ -17420,23 +17070,30 @@ elif menu == "Financeiro":
                     evento.get("venda", 0) or 0
                 )
 
-                custo_evento_total = float(
-                    evento.get("custo", 0) or 0
+                cmv_fechado = (
+                    str(evento.get("cmv_status", "") or "").lower() == "fechado"
                 )
 
                 valor_contratado_total = (
-                    valor_contrato_base +
-                    total_aditivos_cliente
+                    _fin_num(evento.get("cmv_faturamento_total"))
+                    if cmv_fechado and evento.get("cmv_faturamento_total") is not None
+                    else valor_contrato_base + total_aditivos_cliente
                 )
 
-                lucro_evento = max(
-                    0.0,
-                    valor_contratado_total -
-                    custo_evento_total
+                custo_evento_total = (
+                    _fin_num(evento.get("cmv_custo_total"))
+                    if cmv_fechado and evento.get("cmv_custo_total") is not None
+                    else _fin_num(evento.get("custo"))
+                )
+
+                lucro_evento = (
+                    _fin_num(evento.get("cmv_lucro_real"))
+                    if cmv_fechado and evento.get("cmv_lucro_real") is not None
+                    else valor_contratado_total - custo_evento_total
                 )
 
                 reserva_caixa_35 = (
-                    lucro_evento * 0.35
+                    max(0.0, lucro_evento) * 0.35
                 )
 
                 # -------------------------------------------------
@@ -17520,7 +17177,7 @@ elif menu == "Financeiro":
                     )
 
                     m2.metric(
-                        "Custo Estimado",
+                        "Custo Real" if cmv_fechado else "Custo Previsto",
                         f"R$ {custo_evento_total:,.2f}"
                     )
 
@@ -17954,28 +17611,29 @@ elif menu == "Financeiro":
                 )
 
                 cmv_fechado = (
-                    _fin_texto(evento.get("cmv_status")).lower() == "fechado"
+                    str(evento.get("cmv_status", "") or "").lower() == "fechado"
                 )
-                if cmv_fechado and evento.get("cmv_custo_total") is not None:
-                    custo_evento_total = _fin_num(evento.get("cmv_custo_total"))
-                    rotulo_custo_evento = "Custo Real (CMV)"
-                else:
-                    custo_evento_total = _fin_num(evento.get("custo", 0))
-                    rotulo_custo_evento = "Custo Estimado"
 
                 valor_contratado_total = (
-                    valor_contrato_base +
-                    total_aditivos_cliente
+                    _fin_num(evento.get("cmv_faturamento_total"))
+                    if cmv_fechado and evento.get("cmv_faturamento_total") is not None
+                    else valor_contrato_base + total_aditivos_cliente
                 )
 
-                lucro_evento = max(
-                    0.0,
-                    valor_contratado_total -
-                    custo_evento_total
+                custo_evento_total = (
+                    _fin_num(evento.get("cmv_custo_total"))
+                    if cmv_fechado and evento.get("cmv_custo_total") is not None
+                    else _fin_num(evento.get("custo"))
+                )
+
+                lucro_evento = (
+                    _fin_num(evento.get("cmv_lucro_real"))
+                    if cmv_fechado and evento.get("cmv_lucro_real") is not None
+                    else valor_contratado_total - custo_evento_total
                 )
 
                 reserva_caixa_35 = (
-                    lucro_evento * 0.35
+                    max(0.0, lucro_evento) * 0.35
                 )
 
                 caixa_disponivel_evento = (
@@ -18058,7 +17716,7 @@ elif menu == "Financeiro":
                 )
 
                 m2.metric(
-                    rotulo_custo_evento,
+                    "Custo",
                     f"R$ {custo_evento_total:,.2f}"
                 )
 
@@ -18449,6 +18107,7 @@ elif menu == "Financeiro":
                         st.error(
                             f"Erro ao excluir registro: {e}"
                         )
+
 
 elif menu == "Pacotes":
 
