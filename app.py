@@ -3549,8 +3549,8 @@ elif menu == "Relatórios":
 
         st.markdown("## 🏁 Fechamento Anual")
         st.caption(
-            "Consolidação oficial do ano. Use Resumo Anual para os indicadores e Fundo da Equipe "
-            "para simular ou fechar a bonificação anual separadamente."
+            "Escolha o ano e use as subabas abaixo: Resumo Anual para o fechamento do negócio "
+            "e Fundo da Equipe para a bonificação anual."
         )
 
         anos_fecha = (
@@ -3574,7 +3574,7 @@ elif menu == "Relatórios":
             "Ano do fechamento",
             anos_fecha,
             index=len(anos_fecha) - 1,
-            key="rel_v33_fecha_ano"
+            key="rel_v331_fecha_ano"
         )
 
         ano_df = (
@@ -3647,50 +3647,6 @@ elif menu == "Relatórios":
             except Exception:
                 fundo_fechado_dados = None
 
-            # Percentual padrão: 5%.
-            # Se o ano já foi congelado, respeita o percentual do snapshot.
-            percentual_fundo_padrao = 5.0
-
-            if fundo_fechado_dados:
-                percentual_fundo_padrao = _rel_num(
-                    fundo_fechado_dados.get("percentual_fundo"),
-                    5.0
-                )
-
-            percentual_fundo = st.number_input(
-                "👥 Percentual do lucro destinado ao Fundo da Equipe (%)",
-                min_value=0.0,
-                max_value=30.0,
-                value=float(percentual_fundo_padrao),
-                step=0.5,
-                disabled=bool(fundo_fechado_dados),
-                key=f"rel_v33_pct_fundo_{ano_fecha}",
-                help=(
-                    "Sugestão inicial: 5%. O fundo é calculado sobre o lucro real anual positivo "
-                    "e não entra no CMV nem no custo dos eventos."
-                )
-            )
-
-            lucro_base_fundo = max(0.0, lucro)
-
-            if fundo_fechado_dados:
-                fundo_equipe = _rel_num(
-                    fundo_fechado_dados.get("valor_fundo")
-                )
-            else:
-                fundo_equipe = (
-                    lucro_base_fundo
-                    * percentual_fundo
-                    / 100
-                )
-
-            # Disponível final depois das duas destinações.
-            disponivel_final = (
-                lucro
-                - reserva
-                - fundo_equipe
-            )
-
             # =====================================================
             # SUBABAS DO FECHAMENTO ANUAL
             # =====================================================
@@ -3754,15 +3710,15 @@ elif menu == "Relatórios":
                     )
 
                 # =====================================================
-                # DESTINAÇÃO DO LUCRO
+                # DESTINAÇÃO DO LUCRO — VISÃO RESUMIDA
                 # =====================================================
                 with st.container(border=True):
 
                     st.markdown(
-                        "#### 🛡️ Destinação do Lucro"
+                        "#### 🛡️ Reserva e Disponível"
                     )
 
-                    d1, d2, d3, d4 = st.columns(4)
+                    d1, d2, d3 = st.columns(3)
 
                     d1.metric(
                         "Lucro Real do Ano",
@@ -3779,35 +3735,13 @@ elif menu == "Relatórios":
                     )
 
                     d3.metric(
-                        f"Fundo da Equipe — {percentual_fundo:.1f}%".replace(".", ","),
-                        _rel_moeda(fundo_equipe),
+                        "Disponível após Reserva",
+                        _rel_moeda(lucro - reserva),
                         help=(
-                            "Calculado sobre o lucro real anual positivo."
+                            "Antes da destinação anual para o Fundo da Equipe. "
+                            "O Fundo é tratado na subaba própria."
                         )
                     )
-
-                    d4.metric(
-                        "Disponível após Destinações",
-                        _rel_moeda(disponivel_final)
-                    )
-
-                    if lucro <= 0:
-                        st.warning(
-                            "O ano não possui lucro real positivo. "
-                            "Por segurança, o Fundo da Equipe fica em R$ 0,00."
-                        )
-
-                    elif disponivel_final < 0:
-                        st.warning(
-                            "As destinações superam o lucro líquido disponível. "
-                            "Revise o percentual do fundo antes de qualquer fechamento."
-                        )
-
-                    else:
-                        st.caption(
-                            "O Fundo da Equipe é uma destinação do lucro anual e não altera "
-                            "CMV, custo real dos eventos ou cachês já registrados."
-                        )
 
                 # =====================================================
                 # META DO ANO
@@ -3970,8 +3904,72 @@ elif menu == "Relatórios":
 
 
             with subtab_fundo_equipe:
+
+                # =====================================================
+                # CONFIGURAÇÃO DO FUNDO
+                # =====================================================
+                percentual_fundo_padrao = 5.0
+
+                if fundo_fechado_dados:
+                    percentual_fundo_padrao = _rel_num(
+                        fundo_fechado_dados.get("percentual_fundo"),
+                        5.0
+                    )
+
+                percentual_fundo = st.number_input(
+                    "Percentual do lucro destinado ao Fundo da Equipe (%)",
+                    min_value=0.0,
+                    max_value=30.0,
+                    value=float(percentual_fundo_padrao),
+                    step=0.5,
+                    disabled=bool(fundo_fechado_dados),
+                    key=f"rel_v331_pct_fundo_{ano_fecha}",
+                    help=(
+                        "Sugestão inicial: 5%. O fundo é calculado sobre o lucro real anual positivo "
+                        "e não entra no CMV nem no custo dos eventos."
+                    )
+                )
+
+                lucro_base_fundo = max(0.0, lucro)
+
+                if fundo_fechado_dados:
+                    fundo_equipe = _rel_num(
+                        fundo_fechado_dados.get("valor_fundo")
+                    )
+                else:
+                    fundo_equipe = (
+                        lucro_base_fundo
+                        * percentual_fundo
+                        / 100
+                    )
+
+                disponivel_final = (
+                    lucro
+                    - reserva
+                    - fundo_equipe
+                )
+
+                with st.container(border=True):
+                    f1, f2, f3 = st.columns(3)
+
+                    f1.metric(
+                        "Lucro Real do Ano",
+                        _rel_moeda(lucro)
+                    )
+
+                    f2.metric(
+                        f"Fundo da Equipe — {percentual_fundo:.1f}%".replace(".", ","),
+                        _rel_moeda(fundo_equipe)
+                    )
+
+                    f3.metric(
+                        "Disponível após Reserva + Fundo",
+                        _rel_moeda(disponivel_final)
+                    )
+
                 # =====================================================
                 # FUNDO DA EQUIPE
+                # =====================================================
                 # =====================================================
                 st.markdown(
                     "## 👥 Fundo Anual da Equipe"
@@ -4433,7 +4431,7 @@ elif menu == "Relatórios":
                             "e entendo que esta distribuição será congelada como histórico."
                         ),
                         disabled=not pode_fechar_fundo,
-                        key=f"rel_v33_confirma_fundo_{ano_fecha}"
+                        key=f"rel_v331_confirma_fundo_{ano_fecha}"
                     )
 
                     if st.button(
@@ -4444,7 +4442,7 @@ elif menu == "Relatórios":
                             not pode_fechar_fundo
                             or not confirmar_fundo
                         ),
-                        key=f"rel_v33_fechar_fundo_{ano_fecha}"
+                        key=f"rel_v331_fechar_fundo_{ano_fecha}"
                     ):
 
                         try:
