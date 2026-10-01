@@ -16617,6 +16617,17 @@ elif menu == "Financeiro":
         except Exception:
             return float(padrao)
 
+    def _fin_txt(valor):
+        if valor is None:
+            return ""
+        try:
+            if pd.isna(valor):
+                return ""
+        except Exception:
+            pass
+        texto = str(valor).strip()
+        return "" if texto.lower() in {"nan", "none", "null"} else texto
+
     def _fin_moeda(valor):
         txt = f"{_fin_num(valor):,.2f}"
         txt = txt.replace(",", "X").replace(".", ",").replace("X", ".")
@@ -18107,7 +18118,6 @@ elif menu == "Financeiro":
                         st.error(
                             f"Erro ao excluir registro: {e}"
                         )
-
 
 elif menu == "Pacotes":
 
