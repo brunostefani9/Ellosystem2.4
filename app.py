@@ -3543,78 +3543,1012 @@ elif menu == "Relatórios":
         st.line_chart(graf)
 
     # =========================================================
-    # FECHAMENTO ANUAL
+    # FECHAMENTO ANUAL + FUNDO DA EQUIPE
     # =========================================================
     with tab_fechamento:
 
         st.markdown("## 🏁 Fechamento Anual")
-        anos_fecha = sorted(set(df_real_total["data_dt"].dropna().dt.year.astype(int).tolist())) if not df_real_total.empty else [hoje.year]
+        st.caption(
+            "Consolidação oficial do ano. A Reserva continua sendo formada pelos eventos fechados "
+            "e o Fundo da Equipe é uma destinação anual do lucro real positivo."
+        )
+
+        anos_fecha = (
+            sorted(
+                set(
+                    df_real_total["data_dt"]
+                    .dropna()
+                    .dt.year
+                    .astype(int)
+                    .tolist()
+                )
+            )
+            if not df_real_total.empty
+            else [hoje.year]
+        )
+
         if not anos_fecha:
             anos_fecha = [hoje.year]
-        ano_fecha = st.selectbox("Ano do fechamento", anos_fecha, index=len(anos_fecha)-1, key="rel_v3_fecha_ano")
-        ano_df = df_real_total[df_real_total["data_dt"].dt.year == int(ano_fecha)].copy() if not df_real_total.empty else pd.DataFrame()
+
+        ano_fecha = st.selectbox(
+            "Ano do fechamento",
+            anos_fecha,
+            index=len(anos_fecha) - 1,
+            key="rel_v32_fecha_ano"
+        )
+
+        ano_df = (
+            df_real_total[
+                df_real_total["data_dt"].dt.year == int(ano_fecha)
+            ].copy()
+            if not df_real_total.empty
+            else pd.DataFrame()
+        )
 
         if ano_df.empty:
             st.info("Nenhum evento com CMV fechado neste ano.")
+
         else:
+            # =====================================================
+            # RESULTADO DO ANO
+            # =====================================================
             fat = float(ano_df["faturamento_evento"].sum())
             custo = float(ano_df["custo_evento"].sum())
             lucro = float(ano_df["lucro_evento"].sum())
+
+            # Reserva já segue a regra atual do sistema:
+            # 35% do lucro positivo de cada evento fechado.
             reserva = float(ano_df["reserva_evento"].sum())
-            disp = float(ano_df["disponivel_evento"].sum())
+
             eventos = int(len(ano_df))
             convidados = float(ano_df["convidados"].sum())
-            ticket = fat/eventos if eventos>0 else 0.0
-            cmv = custo/fat*100 if fat>0 else 0.0
-            margem_ano = lucro/fat*100 if fat>0 else 0.0
+            ticket = fat / eventos if eventos > 0 else 0.0
+            cmv = custo / fat * 100 if fat > 0 else 0.0
+            margem_ano = lucro / fat * 100 if fat > 0 else 0.0
 
             metas_ano = _rel_carregar_metas(ano_fecha)
-            meta_total = float(pd.to_numeric(metas_ano.get("meta_valor", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()) if not metas_ano.empty else 0.0
-            ating = fat/meta_total*100 if meta_total>0 else 0.0
 
+            meta_total = (
+                float(
+                    pd.to_numeric(
+                        metas_ano.get(
+                            "meta_valor",
+                            pd.Series(dtype=float)
+                        ),
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+                if not metas_ano.empty
+                else 0.0
+            )
+
+            ating = fat / meta_total * 100 if meta_total > 0 else 0.0
+
+            # =====================================================
+            # VERIFICA SE O FUNDO DESTE ANO JÁ FOI FECHADO
+            # =====================================================
+            try:
+                fundo_fechado_resp = (
+                    supabase.table("fundo_equipe_anual")
+                    .select("*")
+                    .eq("ano", int(ano_fecha))
+                    .limit(1)
+                    .execute()
+                )
+
+                fundo_fechado_dados = (
+                    fundo_fechado_resp.data[0]
+                    if fundo_fechado_resp.data
+                    else None
+                )
+
+            except Exception:
+                fundo_fechado_dados = None
+
+            # Percentual padrão: 5%.
+            # Se o ano já foi congelado, respeita o percentual do snapshot.
+            percentual_fundo_padrao = 5.0
+
+            if fundo_fechado_dados:
+                percentual_fundo_padrao = _rel_num(
+                    fundo_fechado_dados.get("percentual_fundo"),
+                    5.0
+                )
+
+            percentual_fundo = st.number_input(
+                "👥 Percentual do lucro destinado ao Fundo da Equipe (%)",
+                min_value=0.0,
+                max_value=30.0,
+                value=float(percentual_fundo_padrao),
+                step=0.5,
+                disabled=bool(fundo_fechado_dados),
+                key=f"rel_v32_pct_fundo_{ano_fecha}",
+                help=(
+                    "Sugestão inicial: 5%. O fundo é calculado sobre o lucro real anual positivo "
+                    "e não entra no CMV nem no custo dos eventos."
+                )
+            )
+
+            lucro_base_fundo = max(0.0, lucro)
+
+            if fundo_fechado_dados:
+                fundo_equipe = _rel_num(
+                    fundo_fechado_dados.get("valor_fundo")
+                )
+            else:
+                fundo_equipe = (
+                    lucro_base_fundo
+                    * percentual_fundo
+                    / 100
+                )
+
+            # Disponível final depois das duas destinações.
+            disponivel_final = (
+                lucro
+                - reserva
+                - fundo_equipe
+            )
+
+            # =====================================================
+            # PAINEL PRINCIPAL DO FECHAMENTO
+            # =====================================================
             with st.container(border=True):
-                st.markdown(f"#### 🏆 Fechamento {ano_fecha}")
-                c1,c2,c3,c4 = st.columns(4)
-                c1.metric("Eventos Fechados", eventos)
-                c2.metric("Faturamento Real", _rel_moeda(fat))
-                c3.metric("Custo Real", _rel_moeda(custo))
-                c4.metric("Lucro Real", _rel_moeda(lucro))
-                c5,c6,c7,c8 = st.columns(4)
-                c5.metric("CMV", _rel_percentual(cmv))
-                c6.metric("Margem", _rel_percentual(margem_ano))
-                c7.metric("Convidados", f"{convidados:,.0f}")
-                c8.metric("Ticket Médio", _rel_moeda(ticket))
 
+                st.markdown(
+                    f"#### 🏆 Fechamento {ano_fecha}"
+                )
+
+                c1, c2, c3, c4 = st.columns(4)
+
+                c1.metric(
+                    "Eventos Fechados",
+                    eventos
+                )
+
+                c2.metric(
+                    "Faturamento Real",
+                    _rel_moeda(fat)
+                )
+
+                c3.metric(
+                    "Custo Real",
+                    _rel_moeda(custo)
+                )
+
+                c4.metric(
+                    "Lucro Real",
+                    _rel_moeda(lucro)
+                )
+
+                c5, c6, c7, c8 = st.columns(4)
+
+                c5.metric(
+                    "CMV",
+                    _rel_percentual(cmv)
+                )
+
+                c6.metric(
+                    "Margem",
+                    _rel_percentual(margem_ano)
+                )
+
+                c7.metric(
+                    "Convidados",
+                    f"{convidados:,.0f}"
+                )
+
+                c8.metric(
+                    "Ticket Médio",
+                    _rel_moeda(ticket)
+                )
+
+            # =====================================================
+            # DESTINAÇÃO DO LUCRO
+            # =====================================================
             with st.container(border=True):
-                st.markdown("#### 🛡️ Destinação e Metas")
-                d1,d2,d3,d4 = st.columns(4)
-                d1.metric("Reserva Gerada", _rel_moeda(reserva))
-                d2.metric("Disponível após Reserva", _rel_moeda(disp))
-                d3.metric("Meta Anual", _rel_moeda(meta_total))
-                d4.metric("Atingimento", _rel_percentual(ating))
 
-            maior_fat = ano_df.loc[ano_df["faturamento_evento"].idxmax()]
-            maior_lucro = ano_df.loc[ano_df["lucro_evento"].idxmax()]
-            e1,e2 = st.columns(2)
-            e1.info(f"💰 Maior faturamento: {maior_fat.get('cliente','Evento')} — {_rel_moeda(maior_fat.get('faturamento_evento',0))}")
-            e2.info(f"📈 Maior lucro: {maior_lucro.get('cliente','Evento')} — {_rel_moeda(maior_lucro.get('lucro_evento',0))}")
+                st.markdown(
+                    "#### 🛡️ Destinação do Lucro"
+                )
 
+                d1, d2, d3, d4 = st.columns(4)
+
+                d1.metric(
+                    "Lucro Real do Ano",
+                    _rel_moeda(lucro)
+                )
+
+                d2.metric(
+                    "Reserva Gerada — 35%",
+                    _rel_moeda(reserva),
+                    help=(
+                        "Segue a regra atual do Ellosystem: 35% do lucro positivo "
+                        "de cada evento fechado."
+                    )
+                )
+
+                d3.metric(
+                    f"Fundo da Equipe — {percentual_fundo:.1f}%".replace(".", ","),
+                    _rel_moeda(fundo_equipe),
+                    help=(
+                        "Calculado sobre o lucro real anual positivo."
+                    )
+                )
+
+                d4.metric(
+                    "Disponível após Destinações",
+                    _rel_moeda(disponivel_final)
+                )
+
+                if lucro <= 0:
+                    st.warning(
+                        "O ano não possui lucro real positivo. "
+                        "Por segurança, o Fundo da Equipe fica em R$ 0,00."
+                    )
+
+                elif disponivel_final < 0:
+                    st.warning(
+                        "As destinações superam o lucro líquido disponível. "
+                        "Revise o percentual do fundo antes de qualquer fechamento."
+                    )
+
+                else:
+                    st.caption(
+                        "O Fundo da Equipe é uma destinação do lucro anual e não altera "
+                        "CMV, custo real dos eventos ou cachês já registrados."
+                    )
+
+            # =====================================================
+            # META DO ANO
+            # =====================================================
+            with st.container(border=True):
+
+                st.markdown(
+                    "#### 🎯 Metas do Ano"
+                )
+
+                m1, m2, m3 = st.columns(3)
+
+                m1.metric(
+                    "Meta Anual",
+                    _rel_moeda(meta_total)
+                )
+
+                m2.metric(
+                    "Faturamento Real",
+                    _rel_moeda(fat)
+                )
+
+                m3.metric(
+                    "Atingimento",
+                    _rel_percentual(ating)
+                )
+
+            # =====================================================
+            # DESTAQUES DO ANO
+            # =====================================================
+            maior_fat = ano_df.loc[
+                ano_df["faturamento_evento"].idxmax()
+            ]
+
+            maior_lucro = ano_df.loc[
+                ano_df["lucro_evento"].idxmax()
+            ]
+
+            st.markdown(
+                "### 🎉 Destaques do Ano"
+            )
+
+            e1, e2 = st.columns(2)
+
+            e1.info(
+                f"💰 Maior faturamento: "
+                f"{maior_fat.get('cliente', 'Evento')} — "
+                f"{_rel_moeda(maior_fat.get('faturamento_evento', 0))}"
+            )
+
+            e2.info(
+                f"📈 Maior lucro: "
+                f"{maior_lucro.get('cliente', 'Evento')} — "
+                f"{_rel_moeda(maior_lucro.get('lucro_evento', 0))}"
+            )
+
+            # =====================================================
+            # FUNDO DA EQUIPE
+            # =====================================================
+            st.markdown(
+                "## 👥 Fundo Anual da Equipe"
+            )
+
+            st.caption(
+                "A sugestão de distribuição não usa o valor do cachê. "
+                "A participação é formada por 50% da participação em eventos "
+                "e 50% das horas trabalhadas no ano."
+            )
+
+            # -----------------------------------------------------
+            # SE JÁ FECHOU, MOSTRA O SNAPSHOT CONGELADO
+            # -----------------------------------------------------
+            if fundo_fechado_dados:
+
+                st.success(
+                    f"🔒 Fundo da Equipe de {ano_fecha} já foi fechado. "
+                    "Os valores abaixo são o snapshot oficial daquele fechamento."
+                )
+
+                try:
+                    dist_salva = pd.DataFrame(
+                        supabase.table(
+                            "fundo_equipe_distribuicao"
+                        )
+                        .select("*")
+                        .eq(
+                            "ano",
+                            int(ano_fecha)
+                        )
+                        .order(
+                            "valor_bonificacao",
+                            desc=True
+                        )
+                        .execute()
+                        .data
+                        or []
+                    )
+                except Exception:
+                    dist_salva = pd.DataFrame()
+
+                if not dist_salva.empty:
+
+                    dist_exibir = dist_salva[
+                        [
+                            c for c in [
+                                "profissional",
+                                "funcoes",
+                                "eventos_trabalhados",
+                                "horas_trabalhadas",
+                                "participacao_pct",
+                                "valor_bonificacao",
+                                "status_pagamento",
+                            ]
+                            if c in dist_salva.columns
+                        ]
+                    ].copy()
+
+                    dist_exibir.rename(
+                        columns={
+                            "profissional":
+                                "Profissional",
+                            "funcoes":
+                                "Função(ões)",
+                            "eventos_trabalhados":
+                                "Eventos",
+                            "horas_trabalhadas":
+                                "Horas",
+                            "participacao_pct":
+                                "Participação (%)",
+                            "valor_bonificacao":
+                                "Bonificação",
+                            "status_pagamento":
+                                "Pagamento",
+                        },
+                        inplace=True
+                    )
+
+                    st.dataframe(
+                        dist_exibir,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Participação (%)":
+                                st.column_config.NumberColumn(
+                                    format="%.2f%%"
+                                ),
+                            "Bonificação":
+                                st.column_config.NumberColumn(
+                                    format="R$ %.2f"
+                                ),
+                            "Horas":
+                                st.column_config.NumberColumn(
+                                    format="%.1f"
+                                ),
+                        }
+                    )
+
+                fechado_em = fundo_fechado_dados.get(
+                    "fechado_em"
+                )
+
+                if fechado_em:
+                    try:
+                        fechado_fmt = pd.to_datetime(
+                            fechado_em
+                        ).strftime(
+                            "%d/%m/%Y %H:%M"
+                        )
+                    except Exception:
+                        fechado_fmt = str(
+                            fechado_em
+                        )
+
+                    st.caption(
+                        f"Fechado em: {fechado_fmt}"
+                    )
+
+            # -----------------------------------------------------
+            # SE AINDA NÃO FECHOU, CALCULA A SIMULAÇÃO
+            # -----------------------------------------------------
+            else:
+
+                try:
+                    df_caches_ano = pd.DataFrame(
+                        supabase.table(
+                            "pagamentos_equipe"
+                        )
+                        .select("*")
+                        .execute()
+                        .data
+                        or []
+                    )
+                except Exception as erro_cache:
+                    df_caches_ano = pd.DataFrame()
+                    st.warning(
+                        f"Não foi possível carregar o histórico de Cachês: {erro_cache}"
+                    )
+
+                distribuicao = pd.DataFrame()
+
+                if not df_caches_ano.empty:
+
+                    ids_eventos_ano = set(
+                        pd.to_numeric(
+                            ano_df["id"],
+                            errors="coerce"
+                        )
+                        .dropna()
+                        .astype(int)
+                        .tolist()
+                    )
+
+                    if "evento_id" in df_caches_ano.columns:
+
+                        df_caches_ano["evento_id_num"] = pd.to_numeric(
+                            df_caches_ano["evento_id"],
+                            errors="coerce"
+                        )
+
+                        df_caches_ano = df_caches_ano[
+                            df_caches_ano["evento_id_num"]
+                            .isin(
+                                ids_eventos_ano
+                            )
+                        ].copy()
+
+                    else:
+                        df_caches_ano = pd.DataFrame()
+
+                if (
+                    not df_caches_ano.empty
+                    and "nome" in df_caches_ano.columns
+                ):
+
+                    df_caches_ano["nome_limpo"] = (
+                        df_caches_ano["nome"]
+                        .fillna("")
+                        .astype(str)
+                        .str.strip()
+                    )
+
+                    df_caches_ano = df_caches_ano[
+                        df_caches_ano["nome_limpo"] != ""
+                    ].copy()
+
+                    df_caches_ano["nome_chave"] = (
+                        df_caches_ano["nome_limpo"]
+                        .str.lower()
+                    )
+
+                    if "horas" not in df_caches_ano.columns:
+                        df_caches_ano["horas"] = 0.0
+
+                    if "horas_extras" not in df_caches_ano.columns:
+                        df_caches_ano["horas_extras"] = 0.0
+
+                    df_caches_ano["horas"] = pd.to_numeric(
+                        df_caches_ano["horas"],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    df_caches_ano["horas_extras"] = pd.to_numeric(
+                        df_caches_ano["horas_extras"],
+                        errors="coerce"
+                    ).fillna(0)
+
+                    df_caches_ano["horas_total"] = (
+                        df_caches_ano["horas"]
+                        + df_caches_ano["horas_extras"]
+                    )
+
+                    linhas_prof = []
+
+                    for nome_chave, grupo in df_caches_ano.groupby(
+                        "nome_chave"
+                    ):
+
+                        nome_exibicao = (
+                            grupo["nome_limpo"]
+                            .dropna()
+                            .astype(str)
+                            .iloc[0]
+                        )
+
+                        funcoes = ""
+
+                        if "funcao" in grupo.columns:
+                            funcoes_lista = sorted(
+                                set(
+                                    [
+                                        str(x).strip()
+                                        for x in grupo["funcao"].dropna()
+                                        if str(x).strip()
+                                    ]
+                                )
+                            )
+
+                            funcoes = ", ".join(
+                                funcoes_lista
+                            )
+
+                        eventos_prof = int(
+                            grupo["evento_id_num"]
+                            .dropna()
+                            .astype(int)
+                            .nunique()
+                        )
+
+                        horas_prof = float(
+                            grupo["horas_total"].sum()
+                        )
+
+                        linhas_prof.append({
+                            "nome_chave":
+                                nome_chave,
+                            "Profissional":
+                                nome_exibicao,
+                            "Função(ões)":
+                                funcoes,
+                            "Eventos":
+                                eventos_prof,
+                            "Horas":
+                                horas_prof,
+                        })
+
+                    distribuicao = pd.DataFrame(
+                        linhas_prof
+                    )
+
+                    if not distribuicao.empty:
+
+                        total_eventos_part = float(
+                            distribuicao["Eventos"].sum()
+                        )
+
+                        total_horas_part = float(
+                            distribuicao["Horas"].sum()
+                        )
+
+                        if total_eventos_part > 0:
+                            distribuicao[
+                                "Peso Eventos"
+                            ] = (
+                                distribuicao["Eventos"]
+                                / total_eventos_part
+                            )
+                        else:
+                            distribuicao[
+                                "Peso Eventos"
+                            ] = 0.0
+
+                        if total_horas_part > 0:
+                            distribuicao[
+                                "Peso Horas"
+                            ] = (
+                                distribuicao["Horas"]
+                                / total_horas_part
+                            )
+                        else:
+                            distribuicao[
+                                "Peso Horas"
+                            ] = 0.0
+
+                        # Regra 50/50.
+                        if (
+                            total_eventos_part > 0
+                            and total_horas_part > 0
+                        ):
+                            distribuicao[
+                                "Participação (%)"
+                            ] = (
+                                (
+                                    distribuicao[
+                                        "Peso Eventos"
+                                    ]
+                                    * 0.50
+                                )
+                                +
+                                (
+                                    distribuicao[
+                                        "Peso Horas"
+                                    ]
+                                    * 0.50
+                                )
+                            ) * 100
+
+                        elif total_eventos_part > 0:
+                            distribuicao[
+                                "Participação (%)"
+                            ] = (
+                                distribuicao[
+                                    "Peso Eventos"
+                                ]
+                                * 100
+                            )
+
+                        elif total_horas_part > 0:
+                            distribuicao[
+                                "Participação (%)"
+                            ] = (
+                                distribuicao[
+                                    "Peso Horas"
+                                ]
+                                * 100
+                            )
+
+                        else:
+                            distribuicao[
+                                "Participação (%)"
+                            ] = 0.0
+
+                        distribuicao[
+                            "Bonificação Sugerida"
+                        ] = (
+                            distribuicao[
+                                "Participação (%)"
+                            ]
+                            / 100
+                            * fundo_equipe
+                        )
+
+                        distribuicao.sort_values(
+                            "Bonificação Sugerida",
+                            ascending=False,
+                            inplace=True
+                        )
+
+                        st.dataframe(
+                            distribuicao[
+                                [
+                                    "Profissional",
+                                    "Função(ões)",
+                                    "Eventos",
+                                    "Horas",
+                                    "Participação (%)",
+                                    "Bonificação Sugerida",
+                                ]
+                            ],
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Horas":
+                                    st.column_config.NumberColumn(
+                                        format="%.1f"
+                                    ),
+                                "Participação (%)":
+                                    st.column_config.NumberColumn(
+                                        format="%.2f%%"
+                                    ),
+                                "Bonificação Sugerida":
+                                    st.column_config.NumberColumn(
+                                        format="R$ %.2f"
+                                    ),
+                            }
+                        )
+
+                        b1, b2, b3 = st.columns(3)
+
+                        b1.metric(
+                            "Profissionais",
+                            len(
+                                distribuicao
+                            )
+                        )
+
+                        b2.metric(
+                            "Horas consideradas",
+                            f"{distribuicao['Horas'].sum():,.1f}"
+                        )
+
+                        b3.metric(
+                            "Fundo a distribuir",
+                            _rel_moeda(
+                                fundo_equipe
+                            )
+                        )
+
+                    else:
+                        st.info(
+                            "Nenhum profissional elegível encontrado nos cachês vinculados aos eventos deste ano."
+                        )
+
+                else:
+                    st.info(
+                        "Nenhum histórico de Cachês vinculado aos eventos fechados deste ano."
+                    )
+
+                # -------------------------------------------------
+                # FECHAMENTO / CONGELAMENTO
+                # -------------------------------------------------
+                ano_ja_terminou = int(
+                    ano_fecha
+                ) < hoje.year
+
+                if int(ano_fecha) == hoje.year:
+                    st.info(
+                        "🧪 O Fundo da Equipe deste ano está em modo de simulação. "
+                        "O fechamento definitivo fica disponível depois que o ano terminar."
+                    )
+
+                elif int(ano_fecha) > hoje.year:
+                    st.info(
+                        "⏳ Este ano ainda não ocorreu. O fundo pode ser simulado, mas não fechado."
+                    )
+
+                pode_fechar_fundo = (
+                    ano_ja_terminou
+                    and lucro > 0
+                    and fundo_equipe > 0
+                    and not distribuicao.empty
+                    and disponivel_final >= 0
+                )
+
+                confirmar_fundo = st.checkbox(
+                    (
+                        f"Confirmo o fechamento do Fundo da Equipe de {ano_fecha} "
+                        "e entendo que esta distribuição será congelada como histórico."
+                    ),
+                    disabled=not pode_fechar_fundo,
+                    key=f"rel_v32_confirma_fundo_{ano_fecha}"
+                )
+
+                if st.button(
+                    f"🔒 Fechar Fundo da Equipe — {ano_fecha}",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=(
+                        not pode_fechar_fundo
+                        or not confirmar_fundo
+                    ),
+                    key=f"rel_v32_fechar_fundo_{ano_fecha}"
+                ):
+
+                    try:
+                        resp_fundo = (
+                            supabase.table(
+                                "fundo_equipe_anual"
+                            )
+                            .insert({
+                                "ano":
+                                    int(
+                                        ano_fecha
+                                    ),
+                                "lucro_base":
+                                    float(
+                                        lucro_base_fundo
+                                    ),
+                                "percentual_fundo":
+                                    float(
+                                        percentual_fundo
+                                    ),
+                                "valor_fundo":
+                                    float(
+                                        fundo_equipe
+                                    ),
+                                "reserva_gerada":
+                                    float(
+                                        reserva
+                                    ),
+                                "disponivel_final":
+                                    float(
+                                        disponivel_final
+                                    ),
+                                "regra_distribuicao":
+                                    "50% eventos + 50% horas",
+                                "status":
+                                    "Fechado",
+                                "fechado_em":
+                                    datetime.now().isoformat(),
+                            })
+                            .execute()
+                        )
+
+                        fundo_id = None
+
+                        if resp_fundo.data:
+                            fundo_id = (
+                                resp_fundo.data[0]
+                                .get(
+                                    "id"
+                                )
+                            )
+
+                        for _, linha in distribuicao.iterrows():
+
+                            supabase.table(
+                                "fundo_equipe_distribuicao"
+                            ).insert({
+                                "fundo_id":
+                                    int(
+                                        fundo_id
+                                    )
+                                    if fundo_id is not None
+                                    else None,
+                                "ano":
+                                    int(
+                                        ano_fecha
+                                    ),
+                                "profissional":
+                                    str(
+                                        linha[
+                                            "Profissional"
+                                        ]
+                                    ),
+                                "funcoes":
+                                    str(
+                                        linha[
+                                            "Função(ões)"
+                                        ]
+                                    ),
+                                "eventos_trabalhados":
+                                    int(
+                                        linha[
+                                            "Eventos"
+                                        ]
+                                    ),
+                                "horas_trabalhadas":
+                                    float(
+                                        linha[
+                                            "Horas"
+                                        ]
+                                    ),
+                                "participacao_pct":
+                                    float(
+                                        linha[
+                                            "Participação (%)"
+                                        ]
+                                    ),
+                                "valor_bonificacao":
+                                    float(
+                                        linha[
+                                            "Bonificação Sugerida"
+                                        ]
+                                    ),
+                                "status_pagamento":
+                                    "Pendente",
+                            }).execute()
+
+                        st.success(
+                            f"✅ Fundo da Equipe de {ano_fecha} fechado e congelado com sucesso."
+                        )
+
+                        st.rerun()
+
+                    except Exception as erro_fundo:
+                        st.error(
+                            f"Erro ao fechar o Fundo da Equipe: {erro_fundo}"
+                        )
+
+            # =====================================================
+            # FECHAMENTO MÊS A MÊS
+            # =====================================================
             mensal = []
-            for mes in range(1,13):
-                b = ano_df[ano_df["data_dt"].dt.month==mes]
-                f = float(b["faturamento_evento"].sum()) if not b.empty else 0.0
-                c = float(b["custo_evento"].sum()) if not b.empty else 0.0
-                l = float(b["lucro_evento"].sum()) if not b.empty else 0.0
-                mensal.append({"Mês":meses_nomes[mes-1],"Eventos":int(len(b)),"Faturamento":f,"Custo":c,"Lucro":l,"CMV (%)":c/f*100 if f>0 else 0.0})
-            mensal_df = pd.DataFrame(mensal)
-            st.markdown("### 📅 Fechamento Mês a Mês")
+
+            for mes in range(
+                1,
+                13
+            ):
+
+                b = ano_df[
+                    ano_df[
+                        "data_dt"
+                    ].dt.month
+                    == mes
+                ]
+
+                f = (
+                    float(
+                        b[
+                            "faturamento_evento"
+                        ].sum()
+                    )
+                    if not b.empty
+                    else 0.0
+                )
+
+                c = (
+                    float(
+                        b[
+                            "custo_evento"
+                        ].sum()
+                    )
+                    if not b.empty
+                    else 0.0
+                )
+
+                l = (
+                    float(
+                        b[
+                            "lucro_evento"
+                        ].sum()
+                    )
+                    if not b.empty
+                    else 0.0
+                )
+
+                mensal.append({
+                    "Mês":
+                        meses_nomes[
+                            mes - 1
+                        ],
+                    "Eventos":
+                        int(
+                            len(
+                                b
+                            )
+                        ),
+                    "Faturamento":
+                        f,
+                    "Custo":
+                        c,
+                    "Lucro":
+                        l,
+                    "CMV (%)":
+                        (
+                            c / f * 100
+                            if f > 0
+                            else 0.0
+                        ),
+                })
+
+            mensal_df = pd.DataFrame(
+                mensal
+            )
+
+            st.markdown(
+                "### 📅 Fechamento Mês a Mês"
+            )
+
             st.dataframe(
-                mensal_df, use_container_width=True, hide_index=True,
+                mensal_df,
+                use_container_width=True,
+                hide_index=True,
                 column_config={
-                    "Faturamento": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Custo": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Lucro": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "CMV (%)": st.column_config.NumberColumn(format="%.2f%%")
+                    "Faturamento":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    "Custo":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    "Lucro":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    "CMV (%)":
+                        st.column_config.NumberColumn(
+                            format="%.2f%%"
+                        ),
                 }
             )
 
@@ -3629,6 +4563,7 @@ elif menu == "Relatórios":
             "do histórico real de consumo do CMV. O resultado financeiro acima já "
             "usa somente os fechamentos oficiais."
         )
+
 
 
 elif menu == "Eventos":
