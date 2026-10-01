@@ -3345,7 +3345,7 @@ elif menu == "Relatórios":
                 )
 
                 crescimento_periodo_texto = (
-                    _rel_pct(
+                    _rel_percentual(
                         (
                             realizado_periodo
                             / anterior_periodo
@@ -3378,7 +3378,7 @@ elif menu == "Relatórios":
 
                     a3.metric(
                         "Atingimento",
-                        _rel_pct(
+                        _rel_percentual(
                             atingimento_periodo
                         )
                     )
