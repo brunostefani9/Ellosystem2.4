@@ -2689,159 +2689,773 @@ elif menu == "Relatórios":
             st.info("Nenhum evento encontrado no período.")
 
     # =========================================================
-    # METAS & CRESCIMENTO
+    # METAS & CRESCIMENTO — V3.1
     # =========================================================
     with tab_metas:
 
         st.markdown("## 🎯 Metas & Crescimento")
         st.caption(
-            "As metas ficam salvas por ano e mês. Para anos futuros, o sistema pode sugerir "
-            "a meta de cada mês aplicando um crescimento sobre o mesmo mês do ano anterior."
+            "Primeiro você define e salva as metas. Depois, quando quiser preparar o próximo ano, "
+            "o sistema usa o faturamento real do mesmo mês do ano anterior. "
+            "Se não houve faturamento naquele mês, usa uma meta mínima definida por você."
         )
 
-        ano_min = 2026
-        if not df_eventos.empty and df_eventos["data_dt"].notna().any():
-            ano_min = min(ano_min, int(df_eventos["data_dt"].dropna().dt.year.min()))
+        (
+            tab_definir_meta,
+            tab_gerar_meta,
+            tab_acompanhar_meta,
+        ) = st.tabs([
+            "✍️ Definir Metas",
+            "⚙️ Gerar Próximo Ano",
+            "📊 Acompanhamento",
+        ])
 
-        anos_meta = list(range(ano_min, hoje.year + 3))
-        m1, m2 = st.columns(2)
-        ano_meta = m1.selectbox(
-            "Ano das metas",
-            anos_meta,
-            index=anos_meta.index(hoje.year) if hoje.year in anos_meta else 0,
-            key="rel_v3_meta_ano"
-        )
-        crescimento = m2.number_input(
-            "Crescimento sugerido sobre o ano anterior (%)",
-            min_value=-100.0,
-            max_value=500.0,
-            value=15.0,
-            step=1.0,
-            key="rel_v3_crescimento"
-        )
+        # =====================================================
+        # A) DEFINIR METAS MANUALMENTE
+        # =====================================================
+        with tab_definir_meta:
 
-        ano_base = int(ano_meta) - 1
-        base_anterior = pd.Series([0.0] * 12, index=range(1, 13), dtype=float)
+            st.markdown("### ✍️ Definir metas do ano")
+            st.caption(
+                "Use esta área para cadastrar ou corrigir as metas mensais. "
+                "O valor salvo fica gravado por ano + mês no Supabase."
+            )
 
-        if not df_real_total.empty:
-            b = df_real_total[df_real_total["data_dt"].dt.year == ano_base]
-            if not b.empty:
-                base_anterior = (
-                    b.groupby(b["data_dt"].dt.month)["faturamento_evento"]
-                    .sum()
-                    .reindex(range(1, 13), fill_value=0.0)
+            ano_min_meta = 2025
+
+            if not df_eventos.empty and df_eventos["data_dt"].notna().any():
+                ano_min_meta = min(
+                    ano_min_meta,
+                    int(df_eventos["data_dt"].dropna().dt.year.min())
                 )
 
-        metas_db = _rel_carregar_metas(ano_meta)
-        metas_salvas = {}
-        if not metas_db.empty:
-            for _, reg in metas_db.iterrows():
+            anos_definir = list(
+                range(ano_min_meta, hoje.year + 4)
+            )
+
+            ano_definir = st.selectbox(
+                "Ano",
+                anos_definir,
+                index=(
+                    anos_definir.index(hoje.year)
+                    if hoje.year in anos_definir
+                    else 0
+                ),
+                key="rel_v31_meta_ano_definir"
+            )
+
+            metas_ano_df = _rel_carregar_metas(ano_definir)
+
+            metas_salvas = {}
+
+            if not metas_ano_df.empty:
+                for _, registro in metas_ano_df.iterrows():
+                    try:
+                        metas_salvas[int(registro["mes"])] = _rel_num(
+                            registro.get("meta_valor")
+                        )
+                    except Exception:
+                        pass
+
+            dados_metas_manual = []
+
+            for mes in range(1, 13):
+                dados_metas_manual.append({
+                    "Mês": meses_nomes[mes - 1],
+                    "Meta": metas_salvas.get(mes, 1000.0),
+                })
+
+            df_metas_manual = pd.DataFrame(
+                dados_metas_manual
+            )
+
+            editor_metas_manual = st.data_editor(
+                df_metas_manual,
+                use_container_width=True,
+                hide_index=True,
+                disabled=["Mês"],
+                column_config={
+                    "Mês":
+                        st.column_config.TextColumn("Mês"),
+                    "Meta":
+                        st.column_config.NumberColumn(
+                            "Meta mensal",
+                            min_value=0.0,
+                            step=100.0,
+                            format="R$ %.2f"
+                        ),
+                },
+                key=f"rel_v31_editor_manual_{ano_definir}"
+            )
+
+            meta_anual_manual = float(
+                pd.to_numeric(
+                    editor_metas_manual["Meta"],
+                    errors="coerce"
+                ).fillna(0).sum()
+            )
+
+            m1, m2 = st.columns([1, 2])
+
+            m1.metric(
+                "Meta anual",
+                _rel_moeda(meta_anual_manual)
+            )
+
+            m2.info(
+                "Exemplo do seu fluxo: 2025 e 2026 podem ficar em R$ 1.000 por mês. "
+                "Depois você usa a aba 'Gerar Próximo Ano' para montar 2027 automaticamente."
+            )
+
+            if st.button(
+                f"💾 Salvar metas de {ano_definir}",
+                type="primary",
+                use_container_width=True,
+                key=f"rel_v31_salvar_manual_{ano_definir}"
+            ):
                 try:
-                    metas_salvas[int(reg["mes"])] = _rel_num(reg.get("meta_valor"))
-                except Exception:
-                    pass
+                    for indice, linha in editor_metas_manual.iterrows():
+                        _rel_salvar_meta(
+                            ano_definir,
+                            indice + 1,
+                            _rel_num(linha["Meta"])
+                        )
 
-        dados_editor = []
-        for mes in range(1, 13):
-            base_mes = float(base_anterior.get(mes, 0) or 0)
-            sugerida = base_mes * (1 + crescimento / 100)
-            meta = metas_salvas.get(mes, sugerida if base_mes > 0 else 0.0)
-            dados_editor.append({
-                "Mês": meses_nomes[mes - 1],
-                f"Realizado {ano_base}": base_mes,
-                "Meta": meta,
-            })
+                    st.success(
+                        f"✅ Metas de {ano_definir} salvas com sucesso."
+                    )
+                    st.rerun()
 
-        editor_meta = st.data_editor(
-            pd.DataFrame(dados_editor),
-            use_container_width=True,
-            hide_index=True,
-            disabled=["Mês", f"Realizado {ano_base}"],
-            column_config={
-                f"Realizado {ano_base}": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Meta": st.column_config.NumberColumn(format="R$ %.2f", min_value=0.0, step=100.0),
-            },
-            key=f"rel_v3_editor_metas_{ano_meta}"
-        )
+                except Exception as erro:
+                    st.error(
+                        f"Não foi possível salvar as metas: {erro}"
+                    )
 
-        if st.button(
-            f"💾 Salvar metas de {ano_meta}",
-            type="primary",
-            use_container_width=True,
-            key=f"rel_v3_salvar_metas_{ano_meta}"
-        ):
-            try:
-                for idx, linha in editor_meta.iterrows():
-                    _rel_salvar_meta(ano_meta, idx + 1, _rel_num(linha["Meta"]))
-                st.success(f"✅ Metas de {ano_meta} salvas no Supabase.")
-                st.rerun()
-            except Exception as erro:
-                st.error(f"Não foi possível salvar as metas: {erro}")
-                st.info("Se o erro for de permissão/RLS, execute a migração de metas enviada com esta versão.")
+        # =====================================================
+        # B) GERAR META DO PRÓXIMO ANO
+        # =====================================================
+        with tab_gerar_meta:
 
-        realizado = pd.Series([0.0] * 12, index=range(1, 13), dtype=float)
-        if not df_real_total.empty:
-            b = df_real_total[df_real_total["data_dt"].dt.year == int(ano_meta)]
-            if not b.empty:
-                realizado = (
-                    b.groupby(b["data_dt"].dt.month)["faturamento_evento"]
-                    .sum()
-                    .reindex(range(1, 13), fill_value=0.0)
+            st.markdown("### ⚙️ Gerar metas do próximo ano")
+            st.caption(
+                "Regra: se o mês teve faturamento, a nova meta é calculada sobre o faturado. "
+                "Se não teve faturamento, entra a meta mínima."
+            )
+
+            anos_com_base = sorted(
+                set(
+                    df_real_total["data_dt"]
+                    .dropna()
+                    .dt.year
+                    .astype(int)
+                    .tolist()
+                )
+            ) if not df_real_total.empty else []
+
+            # Permite também usar anos cadastrados em metas,
+            # mesmo quando não houve faturamento real.
+            anos_candidatos = sorted(
+                set(
+                    anos_com_base
+                    + list(range(2025, hoje.year + 2))
+                )
+            )
+
+            if not anos_candidatos:
+                anos_candidatos = [hoje.year]
+
+            g1, g2, g3 = st.columns(3)
+
+            ano_base_meta = g1.selectbox(
+                "Ano-base",
+                anos_candidatos,
+                index=(
+                    anos_candidatos.index(hoje.year)
+                    if hoje.year in anos_candidatos
+                    else len(anos_candidatos) - 1
+                ),
+                key="rel_v31_gerar_ano_base"
+            )
+
+            ano_destino_meta = int(ano_base_meta) + 1
+
+            crescimento_meta = g2.number_input(
+                "Crescimento desejado (%)",
+                min_value=0.0,
+                max_value=500.0,
+                value=15.0,
+                step=1.0,
+                key="rel_v31_crescimento"
+            )
+
+            meta_minima = g3.number_input(
+                "Meta mínima sem faturamento",
+                min_value=0.0,
+                value=1000.0,
+                step=100.0,
+                key="rel_v31_meta_minima"
+            )
+
+            st.info(
+                f"Você está preparando as metas de **{ano_destino_meta}** "
+                f"usando **{ano_base_meta}** como referência."
+            )
+
+            faturamento_base_mensal = pd.Series(
+                [0.0] * 12,
+                index=range(1, 13),
+                dtype=float
+            )
+
+            if not df_real_total.empty:
+                base_ano = df_real_total[
+                    df_real_total["data_dt"].dt.year == int(ano_base_meta)
+                ].copy()
+
+                if not base_ano.empty:
+                    faturamento_base_mensal = (
+                        base_ano.groupby(
+                            base_ano["data_dt"].dt.month
+                        )["faturamento_evento"]
+                        .sum()
+                        .reindex(
+                            range(1, 13),
+                            fill_value=0.0
+                        )
+                    )
+
+            metas_destino_df = _rel_carregar_metas(
+                ano_destino_meta
+            )
+
+            metas_destino_salvas = {}
+
+            if not metas_destino_df.empty:
+                for _, registro in metas_destino_df.iterrows():
+                    try:
+                        metas_destino_salvas[
+                            int(registro["mes"])
+                        ] = _rel_num(
+                            registro.get("meta_valor")
+                        )
+                    except Exception:
+                        pass
+
+            linhas_sugestao = []
+
+            for mes in range(1, 13):
+
+                faturado_base = float(
+                    faturamento_base_mensal.get(
+                        mes,
+                        0
+                    ) or 0
                 )
 
-        acompanhamento = pd.DataFrame({
-            "Mês": meses_nomes,
-            "Ano Anterior": [float(base_anterior.get(m, 0) or 0) for m in range(1, 13)],
-            "Meta": [_rel_num(editor_meta.iloc[m - 1]["Meta"]) for m in range(1, 13)],
-            "Realizado": [float(realizado.get(m, 0) or 0) for m in range(1, 13)],
-        })
-        acompanhamento["Crescimento YoY (%)"] = acompanhamento.apply(
-            lambda r: ((r["Realizado"] / r["Ano Anterior"]) - 1) * 100
-            if r["Ano Anterior"] > 0 else 0.0,
-            axis=1
-        )
-        acompanhamento["Atingimento Meta (%)"] = acompanhamento.apply(
-            lambda r: r["Realizado"] / r["Meta"] * 100 if r["Meta"] > 0 else 0.0,
-            axis=1
-        )
-        acompanhamento["Diferença p/ Meta"] = acompanhamento["Realizado"] - acompanhamento["Meta"]
-        acompanhamento["Status"] = acompanhamento.apply(
-            lambda r: "🟢 Atingida" if r["Meta"] > 0 and r["Realizado"] >= r["Meta"]
-            else "🟡 Sem meta" if r["Meta"] <= 0 else "🔴 Abaixo",
-            axis=1
-        )
+                if faturado_base > 0:
+                    meta_sugerida = (
+                        faturado_base
+                        * (1 + crescimento_meta / 100)
+                    )
 
-        meta_anual = float(acompanhamento["Meta"].sum())
-        realizado_anual = float(acompanhamento["Realizado"].sum())
-        anterior_anual = float(acompanhamento["Ano Anterior"].sum())
-        atingimento_anual = realizado_anual / meta_anual * 100 if meta_anual > 0 else 0.0
-        crescimento_anual = (realizado_anual / anterior_anual - 1) * 100 if anterior_anual > 0 else 0.0
+                    regra = (
+                        f"Faturado + {crescimento_meta:.0f}%"
+                    )
+                else:
+                    meta_sugerida = float(
+                        meta_minima
+                    )
 
-        with st.container(border=True):
-            a1, a2, a3, a4 = st.columns(4)
-            a1.metric("Meta Anual", _rel_moeda(meta_anual))
-            a2.metric("Realizado", _rel_moeda(realizado_anual))
-            a3.metric("Atingimento", _rel_percentual(atingimento_anual))
-            a4.metric("Crescimento YoY", _rel_percentual(crescimento_anual))
+                    regra = "Meta mínima"
 
-        st.dataframe(
-            acompanhamento,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Ano Anterior": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Meta": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Realizado": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Crescimento YoY (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                "Atingimento Meta (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                "Diferença p/ Meta": st.column_config.NumberColumn(format="R$ %.2f"),
+                meta_final = metas_destino_salvas.get(
+                    mes,
+                    meta_sugerida
+                )
+
+                linhas_sugestao.append({
+                    "Mês":
+                        meses_nomes[mes - 1],
+                    f"Faturado {ano_base_meta}":
+                        faturado_base,
+                    "Regra":
+                        regra,
+                    "Meta sugerida":
+                        meta_sugerida,
+                    f"Meta {ano_destino_meta}":
+                        meta_final,
+                })
+
+            df_sugestao = pd.DataFrame(
+                linhas_sugestao
+            )
+
+            editor_sugestao = st.data_editor(
+                df_sugestao,
+                use_container_width=True,
+                hide_index=True,
+                disabled=[
+                    "Mês",
+                    f"Faturado {ano_base_meta}",
+                    "Regra",
+                    "Meta sugerida",
+                ],
+                column_config={
+                    f"Faturado {ano_base_meta}":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    "Meta sugerida":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    f"Meta {ano_destino_meta}":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f",
+                            min_value=0.0,
+                            step=100.0
+                        ),
+                },
+                key=(
+                    f"rel_v31_editor_geracao_"
+                    f"{ano_base_meta}_{ano_destino_meta}"
+                )
+            )
+
+            meta_sugerida_anual = float(
+                pd.to_numeric(
+                    editor_sugestao[
+                        f"Meta {ano_destino_meta}"
+                    ],
+                    errors="coerce"
+                ).fillna(0).sum()
+            )
+
+            st.metric(
+                f"Meta anual proposta para {ano_destino_meta}",
+                _rel_moeda(
+                    meta_sugerida_anual
+                )
+            )
+
+            st.caption(
+                "Exemplo: se setembro faturou R$ 11.332,96 e o crescimento é 15%, "
+                "a meta do próximo setembro será R$ 13.032,90. "
+                "Se um mês faturou R$ 0,00, entra a meta mínima de R$ 1.000,00."
+            )
+
+            if st.button(
+                f"💾 Salvar metas geradas de {ano_destino_meta}",
+                type="primary",
+                use_container_width=True,
+                key=f"rel_v31_salvar_geradas_{ano_destino_meta}"
+            ):
+                try:
+                    for indice, linha in editor_sugestao.iterrows():
+
+                        _rel_salvar_meta(
+                            ano_destino_meta,
+                            indice + 1,
+                            _rel_num(
+                                linha[
+                                    f"Meta {ano_destino_meta}"
+                                ]
+                            )
+                        )
+
+                    st.success(
+                        f"✅ Metas de {ano_destino_meta} salvas com sucesso."
+                    )
+
+                    st.rerun()
+
+                except Exception as erro:
+                    st.error(
+                        f"Não foi possível salvar as metas: {erro}"
+                    )
+
+        # =====================================================
+        # C) ACOMPANHAMENTO
+        # =====================================================
+        with tab_acompanhar_meta:
+
+            st.markdown("### 📊 Acompanhamento das metas")
+            st.caption(
+                "Aqui você acompanha Meta x Realizado. "
+                "O comparativo com o ano anterior só aparece para meses que já aconteceram."
+            )
+
+            anos_acomp = list(
+                range(
+                    2025,
+                    hoje.year + 4
+                )
+            )
+
+            ano_acomp = st.selectbox(
+                "Ano acompanhado",
+                anos_acomp,
+                index=(
+                    anos_acomp.index(hoje.year)
+                    if hoje.year in anos_acomp
+                    else 0
+                ),
+                key="rel_v31_ano_acomp"
+            )
+
+            metas_acomp_df = _rel_carregar_metas(
+                ano_acomp
+            )
+
+            metas_acomp = {
+                mes: 0.0
+                for mes in range(1, 13)
             }
-        )
 
-        graf_meta = acompanhamento[["Mês", "Ano Anterior", "Meta", "Realizado"]].copy()
-        graf_meta.set_index("Mês", inplace=True)
-        st.markdown("### 📈 Ano Anterior x Meta x Realizado")
-        st.line_chart(graf_meta)
+            if not metas_acomp_df.empty:
+                for _, registro in metas_acomp_df.iterrows():
+                    try:
+                        metas_acomp[
+                            int(registro["mes"])
+                        ] = _rel_num(
+                            registro.get("meta_valor")
+                        )
+                    except Exception:
+                        pass
+
+            realizado_acomp = pd.Series(
+                [0.0] * 12,
+                index=range(1, 13),
+                dtype=float
+            )
+
+            realizado_anterior = pd.Series(
+                [0.0] * 12,
+                index=range(1, 13),
+                dtype=float
+            )
+
+            if not df_real_total.empty:
+
+                base_acomp = df_real_total[
+                    df_real_total["data_dt"].dt.year
+                    == int(ano_acomp)
+                ].copy()
+
+                if not base_acomp.empty:
+                    realizado_acomp = (
+                        base_acomp.groupby(
+                            base_acomp["data_dt"].dt.month
+                        )["faturamento_evento"]
+                        .sum()
+                        .reindex(
+                            range(1, 13),
+                            fill_value=0.0
+                        )
+                    )
+
+                base_ant = df_real_total[
+                    df_real_total["data_dt"].dt.year
+                    == int(ano_acomp) - 1
+                ].copy()
+
+                if not base_ant.empty:
+                    realizado_anterior = (
+                        base_ant.groupby(
+                            base_ant["data_dt"].dt.month
+                        )["faturamento_evento"]
+                        .sum()
+                        .reindex(
+                            range(1, 13),
+                            fill_value=0.0
+                        )
+                    )
+
+            linhas_acomp = []
+
+            for mes in range(1, 13):
+
+                meta_mes = float(
+                    metas_acomp.get(
+                        mes,
+                        0
+                    ) or 0
+                )
+
+                realizado_mes = float(
+                    realizado_acomp.get(
+                        mes,
+                        0
+                    ) or 0
+                )
+
+                anterior_mes = float(
+                    realizado_anterior.get(
+                        mes,
+                        0
+                    ) or 0
+                )
+
+                # ---------------------------------------------
+                # ESTADO DO MÊS
+                # ---------------------------------------------
+                mes_futuro = (
+                    int(ano_acomp) > hoje.year
+                    or (
+                        int(ano_acomp) == hoje.year
+                        and mes > hoje.month
+                    )
+                )
+
+                mes_atual = (
+                    int(ano_acomp) == hoje.year
+                    and mes == hoje.month
+                )
+
+                # ---------------------------------------------
+                # ATINGIMENTO
+                # ---------------------------------------------
+                if mes_futuro:
+                    atingimento = None
+                    diferenca = None
+                    crescimento_texto = "—"
+                    status = "⏳ Aguardando"
+
+                else:
+
+                    atingimento = (
+                        realizado_mes / meta_mes * 100
+                        if meta_mes > 0
+                        else None
+                    )
+
+                    diferenca = (
+                        realizado_mes - meta_mes
+                        if meta_mes > 0
+                        else None
+                    )
+
+                    # O mês atual ainda está em andamento:
+                    # não compara parcial com mês inteiro do ano anterior.
+                    if mes_atual:
+                        crescimento_texto = "Em andamento"
+                    elif anterior_mes > 0:
+                        crescimento_valor = (
+                            realizado_mes / anterior_mes - 1
+                        ) * 100
+
+                        crescimento_texto = (
+                            f"{crescimento_valor:+.2f}%"
+                            .replace(".", ",")
+                        )
+                    elif realizado_mes > 0:
+                        crescimento_texto = (
+                            "Novo faturamento"
+                        )
+                    else:
+                        crescimento_texto = "—"
+
+                    if mes_atual:
+                        status = "🔵 Em andamento"
+                    elif meta_mes <= 0:
+                        status = "🟡 Sem meta"
+                    elif realizado_mes >= meta_mes:
+                        status = "🟢 Atingida"
+                    else:
+                        status = "🔴 Abaixo"
+
+                linhas_acomp.append({
+                    "Mês":
+                        meses_nomes[mes - 1],
+                    "Meta":
+                        meta_mes,
+                    "Realizado":
+                        realizado_mes,
+                    "Atingimento (%)":
+                        atingimento,
+                    "Diferença p/ Meta":
+                        diferenca,
+                    "Crescimento vs Ano Anterior":
+                        crescimento_texto,
+                    "Status":
+                        status,
+                })
+
+            df_acomp = pd.DataFrame(
+                linhas_acomp
+            )
+
+            # ---------------------------------------------
+            # RESUMO DO PERÍODO JUSTO
+            # ---------------------------------------------
+            if int(ano_acomp) < hoje.year:
+                limite_mes = 12
+            elif int(ano_acomp) == hoje.year:
+                limite_mes = hoje.month
+            else:
+                limite_mes = 0
+
+            if limite_mes > 0:
+
+                meta_periodo = float(
+                    sum(
+                        metas_acomp.get(
+                            mes,
+                            0
+                        ) or 0
+                        for mes in range(
+                            1,
+                            limite_mes + 1
+                        )
+                    )
+                )
+
+                realizado_periodo = float(
+                    sum(
+                        realizado_acomp.get(
+                            mes,
+                            0
+                        ) or 0
+                        for mes in range(
+                            1,
+                            limite_mes + 1
+                        )
+                    )
+                )
+
+                anterior_periodo = float(
+                    sum(
+                        realizado_anterior.get(
+                            mes,
+                            0
+                        ) or 0
+                        for mes in range(
+                            1,
+                            limite_mes + 1
+                        )
+                    )
+                )
+
+                atingimento_periodo = (
+                    realizado_periodo
+                    / meta_periodo
+                    * 100
+                    if meta_periodo > 0
+                    else 0.0
+                )
+
+                crescimento_periodo_texto = (
+                    _rel_pct(
+                        (
+                            realizado_periodo
+                            / anterior_periodo
+                            - 1
+                        ) * 100
+                    )
+                    if anterior_periodo > 0
+                    else "—"
+                )
+
+                with st.container(border=True):
+
+                    a1, a2, a3, a4 = st.columns(
+                        4
+                    )
+
+                    a1.metric(
+                        "Meta do período",
+                        _rel_moeda(
+                            meta_periodo
+                        )
+                    )
+
+                    a2.metric(
+                        "Realizado",
+                        _rel_moeda(
+                            realizado_periodo
+                        )
+                    )
+
+                    a3.metric(
+                        "Atingimento",
+                        _rel_pct(
+                            atingimento_periodo
+                        )
+                    )
+
+                    a4.metric(
+                        "Crescimento vs Ano Anterior",
+                        crescimento_periodo_texto
+                    )
+
+            else:
+
+                meta_anual_futura = float(
+                    sum(
+                        metas_acomp.values()
+                    )
+                )
+
+                with st.container(border=True):
+
+                    a1, a2 = st.columns(2)
+
+                    a1.metric(
+                        "Meta anual planejada",
+                        _rel_moeda(
+                            meta_anual_futura
+                        )
+                    )
+
+                    a2.metric(
+                        "Situação",
+                        "Aguardando início"
+                    )
+
+            st.dataframe(
+                df_acomp,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Meta":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    "Realizado":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                    "Atingimento (%)":
+                        st.column_config.NumberColumn(
+                            format="%.2f%%"
+                        ),
+                    "Diferença p/ Meta":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        ),
+                }
+            )
+
+            graf_acomp = df_acomp[
+                [
+                    "Mês",
+                    "Meta",
+                    "Realizado",
+                ]
+            ].copy()
+
+            graf_acomp.set_index(
+                "Mês",
+                inplace=True
+            )
+
+            st.markdown(
+                "### 📈 Meta x Realizado"
+            )
+
+            st.line_chart(
+                graf_acomp
+            )
 
     # =========================================================
     # COMPARATIVO ANUAL
