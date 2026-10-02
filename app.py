@@ -350,7 +350,7 @@ menu = st.sidebar.radio(
         "Vendas",
         "CMV",
         "Financeiro",
-        "Pacotes"
+        "Pacotes",
         "Fundo da Equipe"
     ]
 )
