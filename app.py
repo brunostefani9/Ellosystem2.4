@@ -8553,6 +8553,813 @@ elif menu == "Orçamentos":
 
         return list(consolidados.values())
 
+
+    def _limpar_estado_materiais(prefixo):
+        """Limpa somente os widgets de materiais do orçamento informado."""
+        prefixo_chaves = (
+            f"{prefixo}_matv14_",
+            f"{prefixo}_manualv14_",
+        )
+
+        for chave in list(st.session_state.keys()):
+            if chave.startswith(prefixo_chaves):
+                del st.session_state[chave]
+
+    def _selecionar_materiais_evento(prefixo):
+        """
+        Seleção operacional separada em:
+        1) Utensílios de Bar
+        2) Copos e Taças por caixas, totalizando unidades
+        3) Decoração
+        4) Item adicional manual
+
+        Retorna uma lista pronta para entrar em evento_itens/checklist.
+        """
+
+        itens = []
+
+        def _carregar(tabela):
+            try:
+                return pd.DataFrame(
+                    supabase.table(tabela)
+                    .select("*")
+                    .execute()
+                    .data
+                    or []
+                )
+            except Exception:
+                return pd.DataFrame()
+
+        def _ref_linha(linha, indice):
+            item_id = linha.get("id")
+
+            if (
+                item_id is not None
+                and pd.notna(item_id)
+                and str(item_id).strip() not in ("", "nan", "None")
+            ):
+                return f"id:{item_id}"
+
+            return f"linha:{indice}"
+
+        def _mapa_refs(df, rotulo_func):
+            refs = []
+            mapa = {}
+            rotulos = {}
+
+            if df.empty:
+                return refs, mapa, rotulos
+
+            for indice, linha in df.reset_index(drop=True).iterrows():
+                ref = _ref_linha(linha, indice)
+
+                # Proteção para eventual duplicidade inesperada.
+                ref_original = ref
+                contador = 2
+
+                while ref in mapa:
+                    ref = f"{ref_original}#{contador}"
+                    contador += 1
+
+                refs.append(ref)
+                mapa[ref] = linha
+                rotulos[ref] = rotulo_func(linha)
+
+            return refs, mapa, rotulos
+
+        # =====================================================
+        # 1 — UTENSÍLIOS DE BAR
+        # =====================================================
+        with st.expander(
+            "🧰 1. Utensílios de Bar",
+            expanded=True
+        ):
+
+            df_utensilios = _carregar(
+                "materiais_utensilios_bar"
+            )
+
+            if (
+                df_utensilios.empty
+                or "nome" not in df_utensilios.columns
+            ):
+                st.info(
+                    "Nenhum utensílio de bar cadastrado."
+                )
+
+            else:
+
+                def _rotulo_ut(linha):
+                    nome = str(
+                        linha.get("nome", "")
+                        or "Sem nome"
+                    ).strip()
+
+                    qtd = float(
+                        linha.get("quantidade", 0)
+                        or 0
+                    )
+
+                    if qtd > 0:
+                        return (
+                            f"{nome} | disponível: "
+                            f"{qtd:g}"
+                        )
+
+                    return nome
+
+                refs_ut, mapa_ut, rotulos_ut = (
+                    _mapa_refs(
+                        df_utensilios,
+                        _rotulo_ut
+                    )
+                )
+
+                selecionados_ut = st.multiselect(
+                    "Selecionar utensílios de bar",
+                    refs_ut,
+                    format_func=lambda ref: (
+                        rotulos_ut.get(ref, ref)
+                    ),
+                    key=f"{prefixo}_matv14_ut_selecao",
+                )
+
+                for ref in selecionados_ut:
+
+                    linha = mapa_ut[ref]
+
+                    nome = str(
+                        linha.get("nome", "")
+                        or ""
+                    ).strip()
+
+                    disponivel = float(
+                        linha.get("quantidade", 0)
+                        or 0
+                    )
+
+                    unidade = str(
+                        linha.get("unidade", "un")
+                        or "un"
+                    )
+
+                    qtd = st.number_input(
+                        f"Quantidade a levar — {nome}",
+                        min_value=0.0,
+                        value=1.0,
+                        step=1.0,
+                        key=(
+                            f"{prefixo}_matv14_ut_qtd_"
+                            f"{_safe_key(ref)}"
+                        ),
+                    )
+
+                    if (
+                        disponivel > 0
+                        and qtd > disponivel
+                    ):
+                        st.warning(
+                            f"⚠️ {nome}: selecionado "
+                            f"{qtd:g}, mas há "
+                            f"{disponivel:g} cadastrado(s)."
+                        )
+
+                    if qtd > 0:
+                        itens.append({
+                            "categoria":
+                                "Kit Bar",
+
+                            "produto":
+                                nome,
+
+                            "quantidade":
+                                float(qtd),
+
+                            "unidade":
+                                unidade,
+
+                            "custo_estimado":
+                                0.0,
+
+                            "tipo_base":
+                                "Kit Bar",
+
+                            "produto_ref_id":
+                                linha.get("id"),
+
+                            "quantidade_base":
+                                1.0,
+
+                            "preco_unitario":
+                                0.0,
+
+                            "custo_unitario_operacional":
+                                0.0,
+                        })
+
+        # =====================================================
+        # 2 — COPOS E TAÇAS
+        # =====================================================
+        with st.expander(
+            "🥂 2. Copos e Taças",
+            expanded=True
+        ):
+
+            st.caption(
+                "Escolha os modelos que irão ao evento. "
+                "Informe quantas unidades existem em cada caixa "
+                "e quantas caixas serão levadas; o sistema calcula "
+                "automaticamente o total de peças."
+            )
+
+            df_copos = _carregar(
+                "copos_tacas"
+            )
+
+            if (
+                df_copos.empty
+                or "nome" not in df_copos.columns
+            ):
+                st.info(
+                    "Nenhum copo ou taça cadastrado."
+                )
+
+            else:
+
+                def _rotulo_copo(linha):
+                    tipo = str(
+                        linha.get("tipo", "")
+                        or ""
+                    ).strip()
+
+                    nome = str(
+                        linha.get("nome", "")
+                        or "Sem nome"
+                    ).strip()
+
+                    modelo = str(
+                        linha.get("modelo", "")
+                        or ""
+                    ).strip()
+
+                    capacidade = float(
+                        linha.get("capacidade", 0)
+                        or 0
+                    )
+
+                    disponivel = float(
+                        linha.get("quantidade", 0)
+                        or 0
+                    )
+
+                    partes = []
+
+                    if tipo:
+                        partes.append(tipo)
+
+                    partes.append(nome)
+
+                    if modelo:
+                        partes.append(modelo)
+
+                    if capacidade > 0:
+                        partes.append(
+                            f"{capacidade:g} ml"
+                        )
+
+                    if disponivel > 0:
+                        partes.append(
+                            f"disp.: {disponivel:g} un"
+                        )
+
+                    return " | ".join(partes)
+
+                refs_copos, mapa_copos, rotulos_copos = (
+                    _mapa_refs(
+                        df_copos,
+                        _rotulo_copo
+                    )
+                )
+
+                selecionados_copos = st.multiselect(
+                    "Selecionar copos e taças",
+                    refs_copos,
+                    format_func=lambda ref: (
+                        rotulos_copos.get(ref, ref)
+                    ),
+                    key=f"{prefixo}_matv14_copos_selecao",
+                )
+
+                for ref in selecionados_copos:
+
+                    linha = mapa_copos[ref]
+
+                    tipo = str(
+                        linha.get("tipo", "")
+                        or ""
+                    ).strip()
+
+                    nome = str(
+                        linha.get("nome", "")
+                        or ""
+                    ).strip()
+
+                    modelo = str(
+                        linha.get("modelo", "")
+                        or ""
+                    ).strip()
+
+                    capacidade = float(
+                        linha.get("capacidade", 0)
+                        or 0
+                    )
+
+                    disponivel = float(
+                        linha.get("quantidade", 0)
+                        or 0
+                    )
+
+                    titulo_item = " | ".join(
+                        [
+                            x
+                            for x in [
+                                tipo,
+                                nome,
+                                modelo,
+                            ]
+                            if x
+                        ]
+                    )
+
+                    if capacidade > 0:
+                        titulo_item += (
+                            f" | {capacidade:g} ml"
+                        )
+
+                    with st.container(
+                        border=True
+                    ):
+
+                        st.markdown(
+                            f"#### 🥂 {titulo_item}"
+                        )
+
+                        if disponivel > 0:
+                            st.caption(
+                                f"Disponível cadastrado: "
+                                f"{disponivel:g} unidade(s)"
+                            )
+
+                        c1, c2, c3 = st.columns(
+                            [1, 1, 1]
+                        )
+
+                        unidades_caixa = int(
+                            c1.number_input(
+                                "Unidades por caixa",
+                                min_value=1,
+                                value=12,
+                                step=1,
+                                key=(
+                                    f"{prefixo}_matv14_copo_uncx_"
+                                    f"{_safe_key(ref)}"
+                                ),
+                            )
+                        )
+
+                        caixas = int(
+                            c2.number_input(
+                                "Caixas a levar",
+                                min_value=0,
+                                value=1,
+                                step=1,
+                                key=(
+                                    f"{prefixo}_matv14_copo_cx_"
+                                    f"{_safe_key(ref)}"
+                                ),
+                            )
+                        )
+
+                        total_unidades = (
+                            unidades_caixa
+                            * caixas
+                        )
+
+                        c3.metric(
+                            "Total de unidades",
+                            total_unidades
+                        )
+
+                        if (
+                            disponivel > 0
+                            and total_unidades
+                            > disponivel
+                        ):
+                            st.warning(
+                                f"⚠️ Total solicitado: "
+                                f"{total_unidades} un. "
+                                f"Disponível cadastrado: "
+                                f"{disponivel:g} un."
+                            )
+
+                        if total_unidades > 0:
+
+                            descricao_produto = (
+                                f"{nome}"
+                            )
+
+                            if modelo:
+                                descricao_produto += (
+                                    f" - {modelo}"
+                                )
+
+                            descricao_produto += (
+                                f" — {caixas} cx x "
+                                f"{unidades_caixa} un"
+                            )
+
+                            itens.append({
+                                "categoria":
+                                    "Copos / Taças",
+
+                                "produto":
+                                    descricao_produto,
+
+                                "quantidade":
+                                    float(
+                                        total_unidades
+                                    ),
+
+                                "unidade":
+                                    "un",
+
+                                "custo_estimado":
+                                    0.0,
+
+                                "tipo_base":
+                                    (
+                                        tipo
+                                        or "Copos / Taças"
+                                    ),
+
+                                "produto_ref_id":
+                                    linha.get("id"),
+
+                                # Snapshot da embalagem usada
+                                # no orçamento.
+                                "quantidade_base":
+                                    float(
+                                        unidades_caixa
+                                    ),
+
+                                "preco_unitario":
+                                    0.0,
+
+                                "custo_unitario_operacional":
+                                    0.0,
+                            })
+
+        # =====================================================
+        # 3 — DECORAÇÃO
+        # =====================================================
+        with st.expander(
+            "✨ 3. Decoração",
+            expanded=True
+        ):
+
+            st.caption(
+                "Selecione somente as peças que irão ao evento "
+                "e informe a quantidade de cada uma."
+            )
+
+            df_decor = _carregar(
+                "materiais_decorativos"
+            )
+
+            if (
+                df_decor.empty
+                or "nome" not in df_decor.columns
+            ):
+                st.info(
+                    "Nenhum material decorativo cadastrado."
+                )
+
+            else:
+
+                def _rotulo_decor(linha):
+                    nome = str(
+                        linha.get("nome", "")
+                        or "Sem nome"
+                    ).strip()
+
+                    categoria = str(
+                        linha.get("categoria", "")
+                        or ""
+                    ).strip()
+
+                    disponivel = float(
+                        linha.get("quantidade", 0)
+                        or 0
+                    )
+
+                    partes = [
+                        nome
+                    ]
+
+                    if categoria:
+                        partes.append(
+                            categoria
+                        )
+
+                    if disponivel > 0:
+                        partes.append(
+                            f"disp.: {disponivel:g}"
+                        )
+
+                    return " | ".join(partes)
+
+                refs_dec, mapa_dec, rotulos_dec = (
+                    _mapa_refs(
+                        df_decor,
+                        _rotulo_decor
+                    )
+                )
+
+                selecionados_dec = st.multiselect(
+                    "Selecionar materiais decorativos",
+                    refs_dec,
+                    format_func=lambda ref: (
+                        rotulos_dec.get(ref, ref)
+                    ),
+                    key=f"{prefixo}_matv14_decor_selecao",
+                )
+
+                for ref in selecionados_dec:
+
+                    linha = mapa_dec[ref]
+
+                    nome = str(
+                        linha.get("nome", "")
+                        or ""
+                    ).strip()
+
+                    categoria_cadastro = str(
+                        linha.get("categoria", "")
+                        or ""
+                    ).strip()
+
+                    disponivel = float(
+                        linha.get("quantidade", 0)
+                        or 0
+                    )
+
+                    qtd = st.number_input(
+                        f"Quantidade a levar — {nome}",
+                        min_value=0.0,
+                        value=1.0,
+                        step=1.0,
+                        key=(
+                            f"{prefixo}_matv14_dec_qtd_"
+                            f"{_safe_key(ref)}"
+                        ),
+                    )
+
+                    if (
+                        disponivel > 0
+                        and qtd > disponivel
+                    ):
+                        st.warning(
+                            f"⚠️ {nome}: selecionado "
+                            f"{qtd:g}, mas há "
+                            f"{disponivel:g} cadastrado(s)."
+                        )
+
+                    if qtd > 0:
+                        itens.append({
+                            "categoria":
+                                "Decoração",
+
+                            "produto":
+                                nome,
+
+                            "quantidade":
+                                float(qtd),
+
+                            "unidade":
+                                "un",
+
+                            "custo_estimado":
+                                0.0,
+
+                            "tipo_base":
+                                (
+                                    categoria_cadastro
+                                    or "Decoração"
+                                ),
+
+                            "produto_ref_id":
+                                linha.get("id"),
+
+                            "quantidade_base":
+                                1.0,
+
+                            "preco_unitario":
+                                0.0,
+
+                            "custo_unitario_operacional":
+                                0.0,
+                        })
+
+        # =====================================================
+        # 4 — ITEM ADICIONAL
+        # =====================================================
+        with st.expander(
+            "➕ 4. Item adicional do checklist",
+            expanded=False
+        ):
+
+            st.caption(
+                "Use somente quando o item ainda não estiver "
+                "cadastrado nas três seções acima."
+            )
+
+            chave_lista_manual = (
+                f"{prefixo}_manualv14_lista"
+            )
+
+            if (
+                chave_lista_manual
+                not in st.session_state
+            ):
+                st.session_state[
+                    chave_lista_manual
+                ] = []
+
+            m1, m2, m3, m4 = st.columns(
+                [2, 4, 1.5, 1.5]
+            )
+
+            categoria_manual = m1.selectbox(
+                "Categoria",
+                [
+                    "Kit Bar",
+                    "Limpeza / Higienização",
+                    "Copos / Taças",
+                    "Decoração",
+                    "Gelo",
+                    "Outros",
+                ],
+                key=(
+                    f"{prefixo}_manualv14_categoria"
+                ),
+            )
+
+            item_manual = m2.text_input(
+                "Item",
+                placeholder=(
+                    "Ex.: caixa térmica, pano, "
+                    "balde, extensão..."
+                ),
+                key=f"{prefixo}_manualv14_item",
+            )
+
+            qtd_manual = m3.number_input(
+                "Qtd.",
+                min_value=0.0,
+                value=1.0,
+                step=1.0,
+                key=f"{prefixo}_manualv14_qtd",
+            )
+
+            unidade_manual = m4.selectbox(
+                "Unidade",
+                [
+                    "un",
+                    "kit",
+                    "pct",
+                    "cx",
+                    "kg",
+                    "g",
+                    "L",
+                    "ml",
+                ],
+                key=(
+                    f"{prefixo}_manualv14_unidade"
+                ),
+            )
+
+            if st.button(
+                "➕ Adicionar item ao checklist",
+                key=f"{prefixo}_manualv14_add",
+                use_container_width=True,
+            ):
+
+                if not item_manual.strip():
+                    st.warning(
+                        "Informe o nome do item."
+                    )
+
+                elif qtd_manual <= 0:
+                    st.warning(
+                        "A quantidade deve ser "
+                        "maior que zero."
+                    )
+
+                else:
+                    st.session_state[
+                        chave_lista_manual
+                    ].append({
+                        "categoria":
+                            categoria_manual,
+
+                        "produto":
+                            item_manual.strip(),
+
+                        "quantidade":
+                            float(qtd_manual),
+
+                        "unidade":
+                            unidade_manual,
+
+                        "custo_estimado":
+                            0.0,
+
+                        "tipo_base":
+                            categoria_manual,
+
+                        "produto_ref_id":
+                            None,
+
+                        "quantidade_base":
+                            1.0,
+
+                        "preco_unitario":
+                            0.0,
+
+                        "custo_unitario_operacional":
+                            0.0,
+                    })
+
+                    st.rerun()
+
+            if st.session_state[
+                chave_lista_manual
+            ]:
+
+                st.dataframe(
+                    pd.DataFrame(
+                        st.session_state[
+                            chave_lista_manual
+                        ]
+                    )[
+                        [
+                            "categoria",
+                            "produto",
+                            "quantidade",
+                            "unidade",
+                        ]
+                    ].rename(
+                        columns={
+                            "categoria":
+                                "Categoria",
+
+                            "produto":
+                                "Item",
+
+                            "quantidade":
+                                "Quantidade",
+
+                            "unidade":
+                                "Unidade",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                if st.button(
+                    "🗑️ Limpar itens adicionais",
+                    key=(
+                        f"{prefixo}_manualv14_limpar"
+                    ),
+                ):
+                    st.session_state[
+                        chave_lista_manual
+                    ] = []
+
+                    st.rerun()
+
+            itens.extend(
+                st.session_state.get(
+                    chave_lista_manual,
+                    []
+                )
+            )
+
+        return _consolidar_itens(
+            itens
+        )
+
     def _orc_info_unidade_operacional(item):
         """
         Unidade usada pela equipe no checklist, sem alterar a unidade técnica
@@ -10488,208 +11295,21 @@ elif menu == "Orçamentos":
                         )
 
                         # =============================================
-                        # MATERIAIS OPERACIONAIS OPCIONAIS
+                        # MATERIAIS OPERACIONAIS
                         # =============================================
+
                         st.divider()
+
                         _subsecao_orcamento(
                             "🧰 Materiais Operacionais",
-                            "Tudo que a equipe precisa levar além dos ingredientes: utensílios, copos, decoração, limpeza e itens adicionais.",
+                            "Escolha utensílios, copos/taças por caixas e materiais decorativos em seções independentes.",
                         )
-                        with st.expander(
-                            "Selecionar materiais, copos e taças",
-                            expanded=True,
-                        ):
-                            st.caption(
-                                "Itens selecionados aqui entram no checklist/PDF, "
-                                "mas não alteram automaticamente o custo de bebidas e ingredientes."
+
+                        itens_materiais = (
+                            _selecionar_materiais_evento(
+                                "orc"
                             )
-                            itens_materiais = []
-
-                            for tabela_mat, categoria_mat, titulo_mat in [
-                                ("materiais_utensilios_bar", "Kit Bar", "Utensílios de Bar"),
-                                ("copos_tacas", "Copos / Taças", "Copos e Taças"),
-                                ("materiais_decorativos", "Decoração", "Materiais Decorativos"),
-                            ]:
-                                try:
-                                    dados_mat = (
-                                        supabase.table(tabela_mat)
-                                        .select("*")
-                                        .execute()
-                                        .data
-                                        or []
-                                    )
-                                    df_mat = pd.DataFrame(dados_mat)
-                                except Exception:
-                                    df_mat = pd.DataFrame()
-
-                                if df_mat.empty or "nome" not in df_mat.columns:
-                                    continue
-
-                                st.markdown(f"### {titulo_mat}")
-                                opcoes_mat = [
-                                    str(x).strip()
-                                    for x in df_mat["nome"].dropna().astype(str).tolist()
-                                    if str(x).strip()
-                                ]
-                                selecionados_mat = st.multiselect(
-                                    f"Selecionar {titulo_mat.lower()}",
-                                    opcoes_mat,
-                                    key=f"orc_mat_{_safe_key(tabela_mat)}",
-                                )
-
-                                for nome_mat in selecionados_mat:
-                                    linha_mat = df_mat[
-                                        df_mat["nome"].astype(str).str.strip() == nome_mat
-                                    ].iloc[0]
-
-                                    unidade_mat = (
-                                        "un"
-                                        if tabela_mat == "copos_tacas"
-                                        else str(linha_mat.get("unidade", "un") or "un")
-                                    )
-
-                                    disponivel_mat = None
-                                    if "quantidade" in linha_mat.index:
-                                        try:
-                                            disponivel_mat = float(
-                                                linha_mat.get("quantidade", 0) or 0
-                                            )
-                                        except Exception:
-                                            disponivel_mat = None
-
-                                    rotulo_qtd_mat = f"Quantidade a levar — {nome_mat}"
-
-                                    if (
-                                        disponivel_mat is not None
-                                        and disponivel_mat > 0
-                                    ):
-                                        rotulo_qtd_mat += (
-                                            f" | disponível: {disponivel_mat:g}"
-                                        )
-
-                                    qtd_mat = st.number_input(
-                                        rotulo_qtd_mat,
-                                        min_value=0.0,
-                                        value=1.0,
-                                        step=1.0,
-                                        key=(
-                                            f"orc_mat_qtd_{_safe_key(tabela_mat)}_"
-                                            f"{_safe_key(nome_mat)}"
-                                        ),
-                                    )
-
-                                    if (
-                                        disponivel_mat is not None
-                                        and disponivel_mat > 0
-                                        and qtd_mat > disponivel_mat
-                                    ):
-                                        st.warning(
-                                            f"⚠️ {nome_mat}: selecionado {qtd_mat:g}, "
-                                            f"mas há {disponivel_mat:g} cadastrado(s). "
-                                            "Será necessário complementar a quantidade."
-                                        )
-
-                                    if qtd_mat > 0:
-                                        itens_materiais.append({
-                                            "categoria": categoria_mat,
-                                            "produto": nome_mat,
-                                            "quantidade": float(qtd_mat),
-                                            "unidade": unidade_mat,
-                                            "custo_estimado": 0.0,
-                                            "tipo_base": categoria_mat,
-                                            "produto_ref_id": linha_mat.get("id"),
-                                            "quantidade_base": 1.0,
-                                            "preco_unitario": 0.0,
-                                            "custo_unitario_operacional": 0.0,
-                                        })
-
-                            st.markdown("---")
-                            st.markdown("**➕ Item adicional do checklist**")
-                            st.caption(
-                                "Use para limpeza/higienização ou qualquer item operacional que ainda não possua cadastro próprio."
-                            )
-
-                            if "orc_itens_manuais" not in st.session_state:
-                                st.session_state["orc_itens_manuais"] = []
-
-                            m1, m2, m3, m4 = st.columns([2, 4, 1.5, 1.5])
-                            categoria_manual = m1.selectbox(
-                                "Categoria",
-                                [
-                                    "Kit Bar",
-                                    "Limpeza / Higienização",
-                                    "Copos / Taças",
-                                    "Decoração",
-                                    "Gelo",
-                                    "Outros",
-                                ],
-                                key="orc_manual_categoria",
-                            )
-                            item_manual = m2.text_input(
-                                "Item",
-                                key="orc_manual_item",
-                                placeholder="Ex.: pano multiuso, saco de lixo, balde...",
-                            )
-                            qtd_manual = m3.number_input(
-                                "Qtd.",
-                                min_value=0.0,
-                                value=1.0,
-                                step=1.0,
-                                key="orc_manual_qtd",
-                            )
-                            unidade_manual = m4.selectbox(
-                                "Unidade",
-                                ["un", "kit", "pct", "cx", "kg", "g", "L", "ml"],
-                                key="orc_manual_unidade",
-                            )
-
-                            if st.button(
-                                "➕ Adicionar item ao checklist",
-                                key="orc_manual_add",
-                                use_container_width=True,
-                            ):
-                                if not item_manual.strip():
-                                    st.warning("Informe o nome do item adicional.")
-                                elif qtd_manual <= 0:
-                                    st.warning("A quantidade deve ser maior que zero.")
-                                else:
-                                    st.session_state["orc_itens_manuais"].append({
-                                        "categoria": categoria_manual,
-                                        "produto": item_manual.strip(),
-                                        "quantidade": float(qtd_manual),
-                                        "unidade": unidade_manual,
-                                        "custo_estimado": 0.0,
-                                        "tipo_base": categoria_manual,
-                                        "produto_ref_id": None,
-                                        "quantidade_base": 1.0,
-                                        "preco_unitario": 0.0,
-                                        "custo_unitario_operacional": 0.0,
-                                    })
-                                    st.rerun()
-
-                            if st.session_state["orc_itens_manuais"]:
-                                st.dataframe(
-                                    pd.DataFrame(st.session_state["orc_itens_manuais"])[
-                                        ["categoria", "produto", "quantidade", "unidade"]
-                                    ].rename(columns={
-                                        "categoria": "Categoria",
-                                        "produto": "Item",
-                                        "quantidade": "Quantidade",
-                                        "unidade": "Unidade",
-                                    }),
-                                    use_container_width=True,
-                                    hide_index=True,
-                                )
-                                if st.button(
-                                    "🗑️ Limpar itens adicionais",
-                                    key="orc_manual_limpar",
-                                ):
-                                    st.session_state["orc_itens_manuais"] = []
-                                    st.rerun()
-
-                            itens_materiais.extend(
-                                st.session_state.get("orc_itens_manuais", [])
-                            )
+                        )
 
                         # =============================================
                         # LISTA CANÔNICA DO EVENTO
@@ -11197,6 +11817,7 @@ elif menu == "Orçamentos":
                                     )
 
                                     _limpar_estado_calculo_orcamento()
+                                    _limpar_estado_materiais("orc")
                                     st.session_state["orc_itens_manuais"] = []
 
                                     st.rerun()
@@ -11365,218 +11986,19 @@ elif menu == "Orçamentos":
             # MATERIAIS OPERACIONAIS
             # =========================
 
-            st.subheader("🧰 Materiais Operacionais")
-            st.caption(
-                "Selecione exatamente o que a equipe deverá levar. "
-                "Copos, taças, utensílios e decoração entram no checklist/PDF, "
-                "mas não alteram o custo do orçamento automaticamente."
+            st.subheader(
+                "🧰 Materiais Operacionais"
             )
 
-            itens_operacionais_sp = []
+            st.caption(
+                "Escolha utensílios, copos/taças por caixas e "
+                "materiais decorativos. Tudo entra no checklist/PDF."
+            )
 
-            with st.expander(
-                "📦 Selecionar materiais, copos e taças",
-                expanded=True
-            ):
-
-                for tabela_mat, categoria_mat, titulo_mat in [
-                    ("materiais_utensilios_bar", "Kit Bar", "Utensílios de Bar"),
-                    ("copos_tacas", "Copos / Taças", "Copos e Taças"),
-                    ("materiais_decorativos", "Decoração", "Materiais Decorativos"),
-                ]:
-
-                    try:
-                        dados_mat = (
-                            supabase.table(tabela_mat)
-                            .select("*")
-                            .execute()
-                            .data
-                            or []
-                        )
-                        df_mat = pd.DataFrame(dados_mat)
-                    except Exception:
-                        df_mat = pd.DataFrame()
-
-                    if df_mat.empty or "nome" not in df_mat.columns:
-                        continue
-
-                    st.markdown(f"### {titulo_mat}")
-
-                    opcoes_mat = [
-                        str(x).strip()
-                        for x in df_mat["nome"].dropna().astype(str).tolist()
-                        if str(x).strip()
-                    ]
-
-                    selecionados_mat = st.multiselect(
-                        f"Selecionar {titulo_mat.lower()}",
-                        opcoes_mat,
-                        key=f"sp_mat_{_safe_key(tabela_mat)}"
-                    )
-
-                    for nome_mat in selecionados_mat:
-
-                        linha_mat = df_mat[
-                            df_mat["nome"].astype(str).str.strip() == nome_mat
-                        ].iloc[0]
-
-                        unidade_mat = (
-                            "un"
-                            if tabela_mat == "copos_tacas"
-                            else str(linha_mat.get("unidade", "un") or "un")
-                        )
-
-                        disponivel_mat = None
-                        if "quantidade" in linha_mat.index:
-                            try:
-                                disponivel_mat = float(
-                                    linha_mat.get("quantidade", 0) or 0
-                                )
-                            except Exception:
-                                disponivel_mat = None
-
-                        rotulo_qtd_mat = f"Quantidade a levar — {nome_mat}"
-
-                        if (
-                            disponivel_mat is not None
-                            and disponivel_mat > 0
-                        ):
-                            rotulo_qtd_mat += (
-                                f" | disponível: {disponivel_mat:g}"
-                            )
-
-                        qtd_mat = st.number_input(
-                            rotulo_qtd_mat,
-                            min_value=0.0,
-                            value=1.0,
-                            step=1.0,
-                            key=(
-                                f"sp_mat_qtd_{_safe_key(tabela_mat)}_"
-                                f"{_safe_key(nome_mat)}"
-                            )
-                        )
-
-                        if (
-                            disponivel_mat is not None
-                            and disponivel_mat > 0
-                            and qtd_mat > disponivel_mat
-                        ):
-                            st.warning(
-                                f"⚠️ {nome_mat}: selecionado {qtd_mat:g}, "
-                                f"mas há {disponivel_mat:g} cadastrado(s). "
-                                "Será necessário complementar a quantidade."
-                            )
-
-                        if qtd_mat > 0:
-                            itens_operacionais_sp.append({
-                                "categoria": categoria_mat,
-                                "produto": nome_mat,
-                                "quantidade": float(qtd_mat),
-                                "unidade": unidade_mat,
-                                "custo_estimado": 0.0,
-                                "tipo_base": categoria_mat,
-                                "produto_ref_id": linha_mat.get("id"),
-                                "quantidade_base": 1.0,
-                                "preco_unitario": 0.0,
-                                "custo_unitario_operacional": 0.0,
-                            })
-
-                st.markdown("---")
-                st.markdown("### ➕ Item adicional do checklist")
-                st.caption(
-                    "Use para qualquer material operacional que ainda não possua cadastro."
+            itens_operacionais_sp = (
+                _selecionar_materiais_evento(
+                    "sp"
                 )
-
-                if "sp_itens_manuais" not in st.session_state:
-                    st.session_state["sp_itens_manuais"] = []
-
-                m1, m2, m3, m4 = st.columns([2, 4, 1.5, 1.5])
-
-                categoria_manual_sp = m1.selectbox(
-                    "Categoria",
-                    [
-                        "Kit Bar",
-                        "Limpeza / Higienização",
-                        "Copos / Taças",
-                        "Decoração",
-                        "Outros",
-                    ],
-                    key="sp_manual_categoria"
-                )
-
-                item_manual_sp = m2.text_input(
-                    "Item",
-                    key="sp_manual_item",
-                    placeholder="Ex.: caixa térmica, pano, balde..."
-                )
-
-                qtd_manual_sp = m3.number_input(
-                    "Qtd.",
-                    min_value=0.0,
-                    value=1.0,
-                    step=1.0,
-                    key="sp_manual_qtd"
-                )
-
-                unidade_manual_sp = m4.selectbox(
-                    "Unidade",
-                    ["un", "kit", "pct", "cx", "kg", "g", "L", "ml"],
-                    key="sp_manual_unidade"
-                )
-
-                if st.button(
-                    "➕ Adicionar item ao checklist",
-                    key="sp_manual_add",
-                    use_container_width=True
-                ):
-                    if not item_manual_sp.strip():
-                        st.warning("Informe o nome do item adicional.")
-                    elif qtd_manual_sp <= 0:
-                        st.warning("A quantidade deve ser maior que zero.")
-                    else:
-                        st.session_state["sp_itens_manuais"].append({
-                            "categoria": categoria_manual_sp,
-                            "produto": item_manual_sp.strip(),
-                            "quantidade": float(qtd_manual_sp),
-                            "unidade": unidade_manual_sp,
-                            "custo_estimado": 0.0,
-                            "tipo_base": categoria_manual_sp,
-                            "produto_ref_id": None,
-                            "quantidade_base": 1.0,
-                            "preco_unitario": 0.0,
-                            "custo_unitario_operacional": 0.0,
-                        })
-                        st.rerun()
-
-                if st.session_state["sp_itens_manuais"]:
-                    st.dataframe(
-                        pd.DataFrame(
-                            st.session_state["sp_itens_manuais"]
-                        )[
-                            ["categoria", "produto", "quantidade", "unidade"]
-                        ].rename(columns={
-                            "categoria": "Categoria",
-                            "produto": "Item",
-                            "quantidade": "Quantidade",
-                            "unidade": "Unidade",
-                        }),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    if st.button(
-                        "🗑️ Limpar itens adicionais",
-                        key="sp_manual_limpar"
-                    ):
-                        st.session_state["sp_itens_manuais"] = []
-                        st.rerun()
-
-                itens_operacionais_sp.extend(
-                    st.session_state.get("sp_itens_manuais", [])
-                )
-
-            itens_operacionais_sp = _consolidar_itens(
-                itens_operacionais_sp
             )
 
             # =========================
@@ -11946,13 +12368,14 @@ elif menu == "Orçamentos":
         
                         }).execute()
         
+                _limpar_estado_materiais("sp")
                 st.session_state["sp_itens_manuais"] = []
                 st.success(
                     "✅ Orçamento salvo com sucesso! "
                     "Os materiais operacionais também foram gravados no checklist."
                 )
 
-# =========================================================
+        # =========================================================
         # ABA 2 - PENDENTES / CHECKLIST
         # =========================================================
         with tab2:
