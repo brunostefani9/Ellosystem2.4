@@ -351,6 +351,7 @@ menu = st.sidebar.radio(
         "CMV",
         "Financeiro",
         "Pacotes"
+        "Fundo da Equipe"
     ]
 )
 
@@ -1766,13 +1767,13 @@ elif menu == "Estoque":
             )
 
         st.info("Movimentações com status 'Teste' não afetam o estoque físico")
-        
+
+
 elif menu == "Relatórios":
 
     st.title("📊 Dashboard Geral")
     st.caption(
-        "Resultado econômico dos eventos com base no fechamento oficial do CMV. "
-        "Eventos fechados usam faturamento e custos reais; eventos futuros permanecem como previsão."
+        "Visão executiva simples do negócio, baseada nos fechamentos oficiais do CMV."
     )
 
     # =========================================================
@@ -1789,25 +1790,12 @@ elif menu == "Relatórios":
             return float(padrao)
 
     def _rel_moeda(valor):
-        try:
-            valor = float(valor or 0)
-        except Exception:
-            valor = 0.0
-        txt = f"{valor:,.2f}"
+        txt = f"{_rel_num(valor):,.2f}"
         txt = txt.replace(",", "X").replace(".", ",").replace("X", ".")
         return f"R$ {txt}"
 
     def _rel_percentual(valor):
-        try:
-            return f"{float(valor or 0):.2f}%".replace(".", ",")
-        except Exception:
-            return "0,00%"
-
-    meses_nomes = [
-        "Janeiro", "Fevereiro", "Março", "Abril",
-        "Maio", "Junho", "Julho", "Agosto",
-        "Setembro", "Outubro", "Novembro", "Dezembro"
-    ]
+        return f"{_rel_num(valor):.2f}%".replace(".", ",")
 
     def _rel_carregar_metas(ano):
         try:
@@ -1852,18 +1840,24 @@ elif menu == "Relatórios":
         else:
             supabase.table("metas_mensais").insert(dados).execute()
 
-    # =========================================================
-    # FILTROS DE DATA / PERÍODO
-    # =========================================================
-    col_p, col_i, col_f = st.columns([2, 1, 1])
-
-    periodo = col_p.selectbox(
-        "📅 Período",
-        ["Este ano", "Este mês", "Últimos 30 dias", "Todos"],
-        key="dash_periodo_real"
-    )
+    meses_nomes = [
+        "Janeiro", "Fevereiro", "Março", "Abril",
+        "Maio", "Junho", "Julho", "Agosto",
+        "Setembro", "Outubro", "Novembro", "Dezembro"
+    ]
 
     hoje = datetime.now()
+
+    # =========================================================
+    # FILTROS
+    # =========================================================
+    f1, f2, f3 = st.columns([2, 1, 1])
+
+    periodo = f1.selectbox(
+        "📅 Período",
+        ["Este ano", "Este mês", "Últimos 30 dias", "Todos"],
+        key="rel_v4_periodo"
+    )
 
     if periodo == "Este ano":
         dt_inicio = datetime(hoje.year, 1, 1).date()
@@ -1878,68 +1872,55 @@ elif menu == "Relatórios":
         dt_inicio = datetime(2020, 1, 1).date()
         dt_fim = hoje.date()
 
-    data_i = col_i.date_input(
+    data_i = f2.date_input(
         "🗓️ Data inicial",
         value=dt_inicio,
-        key="dash_real_dt_i"
+        key="rel_v4_data_i"
     )
 
-    data_f = col_f.date_input(
+    data_f = f3.date_input(
         "🗓️ Data final",
         value=dt_fim,
-        key="dash_real_dt_f"
+        key="rel_v4_data_f"
     )
 
     # =========================================================
-    # CARREGAMENTO DAS BASES
+    # BASES
     # =========================================================
     try:
-        response_eventos = (
+        df_eventos = pd.DataFrame(
             supabase.table("eventos")
             .select("*")
             .in_("status", ["aprovado", "finalizado", "concluido", "pago"])
             .execute()
+            .data
+            or []
         )
-        df_eventos = pd.DataFrame(response_eventos.data or [])
     except Exception as erro:
         st.error(f"Erro ao carregar eventos: {erro}")
         df_eventos = pd.DataFrame()
 
     try:
-        response_aditivos = (
+        df_aditivos = pd.DataFrame(
             supabase.table("aditivos_evento")
             .select("*")
             .execute()
+            .data
+            or []
         )
-        df_aditivos = pd.DataFrame(response_aditivos.data or [])
     except Exception:
         df_aditivos = pd.DataFrame()
-
-    try:
-        response_fin = (
-            supabase.table("Financeiro")
-            .select("*")
-            .execute()
-        )
-        df_financeiro = pd.DataFrame(response_fin.data or [])
-    except Exception:
-        try:
-            response_fin = (
-                supabase.table("financeiro")
-                .select("*")
-                .execute()
-            )
-            df_financeiro = pd.DataFrame(response_fin.data or [])
-        except Exception:
-            df_financeiro = pd.DataFrame()
 
     # =========================================================
     # PREPARAÇÃO DOS EVENTOS
     # =========================================================
     if not df_eventos.empty:
 
+        if "data" not in df_eventos.columns:
+            df_eventos["data"] = None
+
         df_eventos["data_dt"] = pd.to_datetime(
-            df_eventos.get("data"),
+            df_eventos["data"],
             errors="coerce"
         )
 
@@ -1952,26 +1933,27 @@ elif menu == "Relatórios":
             "cmv_custo_total",
             "cmv_percentual",
             "cmv_lucro_real",
+            "cmv_status",
         ]:
             if col not in df_eventos.columns:
                 df_eventos[col] = None
 
         df_eventos["venda_base"] = pd.to_numeric(
-            df_eventos["venda"], errors="coerce"
+            df_eventos["venda"],
+            errors="coerce"
         ).fillna(0)
 
         df_eventos["custo_previsto"] = pd.to_numeric(
-            df_eventos["custo"], errors="coerce"
+            df_eventos["custo"],
+            errors="coerce"
         ).fillna(0)
 
         df_eventos["convidados"] = pd.to_numeric(
-            df_eventos["convidados"], errors="coerce"
+            df_eventos["convidados"],
+            errors="coerce"
         ).fillna(0)
 
-        # -----------------------------------------------------
-        # ADENDOS = RECEITA EXTRA
-        # Cancelados não entram no faturamento.
-        # -----------------------------------------------------
+        # Adendos = somente receita extra
         if (
             not df_aditivos.empty
             and "evento_id" in df_aditivos.columns
@@ -1981,143 +1963,118 @@ elif menu == "Relatórios":
 
             if "status" in adit.columns:
                 adit = adit[
-                    adit["status"].fillna("").astype(str).str.lower() != "cancelado"
+                    adit["status"]
+                    .fillna("")
+                    .astype(str)
+                    .str.lower()
+                    != "cancelado"
                 ].copy()
 
             adit["valor_cliente"] = pd.to_numeric(
-                adit["valor_cliente"], errors="coerce"
+                adit["valor_cliente"],
+                errors="coerce"
             ).fillna(0)
 
-            aditivos_agrupados = (
-                adit.groupby("evento_id", as_index=False)["valor_cliente"].sum()
+            adit_agr = (
+                adit.groupby("evento_id", as_index=False)["valor_cliente"]
+                .sum()
             )
-            aditivos_agrupados.rename(
+
+            adit_agr.rename(
                 columns={"valor_cliente": "aditivos_total"},
                 inplace=True
             )
 
             df_eventos = df_eventos.merge(
-                aditivos_agrupados,
+                adit_agr,
                 left_on="id",
                 right_on="evento_id",
                 how="left"
             )
 
-            df_eventos["aditivos_total"] = (
-                pd.to_numeric(df_eventos["aditivos_total"], errors="coerce")
-                .fillna(0)
-            )
+            df_eventos["aditivos_total"] = pd.to_numeric(
+                df_eventos["aditivos_total"],
+                errors="coerce"
+            ).fillna(0)
         else:
             df_eventos["aditivos_total"] = 0.0
 
         df_eventos["faturamento_calculado"] = (
-            df_eventos["venda_base"] + df_eventos["aditivos_total"]
+            df_eventos["venda_base"]
+            + df_eventos["aditivos_total"]
         )
 
-        if "cmv_status" in df_eventos.columns:
-            df_eventos["cmv_fechado"] = (
-                df_eventos["cmv_status"]
-                .fillna("aberto")
-                .astype(str)
-                .str.lower()
-                .eq("fechado")
-            )
-        else:
-            df_eventos["cmv_fechado"] = False
+        df_eventos["cmv_fechado"] = (
+            df_eventos["cmv_status"]
+            .fillna("aberto")
+            .astype(str)
+            .str.lower()
+            .eq("fechado")
+        )
 
-        # -----------------------------------------------------
-        # FATURAMENTO REAL
-        # Fechado: snapshot do CMV.
-        # Aberto: contrato + adendos apenas como referência.
-        # -----------------------------------------------------
         fat_snapshot = pd.to_numeric(
-            df_eventos["cmv_faturamento_total"], errors="coerce"
+            df_eventos["cmv_faturamento_total"],
+            errors="coerce"
         )
 
-        df_eventos["faturamento_evento"] = df_eventos[
-            "faturamento_calculado"
-        ].astype(float)
-
-        mask_fat_real = df_eventos["cmv_fechado"] & fat_snapshot.notna()
-        df_eventos.loc[mask_fat_real, "faturamento_evento"] = (
-            fat_snapshot[mask_fat_real]
-        )
-
-        # -----------------------------------------------------
-        # CUSTO REAL
-        # Fechado: snapshot oficial do CMV.
-        # Aberto: custo previsto apenas para referência.
-        # -----------------------------------------------------
         custo_snapshot = pd.to_numeric(
-            df_eventos["cmv_custo_total"], errors="coerce"
+            df_eventos["cmv_custo_total"],
+            errors="coerce"
         )
 
-        df_eventos["custo_evento"] = df_eventos["custo_previsto"].astype(float)
-
-        mask_custo_real = df_eventos["cmv_fechado"] & custo_snapshot.notna()
-        df_eventos.loc[mask_custo_real, "custo_evento"] = (
-            custo_snapshot[mask_custo_real]
-        )
-
-        # Componentes reais do custo
-        df_eventos["custo_produtos_real"] = pd.to_numeric(
-            df_eventos["cmv_custo_produtos"], errors="coerce"
-        ).fillna(0)
-
-        df_eventos["custo_equipe_real"] = pd.to_numeric(
-            df_eventos["cmv_custo_equipe"], errors="coerce"
-        ).fillna(0)
-
-        df_eventos["custos_extras_real"] = pd.to_numeric(
-            df_eventos["cmv_custos_extras"], errors="coerce"
-        ).fillna(0)
-
-        # -----------------------------------------------------
-        # LUCRO / CMV / MARGEM
-        # -----------------------------------------------------
         lucro_snapshot = pd.to_numeric(
-            df_eventos["cmv_lucro_real"], errors="coerce"
+            df_eventos["cmv_lucro_real"],
+            errors="coerce"
         )
+
+        cmv_snapshot = pd.to_numeric(
+            df_eventos["cmv_percentual"],
+            errors="coerce"
+        )
+
+        df_eventos["faturamento_evento"] = (
+            df_eventos["faturamento_calculado"].astype(float)
+        )
+
+        m_fat = df_eventos["cmv_fechado"] & fat_snapshot.notna()
+        df_eventos.loc[m_fat, "faturamento_evento"] = fat_snapshot[m_fat]
+
+        df_eventos["custo_evento"] = (
+            df_eventos["custo_previsto"].astype(float)
+        )
+
+        m_custo = df_eventos["cmv_fechado"] & custo_snapshot.notna()
+        df_eventos.loc[m_custo, "custo_evento"] = custo_snapshot[m_custo]
 
         df_eventos["lucro_evento"] = (
             df_eventos["faturamento_evento"]
             - df_eventos["custo_evento"]
         )
 
-        mask_lucro_real = df_eventos["cmv_fechado"] & lucro_snapshot.notna()
-        df_eventos.loc[mask_lucro_real, "lucro_evento"] = (
-            lucro_snapshot[mask_lucro_real]
-        )
-
-        cmv_snapshot = pd.to_numeric(
-            df_eventos["cmv_percentual"], errors="coerce"
-        )
+        m_lucro = df_eventos["cmv_fechado"] & lucro_snapshot.notna()
+        df_eventos.loc[m_lucro, "lucro_evento"] = lucro_snapshot[m_lucro]
 
         df_eventos["cmv_real"] = 0.0
-        mask_receita = df_eventos["faturamento_evento"] > 0
-        df_eventos.loc[mask_receita, "cmv_real"] = (
-            df_eventos.loc[mask_receita, "custo_evento"]
-            / df_eventos.loc[mask_receita, "faturamento_evento"]
+        m_receita = df_eventos["faturamento_evento"] > 0
+
+        df_eventos.loc[m_receita, "cmv_real"] = (
+            df_eventos.loc[m_receita, "custo_evento"]
+            / df_eventos.loc[m_receita, "faturamento_evento"]
             * 100
         )
 
-        mask_cmv_real = df_eventos["cmv_fechado"] & cmv_snapshot.notna()
-        df_eventos.loc[mask_cmv_real, "cmv_real"] = (
-            cmv_snapshot[mask_cmv_real]
-        )
+        m_cmv = df_eventos["cmv_fechado"] & cmv_snapshot.notna()
+        df_eventos.loc[m_cmv, "cmv_real"] = cmv_snapshot[m_cmv]
 
         df_eventos["margem_real"] = 0.0
-        df_eventos.loc[mask_receita, "margem_real"] = (
-            df_eventos.loc[mask_receita, "lucro_evento"]
-            / df_eventos.loc[mask_receita, "faturamento_evento"]
+        df_eventos.loc[m_receita, "margem_real"] = (
+            df_eventos.loc[m_receita, "lucro_evento"]
+            / df_eventos.loc[m_receita, "faturamento_evento"]
             * 100
         )
 
-        # -----------------------------------------------------
-        # RESERVA: 35% SOMENTE SOBRE LUCRO POSITIVO
-        # -----------------------------------------------------
         df_eventos["reserva_evento"] = df_eventos["lucro_evento"].apply(
-            lambda x: float(x) * 0.35 if _rel_num(x) > 0 else 0.0
+            lambda x: _rel_num(x) * 0.35 if _rel_num(x) > 0 else 0.0
         )
 
         df_eventos["disponivel_evento"] = (
@@ -2125,22 +2082,12 @@ elif menu == "Relatórios":
             - df_eventos["reserva_evento"]
         )
 
-        df_eventos["previsto_x_real"] = (
-            df_eventos["custo_previsto"]
-            - df_eventos["custo_evento"]
-        )
-
-        df_eventos["fonte_resultado"] = df_eventos["cmv_fechado"].map(
-            {True: "Real — CMV Fechado", False: "Previsto / Em aberto"}
-        )
-
-        df = df_eventos[
-            (df_eventos["data_dt"].dt.date >= data_i)
-            & (df_eventos["data_dt"].dt.date <= data_f)
+        df_real_total = df_eventos[
+            df_eventos["cmv_fechado"]
         ].copy()
 
     else:
-        df = pd.DataFrame()
+        df_real_total = pd.DataFrame()
 
     # =========================================================
     # PRÓXIMOS EVENTOS
@@ -2148,9 +2095,16 @@ elif menu == "Relatórios":
     st.markdown("### 📅 Próximos Eventos")
 
     if not df_eventos.empty:
+
         proximos = df_eventos[
             (df_eventos["data_dt"].dt.date >= hoje.date())
-            & (df_eventos["status"].astype(str).str.lower() == "aprovado")
+            & (
+                df_eventos["status"]
+                .fillna("")
+                .astype(str)
+                .str.lower()
+                == "aprovado"
+            )
             & (~df_eventos["cmv_fechado"])
         ].copy()
 
@@ -2164,7 +2118,6 @@ elif menu == "Relatórios":
                     "cidade",
                     "convidados",
                     "venda_base",
-                    "custo_previsto",
                 ]
             ].copy()
 
@@ -2175,7 +2128,6 @@ elif menu == "Relatórios":
                     "cidade": "Cidade",
                     "convidados": "Convidados",
                     "venda_base": "Venda Prevista",
-                    "custo_previsto": "Custo Previsto",
                 },
                 inplace=True
             )
@@ -2185,707 +2137,349 @@ elif menu == "Relatórios":
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Venda Prevista": st.column_config.NumberColumn(
-                        format="R$ %.2f"
-                    ),
-                    "Custo Previsto": st.column_config.NumberColumn(
-                        format="R$ %.2f"
-                    ),
+                    "Venda Prevista":
+                        st.column_config.NumberColumn(
+                            format="R$ %.2f"
+                        )
                 }
             )
+
         else:
             st.info("Nenhum próximo evento confirmado.")
+
     else:
         st.info("Nenhum próximo evento confirmado.")
 
     # =========================================================
-    # BASE REAL: SOMENTE CMV FECHADO
+    # RECORTE DO PERÍODO
     # =========================================================
-    if not df.empty:
-        df_real = df[df["cmv_fechado"]].copy()
-        df_abertos = df[~df["cmv_fechado"]].copy()
+    if not df_real_total.empty:
+        df_real = df_real_total[
+            (df_real_total["data_dt"].dt.date >= data_i)
+            & (df_real_total["data_dt"].dt.date <= data_f)
+        ].copy()
     else:
         df_real = pd.DataFrame()
-        df_abertos = pd.DataFrame()
 
-    # Base histórica completa para comparativos anuais e metas
-    if not df_eventos.empty:
-        df_real_total = df_eventos[df_eventos["cmv_fechado"]].copy()
-    else:
-        df_real_total = pd.DataFrame()
-
-    # Eventos passados ainda sem fechamento
-    if not df_abertos.empty:
-        passados_abertos = df_abertos[
-            df_abertos["data_dt"].dt.date < hoje.date()
-        ]
-        if not passados_abertos.empty:
-            st.warning(
-                f"⚠️ {len(passados_abertos)} evento(s) passado(s) no período ainda não possuem "
-                "CMV fechado. Eles não entram nos resultados reais abaixo."
-            )
-
-    # =========================================================
-    # CONSOLIDAÇÃO REAL
-    # =========================================================
     if not df_real.empty:
         faturamento = float(df_real["faturamento_evento"].sum())
         custos = float(df_real["custo_evento"].sum())
         lucro_total = float(df_real["lucro_evento"].sum())
-        reserva_emergencia_total = float(df_real["reserva_evento"].sum())
-        caixa_disponivel_total = float(df_real["disponivel_evento"].sum())
-        custo_produtos_total = float(df_real["custo_produtos_real"].sum())
-        custo_equipe_total = float(df_real["custo_equipe_real"].sum())
-        custos_extras_total = float(df_real["custos_extras_real"].sum())
-        custo_previsto_total = float(df_real["custo_previsto"].sum())
+        reserva_total = float(df_real["reserva_evento"].sum())
+        disponivel_total = float(df_real["disponivel_evento"].sum())
+        eventos_fechados = int(len(df_real))
     else:
         faturamento = 0.0
         custos = 0.0
         lucro_total = 0.0
-        reserva_emergencia_total = 0.0
-        caixa_disponivel_total = 0.0
-        custo_produtos_total = 0.0
-        custo_equipe_total = 0.0
-        custos_extras_total = 0.0
-        custo_previsto_total = 0.0
+        reserva_total = 0.0
+        disponivel_total = 0.0
+        eventos_fechados = 0
 
     margem = (
         lucro_total / faturamento * 100
-        if faturamento > 0 else 0.0
+        if faturamento > 0
+        else 0.0
     )
 
     cmv_consolidado = (
         custos / faturamento * 100
-        if faturamento > 0 else 0.0
-    )
-
-    diferenca_previsto_real = (
-        custo_previsto_total - custos
+        if faturamento > 0
+        else 0.0
     )
 
     # =========================================================
-    # ABAS
+    # ABAS — RELATÓRIOS LIMPOS
+    # DRE removido.
+    # Fundo da Equipe movido para o menu principal.
+    # Financeiro/Vendas/Produtos também ficam nos módulos próprios.
     # =========================================================
     (
         tab_visao,
-        tab_dre,
         tab_metas,
         tab_anual,
         tab_fechamento,
-        tab_fin,
-        tab_vendas,
-        tab_prod,
     ) = st.tabs([
         "📊 Visão Geral",
-        "🧾 DRE",
         "🎯 Metas & Crescimento",
         "📈 Comparativo Anual",
         "🏁 Fechamento Anual",
-        "💰 Financeiro",
-        "💵 Vendas",
-        "📦 Produtos"
     ])
 
     # =========================================================
-    # TAB 1 — VISÃO GERAL
+    # 1 — VISÃO GERAL
     # =========================================================
     with tab_visao:
 
         st.markdown("## 📊 Resultado Real Consolidado")
 
         with st.container(border=True):
-            st.markdown("#### 💰 Receita e Resultado")
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Faturamento Real", _rel_moeda(faturamento))
-            c2.metric("Custo Real Total", _rel_moeda(custos))
-            c3.metric("Lucro Real", _rel_moeda(lucro_total))
-            c4.metric("Margem Real", _rel_percentual(margem))
 
-        with st.container(border=True):
-            st.markdown("#### 📦 Composição do Custo Real")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Produtos Consumidos", _rel_moeda(custo_produtos_total))
-            c2.metric("Cachês / Equipe", _rel_moeda(custo_equipe_total))
-            c3.metric("Outros Custos", _rel_moeda(custos_extras_total))
-            c4.metric("CMV Consolidado", _rel_percentual(cmv_consolidado))
+            c1.metric(
+                "💰 Faturamento Real",
+                _rel_moeda(faturamento)
+            )
 
-        with st.container(border=True):
-            st.markdown("#### 🛡️ Destinação do Lucro")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Lucro Real", _rel_moeda(lucro_total))
-            c2.metric("Reserva de Emergência (35%)", _rel_moeda(reserva_emergencia_total))
-            c3.metric("Disponível após Reserva (65%)", _rel_moeda(caixa_disponivel_total))
+            c2.metric(
+                "💸 Custo Real Total",
+                _rel_moeda(custos)
+            )
 
-        with st.container(border=True):
-            st.markdown("#### 🎯 Previsto x Real")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Custo Previsto", _rel_moeda(custo_previsto_total))
-            c2.metric("Custo Real", _rel_moeda(custos))
             c3.metric(
-                "Diferença",
-                _rel_moeda(diferenca_previsto_real),
-                help="Positivo = custo real abaixo do previsto. Negativo = custo real acima do previsto."
+                "📈 Lucro Real",
+                _rel_moeda(lucro_total)
+            )
+
+            c4.metric(
+                "📊 Margem Real",
+                _rel_percentual(margem)
+            )
+
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns(4)
+
+            c1.metric(
+                "🎉 Eventos Fechados",
+                eventos_fechados
+            )
+
+            c2.metric(
+                "📉 CMV Consolidado",
+                _rel_percentual(cmv_consolidado)
+            )
+
+            c3.metric(
+                "🛡️ Reserva Gerada",
+                _rel_moeda(reserva_total)
+            )
+
+            c4.metric(
+                "💵 Disponível após Reserva",
+                _rel_moeda(disponivel_total)
             )
 
         st.markdown("### 📋 Resultado por Evento")
 
         if not df_real.empty:
-            df_resultado = df_real[
+
+            quadro = df_real[
                 [
                     "cliente",
                     "data",
                     "faturamento_evento",
-                    "custo_produtos_real",
-                    "custo_equipe_real",
-                    "custos_extras_real",
                     "custo_evento",
                     "lucro_evento",
                     "cmv_real",
                     "margem_real",
-                    "reserva_evento",
-                    "disponivel_evento",
-                    "previsto_x_real",
                 ]
             ].copy()
 
-            df_resultado.rename(
+            quadro.rename(
                 columns={
                     "cliente": "Cliente",
                     "data": "Data",
-                    "faturamento_evento": "Faturamento Real",
-                    "custo_produtos_real": "Produtos",
-                    "custo_equipe_real": "Equipe",
-                    "custos_extras_real": "Outros",
-                    "custo_evento": "Custo Real",
-                    "lucro_evento": "Lucro Real",
-                    "cmv_real": "CMV (%)",
-                    "margem_real": "Margem (%)",
-                    "reserva_evento": "Reserva 35%",
-                    "disponivel_evento": "Disponível 65%",
-                    "previsto_x_real": "Previsto x Real",
-                },
-                inplace=True
-            )
-
-            st.dataframe(
-                df_resultado,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Faturamento Real": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Produtos": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Equipe": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Outros": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Custo Real": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Lucro Real": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "CMV (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                    "Margem (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                    "Reserva 35%": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Disponível 65%": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Previsto x Real": st.column_config.NumberColumn(format="R$ %.2f"),
-                }
-            )
-
-            st.markdown("### 📈 Faturamento, Custos e Lucro — Mês a Mês")
-
-            df_mensal = df_real.dropna(subset=["data_dt"]).copy()
-            if not df_mensal.empty:
-                df_mensal["mes_ano"] = df_mensal["data_dt"].dt.strftime("%Y-%m")
-
-                consolidado_mensal = (
-                    df_mensal.groupby("mes_ano")[
-                        ["faturamento_evento", "custo_evento", "lucro_evento"]
-                    ]
-                    .sum()
-                )
-
-                consolidado_mensal.rename(
-                    columns={
-                        "faturamento_evento": "Faturamento Real",
-                        "custo_evento": "Custo Real",
-                        "lucro_evento": "Lucro Real",
-                    },
-                    inplace=True
-                )
-
-                st.line_chart(consolidado_mensal)
-        else:
-            st.info("Nenhum evento com CMV fechado no período selecionado.")
-
-    # =========================================================
-    # TAB 2 — DRE GERENCIAL
-    # =========================================================
-    with tab_dre:
-
-        st.markdown("## 🧾 DRE Gerencial dos Eventos")
-        st.caption(
-            "Resultado gerencial baseado apenas em eventos com CMV fechado. "
-            "A Reserva de Emergência é mostrada como destinação do lucro, não como despesa."
-        )
-
-        anos_dre = sorted(
-            set(df_real_total["data_dt"].dropna().dt.year.astype(int).tolist())
-        ) if not df_real_total.empty else [hoje.year]
-
-        if not anos_dre:
-            anos_dre = [hoje.year]
-
-        d1, d2 = st.columns(2)
-        ano_dre = d1.selectbox(
-            "Ano",
-            anos_dre,
-            index=len(anos_dre) - 1,
-            key="rel_v3_dre_ano"
-        )
-        mes_dre = d2.selectbox(
-            "Mês",
-            list(range(1, 13)),
-            index=max(0, min(11, hoje.month - 1)),
-            format_func=lambda m: meses_nomes[m - 1],
-            key="rel_v3_dre_mes"
-        )
-
-        dre_base = df_real_total[
-            (df_real_total["data_dt"].dt.year == int(ano_dre))
-            & (df_real_total["data_dt"].dt.month == int(mes_dre))
-        ].copy() if not df_real_total.empty else pd.DataFrame()
-
-        if dre_base.empty:
-            st.info("Nenhum evento com CMV fechado nesse mês.")
-        else:
-            venda_original = float(dre_base["venda_base"].sum())
-            adendos = float(dre_base["aditivos_total"].sum())
-            fat_real = float(dre_base["faturamento_evento"].sum())
-            ajuste_receita = fat_real - venda_original - adendos
-
-            prod = float(dre_base["custo_produtos_real"].sum())
-            equipe = float(dre_base["custo_equipe_real"].sum())
-            extras = float(dre_base["custos_extras_real"].sum())
-            custo_real = float(dre_base["custo_evento"].sum())
-            ajuste_custo = custo_real - prod - equipe - extras
-
-            lucro_dre = float(dre_base["lucro_evento"].sum())
-            reserva_dre = float(dre_base["reserva_evento"].sum())
-            disponivel_dre = float(dre_base["disponivel_evento"].sum())
-            cmv_dre = custo_real / fat_real * 100 if fat_real > 0 else 0.0
-            margem_dre = lucro_dre / fat_real * 100 if fat_real > 0 else 0.0
-
-            linhas = [
-                ("Venda original dos eventos", venda_original, "moeda"),
-                ("(+) Adendos / receita extra", adendos, "moeda"),
-            ]
-            if abs(ajuste_receita) >= 0.01:
-                linhas.append(("(+/-) Ajuste de fechamento", ajuste_receita, "moeda"))
-            linhas += [
-                ("= FATURAMENTO REAL", fat_real, "moeda"),
-                ("(-) Produtos consumidos", -prod, "moeda"),
-                ("(-) Cachês / equipe", -equipe, "moeda"),
-                ("(-) Outros custos dos eventos", -extras, "moeda"),
-            ]
-            if abs(ajuste_custo) >= 0.01:
-                linhas.append(("(-/+) Ajuste de custos", -ajuste_custo, "moeda"))
-            linhas += [
-                ("= CUSTO REAL TOTAL", -custo_real, "moeda"),
-                ("= RESULTADO OPERACIONAL", lucro_dre, "moeda"),
-                ("CMV", cmv_dre, "pct"),
-                ("Margem", margem_dre, "pct"),
-                ("Reserva de Emergência — 35%", reserva_dre, "moeda"),
-                ("Disponível após Reserva — 65%", disponivel_dre, "moeda"),
-            ]
-
-            dre_df = pd.DataFrame(linhas, columns=["DRE", "_valor", "_tipo"])
-            dre_df["Valor"] = dre_df.apply(
-                lambda r: _rel_percentual(r["_valor"])
-                if r["_tipo"] == "pct"
-                else _rel_moeda(r["_valor"]),
-                axis=1
-            )
-
-            st.dataframe(
-                dre_df[["DRE", "Valor"]],
-                use_container_width=True,
-                hide_index=True
-            )
-
-            with st.container(border=True):
-                k1, k2, k3, k4 = st.columns(4)
-                k1.metric("Faturamento Real", _rel_moeda(fat_real))
-                k2.metric("Custo Real", _rel_moeda(custo_real))
-                k3.metric("Lucro Real", _rel_moeda(lucro_dre))
-                k4.metric("Margem", _rel_percentual(margem_dre))
-
-    # =========================================================
-    # TAB 2 — FINANCEIRO
-    # Separa resultado econômico de caixa realizado.
-    # =========================================================
-    with tab_fin:
-
-        st.markdown("## 💰 Resultado Econômico x Caixa Realizado")
-
-        with st.container(border=True):
-            st.markdown("#### 📊 Resultado Econômico dos Eventos")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Faturamento Real", _rel_moeda(faturamento))
-            c2.metric("Custos Reais", _rel_moeda(custos))
-            c3.metric("Lucro Real", _rel_moeda(lucro_total))
-            c4.metric("Reserva 35%", _rel_moeda(reserva_emergencia_total))
-
-        st.caption(
-            "O resultado econômico usa o CMV fechado. Consumo de estoque é custo do evento, "
-            "mas não é automaticamente uma saída de caixa nesta tela."
-        )
-
-        # Caixa realizado vem apenas da tabela Financeiro
-        fin_filtrado = df_financeiro.copy()
-
-        if not fin_filtrado.empty:
-            if "valor" not in fin_filtrado.columns:
-                fin_filtrado["valor"] = 0.0
-
-            fin_filtrado["valor"] = pd.to_numeric(
-                fin_filtrado["valor"], errors="coerce"
-            ).fillna(0)
-
-            if "data" in fin_filtrado.columns:
-                fin_filtrado["data_dt"] = pd.to_datetime(
-                    fin_filtrado["data"], errors="coerce"
-                )
-                fin_filtrado = fin_filtrado[
-                    (fin_filtrado["data_dt"].dt.date >= data_i)
-                    & (fin_filtrado["data_dt"].dt.date <= data_f)
-                ].copy()
-
-            tipo_lower = fin_filtrado.get(
-                "tipo", pd.Series("", index=fin_filtrado.index)
-            ).fillna("").astype(str).str.lower()
-
-            entradas_caixa = float(
-                fin_filtrado.loc[tipo_lower == "entrada", "valor"].sum()
-            )
-            saidas_caixa = float(
-                fin_filtrado.loc[
-                    tipo_lower.isin(["saída", "saida"]),
-                    "valor"
-                ].sum()
-            )
-        else:
-            entradas_caixa = 0.0
-            saidas_caixa = 0.0
-
-        saldo_caixa = entradas_caixa - saidas_caixa
-
-        with st.container(border=True):
-            st.markdown("#### 🏦 Movimentação de Caixa Registrada")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Entradas Realizadas", _rel_moeda(entradas_caixa))
-            c2.metric("Saídas Realizadas", _rel_moeda(saidas_caixa))
-            c3.metric("Saldo de Caixa", _rel_moeda(saldo_caixa))
-
-        if not fin_filtrado.empty:
-            st.markdown("### 📋 Movimentações Financeiras")
-            colunas_fin = [
-                c for c in [
-                    "data", "tipo", "categoria",
-                    "forma_pagamento", "descricao", "valor"
-                ]
-                if c in fin_filtrado.columns
-            ]
-
-            st.dataframe(
-                fin_filtrado[colunas_fin],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "valor": st.column_config.NumberColumn(
-                        "Valor", format="R$ %.2f"
-                    )
-                }
-            )
-        else:
-            st.info("Nenhuma movimentação financeira no período.")
-
-    # =========================================================
-    # TAB 3 — VENDAS
-    # =========================================================
-    with tab_vendas:
-
-        st.markdown("## 📈 Vendas e Faturamento")
-
-        total_eventos_fechados = len(df_real)
-        ticket_medio = (
-            faturamento / total_eventos_fechados
-            if total_eventos_fechados > 0
-            else 0.0
-        )
-
-        with st.container(border=True):
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Eventos Fechados", total_eventos_fechados)
-            c2.metric("Faturamento Real", _rel_moeda(faturamento))
-            c3.metric("Ticket Médio Real", _rel_moeda(ticket_medio))
-
-        cliente_busca = st.text_input(
-            "🔎 Buscar cliente",
-            key="relatorio_real_busca_cliente"
-        )
-
-        df_vendas = df.copy()
-
-        if (
-            cliente_busca
-            and not df_vendas.empty
-            and "cliente" in df_vendas.columns
-        ):
-            df_vendas = df_vendas[
-                df_vendas["cliente"]
-                .astype(str)
-                .str.contains(cliente_busca, case=False, na=False)
-            ]
-
-        if not df_vendas.empty:
-            venda_exibir = df_vendas[
-                [
-                    "cliente",
-                    "data",
-                    "venda_base",
-                    "aditivos_total",
-                    "faturamento_evento",
-                    "custo_evento",
-                    "lucro_evento",
-                    "cmv_real",
-                    "fonte_resultado",
-                ]
-            ].copy()
-
-            venda_exibir.rename(
-                columns={
-                    "cliente": "Cliente",
-                    "data": "Data",
-                    "venda_base": "Contrato Base",
-                    "aditivos_total": "Adendos",
                     "faturamento_evento": "Faturamento",
                     "custo_evento": "Custo",
                     "lucro_evento": "Lucro",
                     "cmv_real": "CMV (%)",
-                    "fonte_resultado": "Fonte",
+                    "margem_real": "Margem (%)",
                 },
                 inplace=True
             )
 
             st.dataframe(
-                venda_exibir,
+                quadro,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Contrato Base": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Adendos": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Faturamento": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Custo": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "Lucro": st.column_config.NumberColumn(format="R$ %.2f"),
-                    "CMV (%)": st.column_config.NumberColumn(format="%.2f%%"),
+                    "Faturamento":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    "Custo":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    "Lucro":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    "CMV (%)":
+                        st.column_config.NumberColumn(format="%.2f%%"),
+                    "Margem (%)":
+                        st.column_config.NumberColumn(format="%.2f%%"),
                 }
             )
+
+            mensal = df_real.copy()
+            mensal["mes_ano"] = mensal["data_dt"].dt.strftime("%Y-%m")
+
+            mensal = (
+                mensal.groupby("mes_ano")[
+                    [
+                        "faturamento_evento",
+                        "custo_evento",
+                        "lucro_evento",
+                    ]
+                ]
+                .sum()
+            )
+
+            mensal.rename(
+                columns={
+                    "faturamento_evento": "Faturamento",
+                    "custo_evento": "Custo",
+                    "lucro_evento": "Lucro",
+                },
+                inplace=True
+            )
+
+            st.markdown("### 📈 Evolução Mensal")
+            st.line_chart(mensal)
+
         else:
-            st.info("Nenhum evento encontrado no período.")
+            st.info("Nenhum evento com CMV fechado no período.")
 
     # =========================================================
-    # METAS & CRESCIMENTO — V3.1
+    # 2 — METAS & CRESCIMENTO
     # =========================================================
     with tab_metas:
 
         st.markdown("## 🎯 Metas & Crescimento")
-        st.caption(
-            "Primeiro você define e salva as metas. Depois, quando quiser preparar o próximo ano, "
-            "o sistema usa o faturamento real do mesmo mês do ano anterior. "
-            "Se não houve faturamento naquele mês, usa uma meta mínima definida por você."
-        )
 
         (
-            tab_definir_meta,
-            tab_gerar_meta,
-            tab_acompanhar_meta,
+            meta_definir,
+            meta_gerar,
+            meta_acompanhar,
         ) = st.tabs([
             "✍️ Definir Metas",
             "⚙️ Gerar Próximo Ano",
             "📊 Acompanhamento",
         ])
 
-        # =====================================================
-        # A) DEFINIR METAS MANUALMENTE
-        # =====================================================
-        with tab_definir_meta:
+        # -----------------------------------------------------
+        # DEFINIR
+        # -----------------------------------------------------
+        with meta_definir:
 
-            st.markdown("### ✍️ Definir metas do ano")
-            st.caption(
-                "Use esta área para cadastrar ou corrigir as metas mensais. "
-                "O valor salvo fica gravado por ano + mês no Supabase."
-            )
-
-            ano_min_meta = 2025
-
-            if not df_eventos.empty and df_eventos["data_dt"].notna().any():
-                ano_min_meta = min(
-                    ano_min_meta,
-                    int(df_eventos["data_dt"].dropna().dt.year.min())
+            anos_meta = list(
+                range(
+                    2025,
+                    hoje.year + 4
                 )
-
-            anos_definir = list(
-                range(ano_min_meta, hoje.year + 4)
             )
 
-            ano_definir = st.selectbox(
+            ano_meta = st.selectbox(
                 "Ano",
-                anos_definir,
+                anos_meta,
                 index=(
-                    anos_definir.index(hoje.year)
-                    if hoje.year in anos_definir
+                    anos_meta.index(hoje.year)
+                    if hoje.year in anos_meta
                     else 0
                 ),
-                key="rel_v31_meta_ano_definir"
+                key="rel_v4_meta_ano"
             )
 
-            metas_ano_df = _rel_carregar_metas(ano_definir)
-
+            metas_salvas_df = _rel_carregar_metas(ano_meta)
             metas_salvas = {}
 
-            if not metas_ano_df.empty:
-                for _, registro in metas_ano_df.iterrows():
-                    try:
-                        metas_salvas[int(registro["mes"])] = _rel_num(
-                            registro.get("meta_valor")
-                        )
-                    except Exception:
-                        pass
+            if not metas_salvas_df.empty:
+                for _, reg in metas_salvas_df.iterrows():
+                    metas_salvas[int(reg["mes"])] = _rel_num(
+                        reg.get("meta_valor")
+                    )
 
-            dados_metas_manual = []
+            df_editor = pd.DataFrame({
+                "Mês": meses_nomes,
+                "Meta": [
+                    metas_salvas.get(m, 1000.0)
+                    for m in range(1, 13)
+                ],
+            })
 
-            for mes in range(1, 13):
-                dados_metas_manual.append({
-                    "Mês": meses_nomes[mes - 1],
-                    "Meta": metas_salvas.get(mes, 1000.0),
-                })
-
-            df_metas_manual = pd.DataFrame(
-                dados_metas_manual
-            )
-
-            editor_metas_manual = st.data_editor(
-                df_metas_manual,
+            metas_editadas = st.data_editor(
+                df_editor,
                 use_container_width=True,
                 hide_index=True,
                 disabled=["Mês"],
                 column_config={
-                    "Mês":
-                        st.column_config.TextColumn("Mês"),
                     "Meta":
                         st.column_config.NumberColumn(
-                            "Meta mensal",
+                            format="R$ %.2f",
                             min_value=0.0,
-                            step=100.0,
-                            format="R$ %.2f"
+                            step=100.0
                         ),
                 },
-                key=f"rel_v31_editor_manual_{ano_definir}"
+                key=f"rel_v4_editor_meta_{ano_meta}"
             )
 
-            meta_anual_manual = float(
-                pd.to_numeric(
-                    editor_metas_manual["Meta"],
-                    errors="coerce"
-                ).fillna(0).sum()
-            )
-
-            m1, m2 = st.columns([1, 2])
-
-            m1.metric(
-                "Meta anual",
-                _rel_moeda(meta_anual_manual)
-            )
-
-            m2.info(
-                "Exemplo do seu fluxo: 2025 e 2026 podem ficar em R$ 1.000 por mês. "
-                "Depois você usa a aba 'Gerar Próximo Ano' para montar 2027 automaticamente."
+            st.metric(
+                "Meta Anual",
+                _rel_moeda(
+                    pd.to_numeric(
+                        metas_editadas["Meta"],
+                        errors="coerce"
+                    ).fillna(0).sum()
+                )
             )
 
             if st.button(
-                f"💾 Salvar metas de {ano_definir}",
+                f"💾 Salvar metas de {ano_meta}",
                 type="primary",
                 use_container_width=True,
-                key=f"rel_v31_salvar_manual_{ano_definir}"
+                key=f"rel_v4_salvar_meta_{ano_meta}"
             ):
                 try:
-                    for indice, linha in editor_metas_manual.iterrows():
+                    for i, linha in metas_editadas.iterrows():
                         _rel_salvar_meta(
-                            ano_definir,
-                            indice + 1,
+                            ano_meta,
+                            i + 1,
                             _rel_num(linha["Meta"])
                         )
 
-                    st.success(
-                        f"✅ Metas de {ano_definir} salvas com sucesso."
-                    )
+                    st.success("✅ Metas salvas.")
                     st.rerun()
 
                 except Exception as erro:
-                    st.error(
-                        f"Não foi possível salvar as metas: {erro}"
+                    st.error(f"Erro ao salvar metas: {erro}")
+
+        # -----------------------------------------------------
+        # GERAR PRÓXIMO ANO
+        # -----------------------------------------------------
+        with meta_gerar:
+
+            anos_base = sorted(
+                set(
+                    (
+                        df_real_total["data_dt"]
+                        .dropna()
+                        .dt.year
+                        .astype(int)
+                        .tolist()
+                        if not df_real_total.empty
+                        else []
                     )
-
-        # =====================================================
-        # B) GERAR META DO PRÓXIMO ANO
-        # =====================================================
-        with tab_gerar_meta:
-
-            st.markdown("### ⚙️ Gerar metas do próximo ano")
-            st.caption(
-                "Regra: se o mês teve faturamento, a nova meta é calculada sobre o faturado. "
-                "Se não teve faturamento, entra a meta mínima."
-            )
-
-            anos_com_base = sorted(
-                set(
-                    df_real_total["data_dt"]
-                    .dropna()
-                    .dt.year
-                    .astype(int)
-                    .tolist()
-                )
-            ) if not df_real_total.empty else []
-
-            # Permite também usar anos cadastrados em metas,
-            # mesmo quando não houve faturamento real.
-            anos_candidatos = sorted(
-                set(
-                    anos_com_base
                     + list(range(2025, hoje.year + 2))
                 )
             )
 
-            if not anos_candidatos:
-                anos_candidatos = [hoje.year]
-
             g1, g2, g3 = st.columns(3)
 
-            ano_base_meta = g1.selectbox(
+            ano_base = g1.selectbox(
                 "Ano-base",
-                anos_candidatos,
+                anos_base,
                 index=(
-                    anos_candidatos.index(hoje.year)
-                    if hoje.year in anos_candidatos
-                    else len(anos_candidatos) - 1
+                    anos_base.index(hoje.year)
+                    if hoje.year in anos_base
+                    else len(anos_base) - 1
                 ),
-                key="rel_v31_gerar_ano_base"
+                key="rel_v4_meta_base"
             )
 
-            ano_destino_meta = int(ano_base_meta) + 1
+            ano_destino = int(ano_base) + 1
 
-            crescimento_meta = g2.number_input(
+            crescimento = g2.number_input(
                 "Crescimento desejado (%)",
                 min_value=0.0,
                 max_value=500.0,
                 value=15.0,
                 step=1.0,
-                key="rel_v31_crescimento"
+                key="rel_v4_crescimento"
             )
 
             meta_minima = g3.number_input(
@@ -2893,29 +2487,26 @@ elif menu == "Relatórios":
                 min_value=0.0,
                 value=1000.0,
                 step=100.0,
-                key="rel_v31_meta_minima"
+                key="rel_v4_meta_minima"
             )
 
-            st.info(
-                f"Você está preparando as metas de **{ano_destino_meta}** "
-                f"usando **{ano_base_meta}** como referência."
-            )
-
-            faturamento_base_mensal = pd.Series(
+            faturamento_base = pd.Series(
                 [0.0] * 12,
                 index=range(1, 13),
                 dtype=float
             )
 
             if not df_real_total.empty:
-                base_ano = df_real_total[
-                    df_real_total["data_dt"].dt.year == int(ano_base_meta)
+
+                base = df_real_total[
+                    df_real_total["data_dt"].dt.year
+                    == int(ano_base)
                 ].copy()
 
-                if not base_ano.empty:
-                    faturamento_base_mensal = (
-                        base_ano.groupby(
-                            base_ano["data_dt"].dt.month
+                if not base.empty:
+                    faturamento_base = (
+                        base.groupby(
+                            base["data_dt"].dt.month
                         )["faturamento_evento"]
                         .sum()
                         .reindex(
@@ -2925,165 +2516,98 @@ elif menu == "Relatórios":
                     )
 
             metas_destino_df = _rel_carregar_metas(
-                ano_destino_meta
+                ano_destino
             )
 
-            metas_destino_salvas = {}
+            metas_destino = {}
 
             if not metas_destino_df.empty:
-                for _, registro in metas_destino_df.iterrows():
-                    try:
-                        metas_destino_salvas[
-                            int(registro["mes"])
-                        ] = _rel_num(
-                            registro.get("meta_valor")
-                        )
-                    except Exception:
-                        pass
+                for _, reg in metas_destino_df.iterrows():
+                    metas_destino[int(reg["mes"])] = _rel_num(
+                        reg.get("meta_valor")
+                    )
 
-            linhas_sugestao = []
+            sugestoes = []
 
             for mes in range(1, 13):
 
-                faturado_base = float(
-                    faturamento_base_mensal.get(
-                        mes,
-                        0
-                    ) or 0
+                realizado = float(
+                    faturamento_base.get(mes, 0) or 0
                 )
 
-                if faturado_base > 0:
-                    meta_sugerida = (
-                        faturado_base
-                        * (1 + crescimento_meta / 100)
+                if realizado > 0:
+                    sugerida = realizado * (
+                        1 + crescimento / 100
                     )
-
-                    regra = (
-                        f"Faturado + {crescimento_meta:.0f}%"
-                    )
+                    regra = f"Faturado + {crescimento:.0f}%"
                 else:
-                    meta_sugerida = float(
-                        meta_minima
-                    )
-
+                    sugerida = float(meta_minima)
                     regra = "Meta mínima"
 
-                meta_final = metas_destino_salvas.get(
-                    mes,
-                    meta_sugerida
-                )
-
-                linhas_sugestao.append({
-                    "Mês":
-                        meses_nomes[mes - 1],
-                    f"Faturado {ano_base_meta}":
-                        faturado_base,
-                    "Regra":
-                        regra,
-                    "Meta sugerida":
-                        meta_sugerida,
-                    f"Meta {ano_destino_meta}":
-                        meta_final,
+                sugestoes.append({
+                    "Mês": meses_nomes[mes - 1],
+                    f"Faturado {ano_base}": realizado,
+                    "Regra": regra,
+                    "Meta Sugerida": sugerida,
+                    f"Meta {ano_destino}":
+                        metas_destino.get(mes, sugerida),
                 })
 
-            df_sugestao = pd.DataFrame(
-                linhas_sugestao
-            )
+            df_sug = pd.DataFrame(sugestoes)
 
-            editor_sugestao = st.data_editor(
-                df_sugestao,
+            editor_sug = st.data_editor(
+                df_sug,
                 use_container_width=True,
                 hide_index=True,
                 disabled=[
                     "Mês",
-                    f"Faturado {ano_base_meta}",
+                    f"Faturado {ano_base}",
                     "Regra",
-                    "Meta sugerida",
+                    "Meta Sugerida",
                 ],
                 column_config={
-                    f"Faturado {ano_base_meta}":
-                        st.column_config.NumberColumn(
-                            format="R$ %.2f"
-                        ),
-                    "Meta sugerida":
-                        st.column_config.NumberColumn(
-                            format="R$ %.2f"
-                        ),
-                    f"Meta {ano_destino_meta}":
+                    f"Faturado {ano_base}":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    "Meta Sugerida":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    f"Meta {ano_destino}":
                         st.column_config.NumberColumn(
                             format="R$ %.2f",
                             min_value=0.0,
                             step=100.0
                         ),
                 },
-                key=(
-                    f"rel_v31_editor_geracao_"
-                    f"{ano_base_meta}_{ano_destino_meta}"
-                )
-            )
-
-            meta_sugerida_anual = float(
-                pd.to_numeric(
-                    editor_sugestao[
-                        f"Meta {ano_destino_meta}"
-                    ],
-                    errors="coerce"
-                ).fillna(0).sum()
-            )
-
-            st.metric(
-                f"Meta anual proposta para {ano_destino_meta}",
-                _rel_moeda(
-                    meta_sugerida_anual
-                )
-            )
-
-            st.caption(
-                "Exemplo: se setembro faturou R$ 11.332,96 e o crescimento é 15%, "
-                "a meta do próximo setembro será R$ 13.032,90. "
-                "Se um mês faturou R$ 0,00, entra a meta mínima de R$ 1.000,00."
+                key=f"rel_v4_sug_{ano_base}_{ano_destino}"
             )
 
             if st.button(
-                f"💾 Salvar metas geradas de {ano_destino_meta}",
+                f"💾 Salvar metas de {ano_destino}",
                 type="primary",
                 use_container_width=True,
-                key=f"rel_v31_salvar_geradas_{ano_destino_meta}"
+                key=f"rel_v4_salvar_sug_{ano_destino}"
             ):
                 try:
-                    for indice, linha in editor_sugestao.iterrows():
-
+                    for i, linha in editor_sug.iterrows():
                         _rel_salvar_meta(
-                            ano_destino_meta,
-                            indice + 1,
+                            ano_destino,
+                            i + 1,
                             _rel_num(
-                                linha[
-                                    f"Meta {ano_destino_meta}"
-                                ]
+                                linha[f"Meta {ano_destino}"]
                             )
                         )
 
                     st.success(
-                        f"✅ Metas de {ano_destino_meta} salvas com sucesso."
+                        f"✅ Metas de {ano_destino} salvas."
                     )
-
                     st.rerun()
 
                 except Exception as erro:
-                    st.error(
-                        f"Não foi possível salvar as metas: {erro}"
-                    )
+                    st.error(f"Erro ao salvar: {erro}")
 
-        # =====================================================
-        # C) ACOMPANHAMENTO
-        # =====================================================
-        with tab_acompanhar_meta:
-
-            st.markdown("### 📊 Acompanhamento das metas")
-            st.caption(
-                "Aqui você acompanha Meta x Realizado. "
-                "O comparativo com o ano anterior só aparece para meses que já aconteceram."
-            )
+        # -----------------------------------------------------
+        # ACOMPANHAMENTO
+        # -----------------------------------------------------
+        with meta_acompanhar:
 
             anos_acomp = list(
                 range(
@@ -3100,36 +2624,31 @@ elif menu == "Relatórios":
                     if hoje.year in anos_acomp
                     else 0
                 ),
-                key="rel_v31_ano_acomp"
+                key="rel_v4_acomp_ano"
             )
 
-            metas_acomp_df = _rel_carregar_metas(
+            metas_df = _rel_carregar_metas(
                 ano_acomp
             )
 
-            metas_acomp = {
-                mes: 0.0
-                for mes in range(1, 13)
+            metas = {
+                m: 0.0
+                for m in range(1, 13)
             }
 
-            if not metas_acomp_df.empty:
-                for _, registro in metas_acomp_df.iterrows():
-                    try:
-                        metas_acomp[
-                            int(registro["mes"])
-                        ] = _rel_num(
-                            registro.get("meta_valor")
-                        )
-                    except Exception:
-                        pass
+            if not metas_df.empty:
+                for _, reg in metas_df.iterrows():
+                    metas[int(reg["mes"])] = _rel_num(
+                        reg.get("meta_valor")
+                    )
 
-            realizado_acomp = pd.Series(
+            realizado = pd.Series(
                 [0.0] * 12,
                 index=range(1, 13),
                 dtype=float
             )
 
-            realizado_anterior = pd.Series(
+            anterior = pd.Series(
                 [0.0] * 12,
                 index=range(1, 13),
                 dtype=float
@@ -3137,32 +2656,20 @@ elif menu == "Relatórios":
 
             if not df_real_total.empty:
 
-                base_acomp = df_real_total[
+                atual = df_real_total[
                     df_real_total["data_dt"].dt.year
                     == int(ano_acomp)
-                ].copy()
+                ]
 
-                if not base_acomp.empty:
-                    realizado_acomp = (
-                        base_acomp.groupby(
-                            base_acomp["data_dt"].dt.month
-                        )["faturamento_evento"]
-                        .sum()
-                        .reindex(
-                            range(1, 13),
-                            fill_value=0.0
-                        )
-                    )
-
-                base_ant = df_real_total[
+                ant = df_real_total[
                     df_real_total["data_dt"].dt.year
                     == int(ano_acomp) - 1
-                ].copy()
+                ]
 
-                if not base_ant.empty:
-                    realizado_anterior = (
-                        base_ant.groupby(
-                            base_ant["data_dt"].dt.month
+                if not atual.empty:
+                    realizado = (
+                        atual.groupby(
+                            atual["data_dt"].dt.month
                         )["faturamento_evento"]
                         .sum()
                         .reindex(
@@ -3171,35 +2678,27 @@ elif menu == "Relatórios":
                         )
                     )
 
-            linhas_acomp = []
+                if not ant.empty:
+                    anterior = (
+                        ant.groupby(
+                            ant["data_dt"].dt.month
+                        )["faturamento_evento"]
+                        .sum()
+                        .reindex(
+                            range(1, 13),
+                            fill_value=0.0
+                        )
+                    )
+
+            linhas = []
 
             for mes in range(1, 13):
 
-                meta_mes = float(
-                    metas_acomp.get(
-                        mes,
-                        0
-                    ) or 0
-                )
+                meta_mes = float(metas.get(mes, 0) or 0)
+                real_mes = float(realizado.get(mes, 0) or 0)
+                ant_mes = float(anterior.get(mes, 0) or 0)
 
-                realizado_mes = float(
-                    realizado_acomp.get(
-                        mes,
-                        0
-                    ) or 0
-                )
-
-                anterior_mes = float(
-                    realizado_anterior.get(
-                        mes,
-                        0
-                    ) or 0
-                )
-
-                # ---------------------------------------------
-                # ESTADO DO MÊS
-                # ---------------------------------------------
-                mes_futuro = (
+                futuro = (
                     int(ano_acomp) > hoje.year
                     or (
                         int(ano_acomp) == hoje.year
@@ -3207,210 +2706,66 @@ elif menu == "Relatórios":
                     )
                 )
 
-                mes_atual = (
+                atual_mes = (
                     int(ano_acomp) == hoje.year
                     and mes == hoje.month
                 )
 
-                # ---------------------------------------------
-                # ATINGIMENTO
-                # ---------------------------------------------
-                if mes_futuro:
+                if futuro:
                     atingimento = None
-                    diferenca = None
-                    crescimento_texto = "—"
+                    crescimento_txt = "—"
                     status = "⏳ Aguardando"
-
                 else:
-
                     atingimento = (
-                        realizado_mes / meta_mes * 100
+                        real_mes / meta_mes * 100
                         if meta_mes > 0
                         else None
                     )
 
-                    diferenca = (
-                        realizado_mes - meta_mes
-                        if meta_mes > 0
-                        else None
-                    )
+                    if atual_mes:
+                        crescimento_txt = "Em andamento"
+                        status = "🔵 Em andamento"
 
-                    # O mês atual ainda está em andamento:
-                    # não compara parcial com mês inteiro do ano anterior.
-                    if mes_atual:
-                        crescimento_texto = "Em andamento"
-                    elif anterior_mes > 0:
-                        crescimento_valor = (
-                            realizado_mes / anterior_mes - 1
-                        ) * 100
-
-                        crescimento_texto = (
-                            f"{crescimento_valor:+.2f}%"
+                    elif ant_mes > 0:
+                        crescimento_txt = (
+                            f"{((real_mes / ant_mes) - 1) * 100:+.2f}%"
                             .replace(".", ",")
                         )
-                    elif realizado_mes > 0:
-                        crescimento_texto = (
-                            "Novo faturamento"
+
+                        status = (
+                            "🟢 Atingida"
+                            if meta_mes > 0 and real_mes >= meta_mes
+                            else "🔴 Abaixo"
+                            if meta_mes > 0
+                            else "🟡 Sem meta"
                         )
-                    else:
-                        crescimento_texto = "—"
 
-                    if mes_atual:
-                        status = "🔵 Em andamento"
-                    elif meta_mes <= 0:
-                        status = "🟡 Sem meta"
-                    elif realizado_mes >= meta_mes:
-                        status = "🟢 Atingida"
                     else:
-                        status = "🔴 Abaixo"
+                        crescimento_txt = (
+                            "Novo faturamento"
+                            if real_mes > 0
+                            else "—"
+                        )
 
-                linhas_acomp.append({
-                    "Mês":
-                        meses_nomes[mes - 1],
-                    "Meta":
-                        meta_mes,
-                    "Realizado":
-                        realizado_mes,
-                    "Atingimento (%)":
-                        atingimento,
-                    "Diferença p/ Meta":
-                        diferenca,
+                        status = (
+                            "🟢 Atingida"
+                            if meta_mes > 0 and real_mes >= meta_mes
+                            else "🔴 Abaixo"
+                            if meta_mes > 0
+                            else "🟡 Sem meta"
+                        )
+
+                linhas.append({
+                    "Mês": meses_nomes[mes - 1],
+                    "Meta": meta_mes,
+                    "Realizado": real_mes,
+                    "Atingimento (%)": atingimento,
                     "Crescimento vs Ano Anterior":
-                        crescimento_texto,
-                    "Status":
-                        status,
+                        crescimento_txt,
+                    "Status": status,
                 })
 
-            df_acomp = pd.DataFrame(
-                linhas_acomp
-            )
-
-            # ---------------------------------------------
-            # RESUMO DO PERÍODO JUSTO
-            # ---------------------------------------------
-            if int(ano_acomp) < hoje.year:
-                limite_mes = 12
-            elif int(ano_acomp) == hoje.year:
-                limite_mes = hoje.month
-            else:
-                limite_mes = 0
-
-            if limite_mes > 0:
-
-                meta_periodo = float(
-                    sum(
-                        metas_acomp.get(
-                            mes,
-                            0
-                        ) or 0
-                        for mes in range(
-                            1,
-                            limite_mes + 1
-                        )
-                    )
-                )
-
-                realizado_periodo = float(
-                    sum(
-                        realizado_acomp.get(
-                            mes,
-                            0
-                        ) or 0
-                        for mes in range(
-                            1,
-                            limite_mes + 1
-                        )
-                    )
-                )
-
-                anterior_periodo = float(
-                    sum(
-                        realizado_anterior.get(
-                            mes,
-                            0
-                        ) or 0
-                        for mes in range(
-                            1,
-                            limite_mes + 1
-                        )
-                    )
-                )
-
-                atingimento_periodo = (
-                    realizado_periodo
-                    / meta_periodo
-                    * 100
-                    if meta_periodo > 0
-                    else 0.0
-                )
-
-                crescimento_periodo_texto = (
-                    _rel_percentual(
-                        (
-                            realizado_periodo
-                            / anterior_periodo
-                            - 1
-                        ) * 100
-                    )
-                    if anterior_periodo > 0
-                    else "—"
-                )
-
-                with st.container(border=True):
-
-                    a1, a2, a3, a4 = st.columns(
-                        4
-                    )
-
-                    a1.metric(
-                        "Meta do período",
-                        _rel_moeda(
-                            meta_periodo
-                        )
-                    )
-
-                    a2.metric(
-                        "Realizado",
-                        _rel_moeda(
-                            realizado_periodo
-                        )
-                    )
-
-                    a3.metric(
-                        "Atingimento",
-                        _rel_percentual(
-                            atingimento_periodo
-                        )
-                    )
-
-                    a4.metric(
-                        "Crescimento vs Ano Anterior",
-                        crescimento_periodo_texto
-                    )
-
-            else:
-
-                meta_anual_futura = float(
-                    sum(
-                        metas_acomp.values()
-                    )
-                )
-
-                with st.container(border=True):
-
-                    a1, a2 = st.columns(2)
-
-                    a1.metric(
-                        "Meta anual planejada",
-                        _rel_moeda(
-                            meta_anual_futura
-                        )
-                    )
-
-                    a2.metric(
-                        "Situação",
-                        "Aguardando início"
-                    )
+            df_acomp = pd.DataFrame(linhas)
 
             st.dataframe(
                 df_acomp,
@@ -3418,139 +2773,197 @@ elif menu == "Relatórios":
                 hide_index=True,
                 column_config={
                     "Meta":
-                        st.column_config.NumberColumn(
-                            format="R$ %.2f"
-                        ),
+                        st.column_config.NumberColumn(format="R$ %.2f"),
                     "Realizado":
-                        st.column_config.NumberColumn(
-                            format="R$ %.2f"
-                        ),
+                        st.column_config.NumberColumn(format="R$ %.2f"),
                     "Atingimento (%)":
-                        st.column_config.NumberColumn(
-                            format="%.2f%%"
-                        ),
-                    "Diferença p/ Meta":
-                        st.column_config.NumberColumn(
-                            format="R$ %.2f"
-                        ),
+                        st.column_config.NumberColumn(format="%.2f%%"),
                 }
             )
 
-            graf_acomp = df_acomp[
-                [
-                    "Mês",
-                    "Meta",
-                    "Realizado",
-                ]
+            graf = df_acomp[
+                ["Mês", "Meta", "Realizado"]
             ].copy()
 
-            graf_acomp.set_index(
-                "Mês",
-                inplace=True
-            )
+            graf.set_index("Mês", inplace=True)
 
-            st.markdown(
-                "### 📈 Meta x Realizado"
-            )
-
-            st.line_chart(
-                graf_acomp
-            )
+            st.markdown("### 📈 Meta x Realizado")
+            st.line_chart(graf)
 
     # =========================================================
-    # COMPARATIVO ANUAL
+    # 3 — COMPARATIVO ANUAL
     # =========================================================
     with tab_anual:
 
-        st.markdown("## 📈 Comparativo Ano a Ano")
-        st.caption("Compara crescimento de venda e eficiência do negócio entre dois anos.")
+        st.markdown("## 📈 Comparativo Anual")
 
-        anos_existentes = sorted(
-            set(df_real_total["data_dt"].dropna().dt.year.astype(int).tolist())
+        anos_disp = sorted(
+            set(
+                df_real_total["data_dt"]
+                .dropna()
+                .dt.year
+                .astype(int)
+                .tolist()
+            )
         ) if not df_real_total.empty else []
-        anos_comp = sorted(set(anos_existentes + [hoje.year - 1, hoje.year, hoje.year + 1]))
 
-        y1, y2 = st.columns(2)
-        ano_a = y1.selectbox(
-            "Ano base", anos_comp,
-            index=anos_comp.index(hoje.year - 1) if hoje.year - 1 in anos_comp else 0,
-            key="rel_v3_ano_a"
-        )
-        ano_b = y2.selectbox(
-            "Ano comparado", anos_comp,
-            index=anos_comp.index(hoje.year) if hoje.year in anos_comp else len(anos_comp) - 1,
-            key="rel_v3_ano_b"
+        anos_opcoes = sorted(
+            set(
+                anos_disp
+                + [hoje.year - 1, hoje.year, hoje.year + 1]
+            )
         )
 
-        def _resumo_ano_rel(ano):
-            base = df_real_total[df_real_total["data_dt"].dt.year == int(ano)].copy() if not df_real_total.empty else pd.DataFrame()
+        if len(anos_opcoes) < 2:
+            anos_opcoes = [hoje.year - 1, hoje.year]
+
+        a1, a2 = st.columns(2)
+
+        ano_a = a1.selectbox(
+            "Ano base",
+            anos_opcoes,
+            index=0,
+            key="rel_v4_comp_a"
+        )
+
+        ano_b = a2.selectbox(
+            "Ano comparado",
+            anos_opcoes,
+            index=len(anos_opcoes) - 1,
+            key="rel_v4_comp_b"
+        )
+
+        def _resumo_ano(ano):
+            if df_real_total.empty:
+                base = pd.DataFrame()
+            else:
+                base = df_real_total[
+                    df_real_total["data_dt"].dt.year
+                    == int(ano)
+                ]
+
             if base.empty:
-                return {"fat":0.0,"custo":0.0,"lucro":0.0,"cmv":0.0,"margem":0.0,"eventos":0,"convidados":0.0,"ticket":0.0,"reserva":0.0}
+                return {
+                    "faturamento": 0.0,
+                    "custo": 0.0,
+                    "lucro": 0.0,
+                    "eventos": 0,
+                    "ticket": 0.0,
+                    "margem": 0.0,
+                }
+
             fat = float(base["faturamento_evento"].sum())
             custo = float(base["custo_evento"].sum())
             lucro = float(base["lucro_evento"].sum())
-            eventos = int(len(base))
+            qtd = int(len(base))
+
             return {
-                "fat":fat,"custo":custo,"lucro":lucro,
-                "cmv":custo/fat*100 if fat>0 else 0.0,
-                "margem":lucro/fat*100 if fat>0 else 0.0,
-                "eventos":eventos,
-                "convidados":float(base["convidados"].sum()),
-                "ticket":fat/eventos if eventos>0 else 0.0,
-                "reserva":float(base["reserva_evento"].sum()),
+                "faturamento": fat,
+                "custo": custo,
+                "lucro": lucro,
+                "eventos": qtd,
+                "ticket": fat / qtd if qtd > 0 else 0.0,
+                "margem":
+                    lucro / fat * 100 if fat > 0 else 0.0,
             }
 
-        ra = _resumo_ano_rel(ano_a)
-        rb = _resumo_ano_rel(ano_b)
-        linhas = []
-        for nome, chave, tipo in [
-            ("Faturamento","fat","moeda"),("Custo Real","custo","moeda"),("Lucro Real","lucro","moeda"),
-            ("CMV","cmv","pp"),("Margem","margem","pp"),("Eventos","eventos","numero"),
-            ("Convidados","convidados","numero"),("Ticket Médio","ticket","moeda"),("Reserva Gerada","reserva","moeda")
-        ]:
-            va, vb = ra[chave], rb[chave]
-            if tipo == "pp":
-                evol = f"{vb-va:+.2f} p.p.".replace(".", ",")
-                fa, fb = _rel_percentual(va), _rel_percentual(vb)
-            elif tipo == "moeda":
-                evol = _rel_percentual((vb/va-1)*100 if va != 0 else 0.0)
-                fa, fb = _rel_moeda(va), _rel_moeda(vb)
-            else:
-                evol = _rel_percentual((vb/va-1)*100 if va != 0 else 0.0)
-                fa, fb = f"{va:,.0f}", f"{vb:,.0f}"
-            linhas.append({"Indicador":nome,str(ano_a):fa,str(ano_b):fb,"Evolução":evol})
+        ra = _resumo_ano(ano_a)
+        rb = _resumo_ano(ano_b)
 
-        st.dataframe(pd.DataFrame(linhas), use_container_width=True, hide_index=True)
+        comp = pd.DataFrame([
+            {
+                "Indicador": "Faturamento",
+                str(ano_a): _rel_moeda(ra["faturamento"]),
+                str(ano_b): _rel_moeda(rb["faturamento"]),
+            },
+            {
+                "Indicador": "Custo Real",
+                str(ano_a): _rel_moeda(ra["custo"]),
+                str(ano_b): _rel_moeda(rb["custo"]),
+            },
+            {
+                "Indicador": "Lucro Real",
+                str(ano_a): _rel_moeda(ra["lucro"]),
+                str(ano_b): _rel_moeda(rb["lucro"]),
+            },
+            {
+                "Indicador": "Margem",
+                str(ano_a): _rel_percentual(ra["margem"]),
+                str(ano_b): _rel_percentual(rb["margem"]),
+            },
+            {
+                "Indicador": "Eventos",
+                str(ano_a): str(ra["eventos"]),
+                str(ano_b): str(rb["eventos"]),
+            },
+            {
+                "Indicador": "Ticket Médio",
+                str(ano_a): _rel_moeda(ra["ticket"]),
+                str(ano_b): _rel_moeda(rb["ticket"]),
+            },
+        ])
 
-        mensal = []
-        for mes in range(1,13):
-            def _mes(ano):
-                b = df_real_total[(df_real_total["data_dt"].dt.year==int(ano)) & (df_real_total["data_dt"].dt.month==mes)] if not df_real_total.empty else pd.DataFrame()
-                return float(b["faturamento_evento"].sum()) if not b.empty else 0.0
-            fa, fb = _mes(ano_a), _mes(ano_b)
-            mensal.append({"Mês":meses_nomes[mes-1], f"Faturamento {ano_a}":fa, f"Faturamento {ano_b}":fb, "Evolução (%)":((fb/fa)-1)*100 if fa>0 else 0.0})
-        mensal_df = pd.DataFrame(mensal)
-        st.markdown("### 📅 Comparativo Mês a Mês")
         st.dataframe(
-            mensal_df, use_container_width=True, hide_index=True,
+            comp,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        mensal_comp = []
+
+        for mes in range(1, 13):
+
+            linha = {"Mês": meses_nomes[mes - 1]}
+
+            for ano in [ano_a, ano_b]:
+
+                if df_real_total.empty:
+                    valor = 0.0
+                else:
+                    base = df_real_total[
+                        (df_real_total["data_dt"].dt.year == int(ano))
+                        & (df_real_total["data_dt"].dt.month == mes)
+                    ]
+
+                    valor = (
+                        float(base["faturamento_evento"].sum())
+                        if not base.empty
+                        else 0.0
+                    )
+
+                linha[str(ano)] = valor
+
+            mensal_comp.append(linha)
+
+        df_comp = pd.DataFrame(mensal_comp)
+
+        st.markdown("### 📅 Faturamento Mês a Mês")
+
+        st.dataframe(
+            df_comp,
+            use_container_width=True,
+            hide_index=True,
             column_config={
-                f"Faturamento {ano_a}": st.column_config.NumberColumn(format="R$ %.2f"),
-                f"Faturamento {ano_b}": st.column_config.NumberColumn(format="R$ %.2f"),
-                "Evolução (%)": st.column_config.NumberColumn(format="%.2f%%")
+                str(ano_a):
+                    st.column_config.NumberColumn(format="R$ %.2f"),
+                str(ano_b):
+                    st.column_config.NumberColumn(format="R$ %.2f"),
             }
         )
-        graf = mensal_df[["Mês", f"Faturamento {ano_a}", f"Faturamento {ano_b}"]].copy().set_index("Mês")
-        st.line_chart(graf)
+
+        graf_comp = df_comp.copy()
+        graf_comp.set_index("Mês", inplace=True)
+        st.line_chart(graf_comp)
 
     # =========================================================
-    # FECHAMENTO ANUAL + FUNDO DA EQUIPE
+    # 4 — FECHAMENTO ANUAL
     # =========================================================
     with tab_fechamento:
 
         st.markdown("## 🏁 Fechamento Anual")
         st.caption(
-            "Escolha o ano e use as subabas abaixo: Resumo Anual para o fechamento do negócio "
-            "e Fundo da Equipe para a bonificação anual."
+            "Resumo anual simples do negócio. "
+            "O Fundo da Equipe agora possui uma área própria no menu principal."
         )
 
         anos_fecha = (
@@ -3574,1006 +2987,188 @@ elif menu == "Relatórios":
             "Ano do fechamento",
             anos_fecha,
             index=len(anos_fecha) - 1,
-            key="rel_v331_fecha_ano"
+            key="rel_v4_fecha_ano"
         )
 
         ano_df = (
             df_real_total[
-                df_real_total["data_dt"].dt.year == int(ano_fecha)
+                df_real_total["data_dt"].dt.year
+                == int(ano_fecha)
             ].copy()
             if not df_real_total.empty
             else pd.DataFrame()
         )
 
         if ano_df.empty:
-            st.info("Nenhum evento com CMV fechado neste ano.")
+            st.info(
+                "Nenhum evento com CMV fechado neste ano."
+            )
 
         else:
-            # =====================================================
-            # RESULTADO DO ANO
-            # =====================================================
-            fat = float(ano_df["faturamento_evento"].sum())
-            custo = float(ano_df["custo_evento"].sum())
-            lucro = float(ano_df["lucro_evento"].sum())
 
-            # Reserva já segue a regra atual do sistema:
-            # 35% do lucro positivo de cada evento fechado.
-            reserva = float(ano_df["reserva_evento"].sum())
+            fat = float(
+                ano_df["faturamento_evento"].sum()
+            )
 
-            eventos = int(len(ano_df))
-            convidados = float(ano_df["convidados"].sum())
-            ticket = fat / eventos if eventos > 0 else 0.0
-            cmv = custo / fat * 100 if fat > 0 else 0.0
-            margem_ano = lucro / fat * 100 if fat > 0 else 0.0
+            custo = float(
+                ano_df["custo_evento"].sum()
+            )
 
-            metas_ano = _rel_carregar_metas(ano_fecha)
+            lucro = float(
+                ano_df["lucro_evento"].sum()
+            )
 
-            meta_total = (
-                float(
-                    pd.to_numeric(
-                        metas_ano.get(
-                            "meta_valor",
-                            pd.Series(dtype=float)
-                        ),
-                        errors="coerce"
-                    )
-                    .fillna(0)
-                    .sum()
-                )
-                if not metas_ano.empty
+            reserva = float(
+                ano_df["reserva_evento"].sum()
+            )
+
+            eventos = int(
+                len(ano_df)
+            )
+
+            convidados = float(
+                ano_df["convidados"].sum()
+            )
+
+            ticket = (
+                fat / eventos
+                if eventos > 0
                 else 0.0
             )
 
-            ating = fat / meta_total * 100 if meta_total > 0 else 0.0
+            cmv = (
+                custo / fat * 100
+                if fat > 0
+                else 0.0
+            )
 
-            # =====================================================
-            # VERIFICA SE O FUNDO DESTE ANO JÁ FOI FECHADO
-            # =====================================================
-            try:
-                fundo_fechado_resp = (
-                    supabase.table("fundo_equipe_anual")
-                    .select("*")
-                    .eq("ano", int(ano_fecha))
-                    .limit(1)
-                    .execute()
+            margem_ano = (
+                lucro / fat * 100
+                if fat > 0
+                else 0.0
+            )
+
+            with st.container(border=True):
+
+                c1, c2, c3, c4 = st.columns(4)
+
+                c1.metric(
+                    "Faturamento",
+                    _rel_moeda(fat)
                 )
 
-                fundo_fechado_dados = (
-                    fundo_fechado_resp.data[0]
-                    if fundo_fechado_resp.data
-                    else None
+                c2.metric(
+                    "Custo Real",
+                    _rel_moeda(custo)
                 )
 
-            except Exception:
-                fundo_fechado_dados = None
+                c3.metric(
+                    "Lucro Real",
+                    _rel_moeda(lucro)
+                )
 
-            # =====================================================
-            # SUBABAS DO FECHAMENTO ANUAL
-            # =====================================================
-            subtab_resumo_anual, subtab_fundo_equipe = st.tabs([
-                "📊 Resumo Anual",
-                "👥 Fundo da Equipe",
-            ])
+                c4.metric(
+                    "Margem",
+                    _rel_percentual(margem_ano)
+                )
 
-            with subtab_resumo_anual:
-                # =====================================================
-                # PAINEL PRINCIPAL DO FECHAMENTO
-                # =====================================================
-                with st.container(border=True):
+                c5, c6, c7, c8 = st.columns(4)
 
-                    st.markdown(
-                        f"#### 🏆 Fechamento {ano_fecha}"
-                    )
+                c5.metric(
+                    "Eventos",
+                    eventos
+                )
 
-                    c1, c2, c3, c4 = st.columns(4)
+                c6.metric(
+                    "Convidados",
+                    f"{convidados:,.0f}"
+                )
 
-                    c1.metric(
-                        "Eventos Fechados",
-                        eventos
-                    )
+                c7.metric(
+                    "Ticket Médio",
+                    _rel_moeda(ticket)
+                )
 
-                    c2.metric(
-                        "Faturamento Real",
-                        _rel_moeda(fat)
-                    )
+                c8.metric(
+                    "CMV",
+                    _rel_percentual(cmv)
+                )
 
-                    c3.metric(
-                        "Custo Real",
-                        _rel_moeda(custo)
-                    )
+            with st.container(border=True):
 
-                    c4.metric(
-                        "Lucro Real",
-                        _rel_moeda(lucro)
-                    )
+                r1, r2 = st.columns(2)
 
-                    c5, c6, c7, c8 = st.columns(4)
+                r1.metric(
+                    "🛡️ Reserva Gerada",
+                    _rel_moeda(reserva)
+                )
 
-                    c5.metric(
-                        "CMV",
-                        _rel_percentual(cmv)
-                    )
+                r2.metric(
+                    "💵 Disponível após Reserva",
+                    _rel_moeda(lucro - reserva)
+                )
 
-                    c6.metric(
-                        "Margem",
-                        _rel_percentual(margem_ano)
-                    )
+            mensal = []
 
-                    c7.metric(
-                        "Convidados",
-                        f"{convidados:,.0f}"
-                    )
+            for mes in range(1, 13):
 
-                    c8.metric(
-                        "Ticket Médio",
-                        _rel_moeda(ticket)
-                    )
-
-                # =====================================================
-                # DESTINAÇÃO DO LUCRO — VISÃO RESUMIDA
-                # =====================================================
-                with st.container(border=True):
-
-                    st.markdown(
-                        "#### 🛡️ Reserva e Disponível"
-                    )
-
-                    d1, d2, d3 = st.columns(3)
-
-                    d1.metric(
-                        "Lucro Real do Ano",
-                        _rel_moeda(lucro)
-                    )
-
-                    d2.metric(
-                        "Reserva Gerada — 35%",
-                        _rel_moeda(reserva),
-                        help=(
-                            "Segue a regra atual do Ellosystem: 35% do lucro positivo "
-                            "de cada evento fechado."
-                        )
-                    )
-
-                    d3.metric(
-                        "Disponível após Reserva",
-                        _rel_moeda(lucro - reserva),
-                        help=(
-                            "Antes da destinação anual para o Fundo da Equipe. "
-                            "O Fundo é tratado na subaba própria."
-                        )
-                    )
-
-                # =====================================================
-                # META DO ANO
-                # =====================================================
-                with st.container(border=True):
-
-                    st.markdown(
-                        "#### 🎯 Metas do Ano"
-                    )
-
-                    m1, m2, m3 = st.columns(3)
-
-                    m1.metric(
-                        "Meta Anual",
-                        _rel_moeda(meta_total)
-                    )
-
-                    m2.metric(
-                        "Faturamento Real",
-                        _rel_moeda(fat)
-                    )
-
-                    m3.metric(
-                        "Atingimento",
-                        _rel_percentual(ating)
-                    )
-
-                # =====================================================
-                # DESTAQUES DO ANO
-                # =====================================================
-                maior_fat = ano_df.loc[
-                    ano_df["faturamento_evento"].idxmax()
+                base = ano_df[
+                    ano_df["data_dt"].dt.month
+                    == mes
                 ]
 
-                maior_lucro = ano_df.loc[
-                    ano_df["lucro_evento"].idxmax()
-                ]
-
-                st.markdown(
-                    "### 🎉 Destaques do Ano"
+                faturamento_mes = (
+                    float(
+                        base["faturamento_evento"].sum()
+                    )
+                    if not base.empty
+                    else 0.0
                 )
 
-                e1, e2 = st.columns(2)
-
-                e1.info(
-                    f"💰 Maior faturamento: "
-                    f"{maior_fat.get('cliente', 'Evento')} — "
-                    f"{_rel_moeda(maior_fat.get('faturamento_evento', 0))}"
+                custo_mes = (
+                    float(
+                        base["custo_evento"].sum()
+                    )
+                    if not base.empty
+                    else 0.0
                 )
 
-                e2.info(
-                    f"📈 Maior lucro: "
-                    f"{maior_lucro.get('cliente', 'Evento')} — "
-                    f"{_rel_moeda(maior_lucro.get('lucro_evento', 0))}"
+                lucro_mes = (
+                    float(
+                        base["lucro_evento"].sum()
+                    )
+                    if not base.empty
+                    else 0.0
                 )
 
-                # =====================================================
-                # FECHAMENTO MÊS A MÊS
-                # =====================================================
-                mensal = []
-
-                for mes in range(
-                    1,
-                    13
-                ):
-
-                    b = ano_df[
-                        ano_df[
-                            "data_dt"
-                        ].dt.month
-                        == mes
-                    ]
-
-                    f = (
-                        float(
-                            b[
-                                "faturamento_evento"
-                            ].sum()
-                        )
-                        if not b.empty
-                        else 0.0
-                    )
-
-                    c = (
-                        float(
-                            b[
-                                "custo_evento"
-                            ].sum()
-                        )
-                        if not b.empty
-                        else 0.0
-                    )
-
-                    l = (
-                        float(
-                            b[
-                                "lucro_evento"
-                            ].sum()
-                        )
-                        if not b.empty
-                        else 0.0
-                    )
-
-                    mensal.append({
-                        "Mês":
-                            meses_nomes[
-                                mes - 1
-                            ],
-                        "Eventos":
-                            int(
-                                len(
-                                    b
-                                )
-                            ),
-                        "Faturamento":
-                            f,
-                        "Custo":
-                            c,
-                        "Lucro":
-                            l,
-                        "CMV (%)":
-                            (
-                                c / f * 100
-                                if f > 0
-                                else 0.0
-                            ),
-                    })
-
-                mensal_df = pd.DataFrame(
-                    mensal
-                )
-
-                st.markdown(
-                    "### 📅 Fechamento Mês a Mês"
-                )
-
-                st.dataframe(
-                    mensal_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Faturamento":
-                            st.column_config.NumberColumn(
-                                format="R$ %.2f"
-                            ),
-                        "Custo":
-                            st.column_config.NumberColumn(
-                                format="R$ %.2f"
-                            ),
-                        "Lucro":
-                            st.column_config.NumberColumn(
-                                format="R$ %.2f"
-                            ),
-                        "CMV (%)":
-                            st.column_config.NumberColumn(
-                                format="%.2f%%"
-                            ),
-                    }
-                )
-
-
-            with subtab_fundo_equipe:
-
-                # =====================================================
-                # CONFIGURAÇÃO DO FUNDO
-                # =====================================================
-                percentual_fundo_padrao = 5.0
-
-                if fundo_fechado_dados:
-                    percentual_fundo_padrao = _rel_num(
-                        fundo_fechado_dados.get("percentual_fundo"),
-                        5.0
-                    )
-
-                percentual_fundo = st.number_input(
-                    "Percentual do lucro destinado ao Fundo da Equipe (%)",
-                    min_value=0.0,
-                    max_value=30.0,
-                    value=float(percentual_fundo_padrao),
-                    step=0.5,
-                    disabled=bool(fundo_fechado_dados),
-                    key=f"rel_v331_pct_fundo_{ano_fecha}",
-                    help=(
-                        "Sugestão inicial: 5%. O fundo é calculado sobre o lucro real anual positivo "
-                        "e não entra no CMV nem no custo dos eventos."
-                    )
-                )
-
-                lucro_base_fundo = max(0.0, lucro)
-
-                if fundo_fechado_dados:
-                    fundo_equipe = _rel_num(
-                        fundo_fechado_dados.get("valor_fundo")
-                    )
-                else:
-                    fundo_equipe = (
-                        lucro_base_fundo
-                        * percentual_fundo
-                        / 100
-                    )
-
-                disponivel_final = (
-                    lucro
-                    - reserva
-                    - fundo_equipe
-                )
-
-                with st.container(border=True):
-                    f1, f2, f3 = st.columns(3)
-
-                    f1.metric(
-                        "Lucro Real do Ano",
-                        _rel_moeda(lucro)
-                    )
-
-                    f2.metric(
-                        f"Fundo da Equipe — {percentual_fundo:.1f}%".replace(".", ","),
-                        _rel_moeda(fundo_equipe)
-                    )
-
-                    f3.metric(
-                        "Disponível após Reserva + Fundo",
-                        _rel_moeda(disponivel_final)
-                    )
-
-                # =====================================================
-                # FUNDO DA EQUIPE
-                # =====================================================
-                # =====================================================
-                st.markdown(
-                    "## 👥 Fundo Anual da Equipe"
-                )
-
-                st.caption(
-                    "A sugestão de distribuição não usa o valor do cachê. "
-                    "A participação é formada por 50% da participação em eventos "
-                    "e 50% das horas trabalhadas no ano."
-                )
-
-                # -----------------------------------------------------
-                # SE JÁ FECHOU, MOSTRA O SNAPSHOT CONGELADO
-                # -----------------------------------------------------
-                if fundo_fechado_dados:
-
-                    st.success(
-                        f"🔒 Fundo da Equipe de {ano_fecha} já foi fechado. "
-                        "Os valores abaixo são o snapshot oficial daquele fechamento."
-                    )
-
-                    try:
-                        dist_salva = pd.DataFrame(
-                            supabase.table(
-                                "fundo_equipe_distribuicao"
-                            )
-                            .select("*")
-                            .eq(
-                                "ano",
-                                int(ano_fecha)
-                            )
-                            .order(
-                                "valor_bonificacao",
-                                desc=True
-                            )
-                            .execute()
-                            .data
-                            or []
-                        )
-                    except Exception:
-                        dist_salva = pd.DataFrame()
-
-                    if not dist_salva.empty:
-
-                        dist_exibir = dist_salva[
-                            [
-                                c for c in [
-                                    "profissional",
-                                    "funcoes",
-                                    "eventos_trabalhados",
-                                    "horas_trabalhadas",
-                                    "participacao_pct",
-                                    "valor_bonificacao",
-                                    "status_pagamento",
-                                ]
-                                if c in dist_salva.columns
-                            ]
-                        ].copy()
-
-                        dist_exibir.rename(
-                            columns={
-                                "profissional":
-                                    "Profissional",
-                                "funcoes":
-                                    "Função(ões)",
-                                "eventos_trabalhados":
-                                    "Eventos",
-                                "horas_trabalhadas":
-                                    "Horas",
-                                "participacao_pct":
-                                    "Participação (%)",
-                                "valor_bonificacao":
-                                    "Bonificação",
-                                "status_pagamento":
-                                    "Pagamento",
-                            },
-                            inplace=True
-                        )
-
-                        st.dataframe(
-                            dist_exibir,
-                            use_container_width=True,
-                            hide_index=True,
-                            column_config={
-                                "Participação (%)":
-                                    st.column_config.NumberColumn(
-                                        format="%.2f%%"
-                                    ),
-                                "Bonificação":
-                                    st.column_config.NumberColumn(
-                                        format="R$ %.2f"
-                                    ),
-                                "Horas":
-                                    st.column_config.NumberColumn(
-                                        format="%.1f"
-                                    ),
-                            }
-                        )
-
-                    fechado_em = fundo_fechado_dados.get(
-                        "fechado_em"
-                    )
-
-                    if fechado_em:
-                        try:
-                            fechado_fmt = pd.to_datetime(
-                                fechado_em
-                            ).strftime(
-                                "%d/%m/%Y %H:%M"
-                            )
-                        except Exception:
-                            fechado_fmt = str(
-                                fechado_em
-                            )
-
-                        st.caption(
-                            f"Fechado em: {fechado_fmt}"
-                        )
-
-                # -----------------------------------------------------
-                # SE AINDA NÃO FECHOU, CALCULA A SIMULAÇÃO
-                # -----------------------------------------------------
-                else:
-
-                    try:
-                        df_caches_ano = pd.DataFrame(
-                            supabase.table(
-                                "pagamentos_equipe"
-                            )
-                            .select("*")
-                            .execute()
-                            .data
-                            or []
-                        )
-                    except Exception as erro_cache:
-                        df_caches_ano = pd.DataFrame()
-                        st.warning(
-                            f"Não foi possível carregar o histórico de Cachês: {erro_cache}"
-                        )
-
-                    distribuicao = pd.DataFrame()
-
-                    if not df_caches_ano.empty:
-
-                        ids_eventos_ano = set(
-                            pd.to_numeric(
-                                ano_df["id"],
-                                errors="coerce"
-                            )
-                            .dropna()
-                            .astype(int)
-                            .tolist()
-                        )
-
-                        if "evento_id" in df_caches_ano.columns:
-
-                            df_caches_ano["evento_id_num"] = pd.to_numeric(
-                                df_caches_ano["evento_id"],
-                                errors="coerce"
-                            )
-
-                            df_caches_ano = df_caches_ano[
-                                df_caches_ano["evento_id_num"]
-                                .isin(
-                                    ids_eventos_ano
-                                )
-                            ].copy()
-
-                        else:
-                            df_caches_ano = pd.DataFrame()
-
-                    if (
-                        not df_caches_ano.empty
-                        and "nome" in df_caches_ano.columns
-                    ):
-
-                        df_caches_ano["nome_limpo"] = (
-                            df_caches_ano["nome"]
-                            .fillna("")
-                            .astype(str)
-                            .str.strip()
-                        )
-
-                        df_caches_ano = df_caches_ano[
-                            df_caches_ano["nome_limpo"] != ""
-                        ].copy()
-
-                        df_caches_ano["nome_chave"] = (
-                            df_caches_ano["nome_limpo"]
-                            .str.lower()
-                        )
-
-                        if "horas" not in df_caches_ano.columns:
-                            df_caches_ano["horas"] = 0.0
-
-                        if "horas_extras" not in df_caches_ano.columns:
-                            df_caches_ano["horas_extras"] = 0.0
-
-                        df_caches_ano["horas"] = pd.to_numeric(
-                            df_caches_ano["horas"],
-                            errors="coerce"
-                        ).fillna(0)
-
-                        df_caches_ano["horas_extras"] = pd.to_numeric(
-                            df_caches_ano["horas_extras"],
-                            errors="coerce"
-                        ).fillna(0)
-
-                        df_caches_ano["horas_total"] = (
-                            df_caches_ano["horas"]
-                            + df_caches_ano["horas_extras"]
-                        )
-
-                        linhas_prof = []
-
-                        for nome_chave, grupo in df_caches_ano.groupby(
-                            "nome_chave"
-                        ):
-
-                            nome_exibicao = (
-                                grupo["nome_limpo"]
-                                .dropna()
-                                .astype(str)
-                                .iloc[0]
-                            )
-
-                            funcoes = ""
-
-                            if "funcao" in grupo.columns:
-                                funcoes_lista = sorted(
-                                    set(
-                                        [
-                                            str(x).strip()
-                                            for x in grupo["funcao"].dropna()
-                                            if str(x).strip()
-                                        ]
-                                    )
-                                )
-
-                                funcoes = ", ".join(
-                                    funcoes_lista
-                                )
-
-                            eventos_prof = int(
-                                grupo["evento_id_num"]
-                                .dropna()
-                                .astype(int)
-                                .nunique()
-                            )
-
-                            horas_prof = float(
-                                grupo["horas_total"].sum()
-                            )
-
-                            linhas_prof.append({
-                                "nome_chave":
-                                    nome_chave,
-                                "Profissional":
-                                    nome_exibicao,
-                                "Função(ões)":
-                                    funcoes,
-                                "Eventos":
-                                    eventos_prof,
-                                "Horas":
-                                    horas_prof,
-                            })
-
-                        distribuicao = pd.DataFrame(
-                            linhas_prof
-                        )
-
-                        if not distribuicao.empty:
-
-                            total_eventos_part = float(
-                                distribuicao["Eventos"].sum()
-                            )
-
-                            total_horas_part = float(
-                                distribuicao["Horas"].sum()
-                            )
-
-                            if total_eventos_part > 0:
-                                distribuicao[
-                                    "Peso Eventos"
-                                ] = (
-                                    distribuicao["Eventos"]
-                                    / total_eventos_part
-                                )
-                            else:
-                                distribuicao[
-                                    "Peso Eventos"
-                                ] = 0.0
-
-                            if total_horas_part > 0:
-                                distribuicao[
-                                    "Peso Horas"
-                                ] = (
-                                    distribuicao["Horas"]
-                                    / total_horas_part
-                                )
-                            else:
-                                distribuicao[
-                                    "Peso Horas"
-                                ] = 0.0
-
-                            # Regra 50/50.
-                            if (
-                                total_eventos_part > 0
-                                and total_horas_part > 0
-                            ):
-                                distribuicao[
-                                    "Participação (%)"
-                                ] = (
-                                    (
-                                        distribuicao[
-                                            "Peso Eventos"
-                                        ]
-                                        * 0.50
-                                    )
-                                    +
-                                    (
-                                        distribuicao[
-                                            "Peso Horas"
-                                        ]
-                                        * 0.50
-                                    )
-                                ) * 100
-
-                            elif total_eventos_part > 0:
-                                distribuicao[
-                                    "Participação (%)"
-                                ] = (
-                                    distribuicao[
-                                        "Peso Eventos"
-                                    ]
-                                    * 100
-                                )
-
-                            elif total_horas_part > 0:
-                                distribuicao[
-                                    "Participação (%)"
-                                ] = (
-                                    distribuicao[
-                                        "Peso Horas"
-                                    ]
-                                    * 100
-                                )
-
-                            else:
-                                distribuicao[
-                                    "Participação (%)"
-                                ] = 0.0
-
-                            distribuicao[
-                                "Bonificação Sugerida"
-                            ] = (
-                                distribuicao[
-                                    "Participação (%)"
-                                ]
-                                / 100
-                                * fundo_equipe
-                            )
-
-                            distribuicao.sort_values(
-                                "Bonificação Sugerida",
-                                ascending=False,
-                                inplace=True
-                            )
-
-                            st.dataframe(
-                                distribuicao[
-                                    [
-                                        "Profissional",
-                                        "Função(ões)",
-                                        "Eventos",
-                                        "Horas",
-                                        "Participação (%)",
-                                        "Bonificação Sugerida",
-                                    ]
-                                ],
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Horas":
-                                        st.column_config.NumberColumn(
-                                            format="%.1f"
-                                        ),
-                                    "Participação (%)":
-                                        st.column_config.NumberColumn(
-                                            format="%.2f%%"
-                                        ),
-                                    "Bonificação Sugerida":
-                                        st.column_config.NumberColumn(
-                                            format="R$ %.2f"
-                                        ),
-                                }
-                            )
-
-                            b1, b2, b3 = st.columns(3)
-
-                            b1.metric(
-                                "Profissionais",
-                                len(
-                                    distribuicao
-                                )
-                            )
-
-                            b2.metric(
-                                "Horas consideradas",
-                                f"{distribuicao['Horas'].sum():,.1f}"
-                            )
-
-                            b3.metric(
-                                "Fundo a distribuir",
-                                _rel_moeda(
-                                    fundo_equipe
-                                )
-                            )
-
-                        else:
-                            st.info(
-                                "Nenhum profissional elegível encontrado nos cachês vinculados aos eventos deste ano."
-                            )
-
-                    else:
-                        st.info(
-                            "Nenhum histórico de Cachês vinculado aos eventos fechados deste ano."
-                        )
-
-                    # -------------------------------------------------
-                    # FECHAMENTO / CONGELAMENTO
-                    # -------------------------------------------------
-                    ano_ja_terminou = int(
-                        ano_fecha
-                    ) < hoje.year
-
-                    if int(ano_fecha) == hoje.year:
-                        st.info(
-                            "🧪 O Fundo da Equipe deste ano está em modo de simulação. "
-                            "O fechamento definitivo fica disponível depois que o ano terminar."
-                        )
-
-                    elif int(ano_fecha) > hoje.year:
-                        st.info(
-                            "⏳ Este ano ainda não ocorreu. O fundo pode ser simulado, mas não fechado."
-                        )
-
-                    pode_fechar_fundo = (
-                        ano_ja_terminou
-                        and lucro > 0
-                        and fundo_equipe > 0
-                        and not distribuicao.empty
-                        and disponivel_final >= 0
-                    )
-
-                    confirmar_fundo = st.checkbox(
-                        (
-                            f"Confirmo o fechamento do Fundo da Equipe de {ano_fecha} "
-                            "e entendo que esta distribuição será congelada como histórico."
-                        ),
-                        disabled=not pode_fechar_fundo,
-                        key=f"rel_v331_confirma_fundo_{ano_fecha}"
-                    )
-
-                    if st.button(
-                        f"🔒 Fechar Fundo da Equipe — {ano_fecha}",
-                        type="primary",
-                        use_container_width=True,
-                        disabled=(
-                            not pode_fechar_fundo
-                            or not confirmar_fundo
-                        ),
-                        key=f"rel_v331_fechar_fundo_{ano_fecha}"
-                    ):
-
-                        try:
-                            resp_fundo = (
-                                supabase.table(
-                                    "fundo_equipe_anual"
-                                )
-                                .insert({
-                                    "ano":
-                                        int(
-                                            ano_fecha
-                                        ),
-                                    "lucro_base":
-                                        float(
-                                            lucro_base_fundo
-                                        ),
-                                    "percentual_fundo":
-                                        float(
-                                            percentual_fundo
-                                        ),
-                                    "valor_fundo":
-                                        float(
-                                            fundo_equipe
-                                        ),
-                                    "reserva_gerada":
-                                        float(
-                                            reserva
-                                        ),
-                                    "disponivel_final":
-                                        float(
-                                            disponivel_final
-                                        ),
-                                    "regra_distribuicao":
-                                        "50% eventos + 50% horas",
-                                    "status":
-                                        "Fechado",
-                                    "fechado_em":
-                                        datetime.now().isoformat(),
-                                })
-                                .execute()
-                            )
-
-                            fundo_id = None
-
-                            if resp_fundo.data:
-                                fundo_id = (
-                                    resp_fundo.data[0]
-                                    .get(
-                                        "id"
-                                    )
-                                )
-
-                            for _, linha in distribuicao.iterrows():
-
-                                supabase.table(
-                                    "fundo_equipe_distribuicao"
-                                ).insert({
-                                    "fundo_id":
-                                        int(
-                                            fundo_id
-                                        )
-                                        if fundo_id is not None
-                                        else None,
-                                    "ano":
-                                        int(
-                                            ano_fecha
-                                        ),
-                                    "profissional":
-                                        str(
-                                            linha[
-                                                "Profissional"
-                                            ]
-                                        ),
-                                    "funcoes":
-                                        str(
-                                            linha[
-                                                "Função(ões)"
-                                            ]
-                                        ),
-                                    "eventos_trabalhados":
-                                        int(
-                                            linha[
-                                                "Eventos"
-                                            ]
-                                        ),
-                                    "horas_trabalhadas":
-                                        float(
-                                            linha[
-                                                "Horas"
-                                            ]
-                                        ),
-                                    "participacao_pct":
-                                        float(
-                                            linha[
-                                                "Participação (%)"
-                                            ]
-                                        ),
-                                    "valor_bonificacao":
-                                        float(
-                                            linha[
-                                                "Bonificação Sugerida"
-                                            ]
-                                        ),
-                                    "status_pagamento":
-                                        "Pendente",
-                                }).execute()
-
-                            st.success(
-                                f"✅ Fundo da Equipe de {ano_fecha} fechado e congelado com sucesso."
-                            )
-
-                            st.rerun()
-
-                        except Exception as erro_fundo:
-                            st.error(
-                                f"Erro ao fechar o Fundo da Equipe: {erro_fundo}"
-                            )
-
-    # =========================================================
-    # TAB 5 — PRODUTOS
-    # =========================================================
-    with tab_prod:
-
-        st.markdown("## 📦 Desempenho por Produto / Serviço")
-        st.info(
-            "A análise detalhada por produto continuará sendo construída a partir "
-            "do histórico real de consumo do CMV. O resultado financeiro acima já "
-            "usa somente os fechamentos oficiais."
-        )
-
-
+                mensal.append({
+                    "Mês":
+                        meses_nomes[mes - 1],
+                    "Eventos":
+                        int(len(base)),
+                    "Faturamento":
+                        faturamento_mes,
+                    "Custo":
+                        custo_mes,
+                    "Lucro":
+                        lucro_mes,
+                })
+
+            st.markdown("### 📅 Resultado Mês a Mês")
+
+            st.dataframe(
+                pd.DataFrame(mensal),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Faturamento":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    "Custo":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                    "Lucro":
+                        st.column_config.NumberColumn(format="R$ %.2f"),
+                }
+            )
 
 
 elif menu == "Eventos":
@@ -19396,3 +17991,731 @@ elif menu == "Pacotes":
                             st.success("Serviço excluído!")
 
                             st.rerun()
+
+elif menu == "Fundo da Equipe":
+
+    st.title("👥 Fundo Anual da Equipe")
+    st.caption(
+        "Bonificação anual da equipe baseada no resultado real do negócio e na participação de cada profissional."
+    )
+
+    # =========================================================
+    # HELPERS
+    # =========================================================
+    def _fe_num(valor, padrao=0.0):
+        try:
+            if valor is None:
+                return float(padrao)
+            if pd.isna(valor):
+                return float(padrao)
+            return float(valor)
+        except Exception:
+            return float(padrao)
+
+    def _fe_moeda(valor):
+        txt = f"{_fe_num(valor):,.2f}"
+        txt = txt.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {txt}"
+
+    hoje_fe = datetime.now()
+
+    # =========================================================
+    # EVENTOS FECHADOS
+    # =========================================================
+    try:
+        df_fe_eventos = pd.DataFrame(
+            supabase.table("eventos")
+            .select("*")
+            .eq("cmv_status", "fechado")
+            .execute()
+            .data
+            or []
+        )
+    except Exception as erro:
+        st.error(f"Erro ao carregar os eventos fechados: {erro}")
+        df_fe_eventos = pd.DataFrame()
+
+    if not df_fe_eventos.empty:
+
+        if "data" not in df_fe_eventos.columns:
+            df_fe_eventos["data"] = None
+
+        df_fe_eventos["data_dt"] = pd.to_datetime(
+            df_fe_eventos["data"],
+            errors="coerce"
+        )
+
+        for col in [
+            "cmv_faturamento_total",
+            "cmv_custo_total",
+            "cmv_lucro_real",
+        ]:
+            if col not in df_fe_eventos.columns:
+                df_fe_eventos[col] = 0.0
+
+        df_fe_eventos["cmv_faturamento_total"] = pd.to_numeric(
+            df_fe_eventos["cmv_faturamento_total"],
+            errors="coerce"
+        ).fillna(0)
+
+        df_fe_eventos["cmv_custo_total"] = pd.to_numeric(
+            df_fe_eventos["cmv_custo_total"],
+            errors="coerce"
+        ).fillna(0)
+
+        df_fe_eventos["cmv_lucro_real"] = pd.to_numeric(
+            df_fe_eventos["cmv_lucro_real"],
+            errors="coerce"
+        ).fillna(0)
+
+        anos_fundo = sorted(
+            set(
+                df_fe_eventos["data_dt"]
+                .dropna()
+                .dt.year
+                .astype(int)
+                .tolist()
+            )
+        )
+
+    else:
+        anos_fundo = []
+
+    if not anos_fundo:
+        anos_fundo = [hoje_fe.year]
+
+    # =========================================================
+    # ANO
+    # =========================================================
+    ano_fundo = st.selectbox(
+        "📅 Ano de referência",
+        anos_fundo,
+        index=len(anos_fundo) - 1,
+        key="fe_ano"
+    )
+
+    ano_df = (
+        df_fe_eventos[
+            df_fe_eventos["data_dt"].dt.year
+            == int(ano_fundo)
+        ].copy()
+        if not df_fe_eventos.empty
+        else pd.DataFrame()
+    )
+
+    if ano_df.empty:
+
+        st.info(
+            "Nenhum evento com CMV fechado neste ano."
+        )
+
+    else:
+
+        faturamento_ano = float(
+            ano_df["cmv_faturamento_total"].sum()
+        )
+
+        custo_ano = float(
+            ano_df["cmv_custo_total"].sum()
+        )
+
+        lucro_ano = float(
+            ano_df["cmv_lucro_real"].sum()
+        )
+
+        # Reserva segue a regra já adotada:
+        # 35% do lucro positivo de cada evento.
+        reserva_ano = float(
+            ano_df["cmv_lucro_real"]
+            .apply(
+                lambda x:
+                    _fe_num(x) * 0.35
+                    if _fe_num(x) > 0
+                    else 0.0
+            )
+            .sum()
+        )
+
+        # =====================================================
+        # VERIFICA FECHAMENTO JÁ GRAVADO
+        # =====================================================
+        try:
+            resp_fundo = (
+                supabase.table("fundo_equipe_anual")
+                .select("*")
+                .eq("ano", int(ano_fundo))
+                .limit(1)
+                .execute()
+            )
+
+            fundo_fechado = (
+                resp_fundo.data[0]
+                if resp_fundo.data
+                else None
+            )
+
+        except Exception:
+            fundo_fechado = None
+
+        pct_padrao = (
+            _fe_num(
+                fundo_fechado.get("percentual_fundo"),
+                5.0
+            )
+            if fundo_fechado
+            else 5.0
+        )
+
+        # =====================================================
+        # DESTAQUE EXECUTIVO
+        # =====================================================
+        st.markdown("## 💰 Base do Fundo")
+
+        with st.container(border=True):
+
+            c1, c2, c3 = st.columns(3)
+
+            c1.metric(
+                "Faturamento Real do Ano",
+                _fe_moeda(faturamento_ano)
+            )
+
+            c2.metric(
+                "Custo Real do Ano",
+                _fe_moeda(custo_ano)
+            )
+
+            c3.metric(
+                "Lucro Real do Ano",
+                _fe_moeda(lucro_ano)
+            )
+
+        st.markdown("## ⚙️ Configuração")
+
+        percentual_fundo = st.number_input(
+            "Percentual do lucro destinado à equipe (%)",
+            min_value=0.0,
+            max_value=30.0,
+            value=float(pct_padrao),
+            step=0.5,
+            disabled=bool(fundo_fechado),
+            key=f"fe_pct_{ano_fundo}",
+            help=(
+                "Sugestão inicial: 5%. "
+                "O Fundo é uma destinação do lucro anual e não entra no CMV."
+            )
+        )
+
+        lucro_base = max(
+            0.0,
+            lucro_ano
+        )
+
+        if fundo_fechado:
+            valor_fundo = _fe_num(
+                fundo_fechado.get("valor_fundo")
+            )
+        else:
+            valor_fundo = (
+                lucro_base
+                * percentual_fundo
+                / 100
+            )
+
+        disponivel_final = (
+            lucro_ano
+            - reserva_ano
+            - valor_fundo
+        )
+
+        with st.container(border=True):
+
+            d1, d2, d3 = st.columns(3)
+
+            d1.metric(
+                "🛡️ Reserva — 35%",
+                _fe_moeda(reserva_ano)
+            )
+
+            d2.metric(
+                f"👥 Fundo da Equipe — {percentual_fundo:.1f}%".replace(".", ","),
+                _fe_moeda(valor_fundo)
+            )
+
+            d3.metric(
+                "💵 Disponível ao Negócio",
+                _fe_moeda(disponivel_final)
+            )
+
+        if lucro_ano <= 0:
+            st.warning(
+                "O ano não possui lucro real positivo. "
+                "O Fundo da Equipe fica zerado."
+            )
+
+        # =====================================================
+        # SE JÁ FECHADO
+        # =====================================================
+        if fundo_fechado:
+
+            st.success(
+                f"🔒 Fundo de {ano_fundo} já fechado. "
+                "A distribuição abaixo está congelada como histórico."
+            )
+
+            try:
+                df_dist = pd.DataFrame(
+                    supabase.table(
+                        "fundo_equipe_distribuicao"
+                    )
+                    .select("*")
+                    .eq("ano", int(ano_fundo))
+                    .order(
+                        "valor_bonificacao",
+                        desc=True
+                    )
+                    .execute()
+                    .data
+                    or []
+                )
+            except Exception:
+                df_dist = pd.DataFrame()
+
+            if not df_dist.empty:
+
+                exibir = df_dist[
+                    [
+                        c for c in [
+                            "profissional",
+                            "funcoes",
+                            "eventos_trabalhados",
+                            "horas_trabalhadas",
+                            "participacao_pct",
+                            "valor_bonificacao",
+                            "status_pagamento",
+                        ]
+                        if c in df_dist.columns
+                    ]
+                ].copy()
+
+                exibir.rename(
+                    columns={
+                        "profissional":
+                            "Profissional",
+                        "funcoes":
+                            "Função(ões)",
+                        "eventos_trabalhados":
+                            "Eventos",
+                        "horas_trabalhadas":
+                            "Horas",
+                        "participacao_pct":
+                            "Participação (%)",
+                        "valor_bonificacao":
+                            "Bonificação",
+                        "status_pagamento":
+                            "Pagamento",
+                    },
+                    inplace=True
+                )
+
+                st.dataframe(
+                    exibir,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Horas":
+                            st.column_config.NumberColumn(
+                                format="%.1f"
+                            ),
+                        "Participação (%)":
+                            st.column_config.NumberColumn(
+                                format="%.2f%%"
+                            ),
+                        "Bonificação":
+                            st.column_config.NumberColumn(
+                                format="R$ %.2f"
+                            ),
+                    }
+                )
+
+        # =====================================================
+        # SIMULAÇÃO / DISTRIBUIÇÃO
+        # =====================================================
+        else:
+
+            st.markdown("## 📊 Distribuição Sugerida")
+            st.caption(
+                "Regra atual: 50% pela participação em eventos e 50% pelas horas trabalhadas. "
+                "O valor do cachê não aumenta a participação."
+            )
+
+            try:
+                df_caches = pd.DataFrame(
+                    supabase.table("pagamentos_equipe")
+                    .select("*")
+                    .execute()
+                    .data
+                    or []
+                )
+            except Exception as erro:
+                st.warning(
+                    f"Não foi possível carregar os Cachês: {erro}"
+                )
+                df_caches = pd.DataFrame()
+
+            distribuicao = pd.DataFrame()
+
+            if not df_caches.empty and "evento_id" in df_caches.columns:
+
+                ids_eventos_ano = set(
+                    pd.to_numeric(
+                        ano_df["id"],
+                        errors="coerce"
+                    )
+                    .dropna()
+                    .astype(int)
+                    .tolist()
+                )
+
+                df_caches["evento_id_num"] = pd.to_numeric(
+                    df_caches["evento_id"],
+                    errors="coerce"
+                )
+
+                df_caches = df_caches[
+                    df_caches["evento_id_num"]
+                    .isin(ids_eventos_ano)
+                ].copy()
+
+            else:
+                df_caches = pd.DataFrame()
+
+            if (
+                not df_caches.empty
+                and "nome" in df_caches.columns
+            ):
+
+                df_caches["nome_limpo"] = (
+                    df_caches["nome"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+
+                df_caches = df_caches[
+                    df_caches["nome_limpo"] != ""
+                ].copy()
+
+                df_caches["nome_chave"] = (
+                    df_caches["nome_limpo"]
+                    .str.lower()
+                )
+
+                if "horas" not in df_caches.columns:
+                    df_caches["horas"] = 0.0
+
+                if "horas_extras" not in df_caches.columns:
+                    df_caches["horas_extras"] = 0.0
+
+                df_caches["horas"] = pd.to_numeric(
+                    df_caches["horas"],
+                    errors="coerce"
+                ).fillna(0)
+
+                df_caches["horas_extras"] = pd.to_numeric(
+                    df_caches["horas_extras"],
+                    errors="coerce"
+                ).fillna(0)
+
+                df_caches["horas_total"] = (
+                    df_caches["horas"]
+                    + df_caches["horas_extras"]
+                )
+
+                linhas = []
+
+                for nome_chave, grupo in df_caches.groupby(
+                    "nome_chave"
+                ):
+
+                    nome = (
+                        grupo["nome_limpo"]
+                        .iloc[0]
+                    )
+
+                    funcoes = ""
+
+                    if "funcao" in grupo.columns:
+                        funcoes = ", ".join(
+                            sorted(
+                                set(
+                                    [
+                                        str(x).strip()
+                                        for x in grupo["funcao"].dropna()
+                                        if str(x).strip()
+                                    ]
+                                )
+                            )
+                        )
+
+                    eventos_prof = int(
+                        grupo["evento_id_num"]
+                        .dropna()
+                        .astype(int)
+                        .nunique()
+                    )
+
+                    horas_prof = float(
+                        grupo["horas_total"].sum()
+                    )
+
+                    linhas.append({
+                        "Profissional": nome,
+                        "Função(ões)": funcoes,
+                        "Eventos": eventos_prof,
+                        "Horas": horas_prof,
+                    })
+
+                distribuicao = pd.DataFrame(linhas)
+
+                if not distribuicao.empty:
+
+                    total_eventos = float(
+                        distribuicao["Eventos"].sum()
+                    )
+
+                    total_horas = float(
+                        distribuicao["Horas"].sum()
+                    )
+
+                    if total_eventos > 0:
+                        peso_eventos = (
+                            distribuicao["Eventos"]
+                            / total_eventos
+                        )
+                    else:
+                        peso_eventos = 0.0
+
+                    if total_horas > 0:
+                        peso_horas = (
+                            distribuicao["Horas"]
+                            / total_horas
+                        )
+                    else:
+                        peso_horas = 0.0
+
+                    if (
+                        total_eventos > 0
+                        and total_horas > 0
+                    ):
+                        distribuicao["Participação (%)"] = (
+                            (
+                                peso_eventos * 0.50
+                            )
+                            +
+                            (
+                                peso_horas * 0.50
+                            )
+                        ) * 100
+
+                    elif total_eventos > 0:
+                        distribuicao["Participação (%)"] = (
+                            peso_eventos * 100
+                        )
+
+                    elif total_horas > 0:
+                        distribuicao["Participação (%)"] = (
+                            peso_horas * 100
+                        )
+
+                    else:
+                        distribuicao["Participação (%)"] = 0.0
+
+                    distribuicao["Bonificação Sugerida"] = (
+                        distribuicao["Participação (%)"]
+                        / 100
+                        * valor_fundo
+                    )
+
+                    distribuicao.sort_values(
+                        "Bonificação Sugerida",
+                        ascending=False,
+                        inplace=True
+                    )
+
+                    st.dataframe(
+                        distribuicao,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "Horas":
+                                st.column_config.NumberColumn(
+                                    format="%.1f"
+                                ),
+                            "Participação (%)":
+                                st.column_config.NumberColumn(
+                                    format="%.2f%%"
+                                ),
+                            "Bonificação Sugerida":
+                                st.column_config.NumberColumn(
+                                    format="R$ %.2f"
+                                ),
+                        }
+                    )
+
+                    with st.container(border=True):
+
+                        k1, k2, k3 = st.columns(3)
+
+                        k1.metric(
+                            "Profissionais",
+                            len(distribuicao)
+                        )
+
+                        k2.metric(
+                            "Horas Consideradas",
+                            f"{distribuicao['Horas'].sum():,.1f}"
+                        )
+
+                        k3.metric(
+                            "Fundo a Distribuir",
+                            _fe_moeda(valor_fundo)
+                        )
+
+            if distribuicao.empty:
+                st.info(
+                    "Nenhum profissional elegível encontrado nos Cachês vinculados aos eventos deste ano."
+                )
+
+            # =================================================
+            # FECHAMENTO
+            # =================================================
+            ano_encerrado = int(
+                ano_fundo
+            ) < hoje_fe.year
+
+            if int(ano_fundo) == hoje_fe.year:
+                st.info(
+                    "🧪 Este ano está em modo de simulação. "
+                    "O fechamento definitivo fica disponível depois que o ano terminar."
+                )
+
+            elif int(ano_fundo) > hoje_fe.year:
+                st.info(
+                    "⏳ Ano futuro: somente simulação."
+                )
+
+            pode_fechar = (
+                ano_encerrado
+                and lucro_ano > 0
+                and valor_fundo > 0
+                and not distribuicao.empty
+                and disponivel_final >= 0
+            )
+
+            confirmar = st.checkbox(
+                (
+                    f"Confirmo o fechamento do Fundo da Equipe de {ano_fundo} "
+                    "e entendo que a distribuição será congelada como histórico."
+                ),
+                disabled=not pode_fechar,
+                key=f"fe_confirmar_{ano_fundo}"
+            )
+
+            if st.button(
+                f"🔒 Fechar Fundo da Equipe — {ano_fundo}",
+                type="primary",
+                use_container_width=True,
+                disabled=(
+                    not pode_fechar
+                    or not confirmar
+                ),
+                key=f"fe_fechar_{ano_fundo}"
+            ):
+
+                try:
+                    resp = (
+                        supabase.table("fundo_equipe_anual")
+                        .insert({
+                            "ano":
+                                int(ano_fundo),
+                            "lucro_base":
+                                float(lucro_base),
+                            "percentual_fundo":
+                                float(percentual_fundo),
+                            "valor_fundo":
+                                float(valor_fundo),
+                            "reserva_gerada":
+                                float(reserva_ano),
+                            "disponivel_final":
+                                float(disponivel_final),
+                            "regra_distribuicao":
+                                "50% eventos + 50% horas",
+                            "status":
+                                "Fechado",
+                            "fechado_em":
+                                datetime.now().isoformat(),
+                        })
+                        .execute()
+                    )
+
+                    fundo_id = (
+                        resp.data[0].get("id")
+                        if resp.data
+                        else None
+                    )
+
+                    for _, linha in distribuicao.iterrows():
+
+                        supabase.table(
+                            "fundo_equipe_distribuicao"
+                        ).insert({
+                            "fundo_id":
+                                int(fundo_id)
+                                if fundo_id is not None
+                                else None,
+                            "ano":
+                                int(ano_fundo),
+                            "profissional":
+                                str(
+                                    linha["Profissional"]
+                                ),
+                            "funcoes":
+                                str(
+                                    linha["Função(ões)"]
+                                ),
+                            "eventos_trabalhados":
+                                int(
+                                    linha["Eventos"]
+                                ),
+                            "horas_trabalhadas":
+                                float(
+                                    linha["Horas"]
+                                ),
+                            "participacao_pct":
+                                float(
+                                    linha[
+                                        "Participação (%)"
+                                    ]
+                                ),
+                            "valor_bonificacao":
+                                float(
+                                    linha[
+                                        "Bonificação Sugerida"
+                                    ]
+                                ),
+                            "status_pagamento":
+                                "Pendente",
+                        }).execute()
+
+                    st.success(
+                        "✅ Fundo fechado e congelado com sucesso."
+                    )
+
+                    st.rerun()
+
+                except Exception as erro:
+                    st.error(
+                        f"Erro ao fechar o Fundo: {erro}"
+                    )
+
