@@ -9447,6 +9447,7 @@ elif menu == "Orçamentos":
                 SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
                 PageBreak, KeepTogether,
             )
+            from xml.sax.saxutils import escape
         except Exception:
             return None, (
                 "PDF indisponível: falta a biblioteca reportlab. "
@@ -9526,12 +9527,79 @@ elif menu == "Orçamentos":
         story.append(t_info)
         story.append(Spacer(1, 5*mm))
 
-        drinks_txt = str(evento.get("drinks", "") or "").strip()
+        drinks_txt = str(
+            evento.get("drinks", "") or ""
+        ).strip()
+
         if drinks_txt:
-            lista = [d.strip() for d in drinks_txt.split("\n") if d.strip()]
-            story.append(Paragraph("Carta de Drinks", subtitulo))
-            story.append(Paragraph(" • ".join(lista), normal))
-            story.append(Spacer(1, 4*mm))
+            lista = [
+                d.strip()
+                for d in drinks_txt.split("\n")
+                if d.strip()
+            ]
+
+            story.append(
+                Paragraph(
+                    "Carta de Drinks",
+                    subtitulo
+                )
+            )
+
+            story.append(
+                Paragraph(
+                    " • ".join(
+                        escape(d)
+                        for d in lista
+                    ),
+                    normal
+                )
+            )
+
+            story.append(
+                Spacer(
+                    1,
+                    4 * mm
+                )
+            )
+
+        observacoes_drinks = str(
+            evento.get(
+                "observacoes_drinks",
+                ""
+            )
+            or ""
+        ).strip()
+
+        if observacoes_drinks:
+
+            story.append(
+                Paragraph(
+                    "Observações / Drinks Personalizados",
+                    subtitulo
+                )
+            )
+
+            linhas_observacao = [
+                escape(linha.strip())
+                for linha in observacoes_drinks.splitlines()
+                if linha.strip()
+            ]
+
+            story.append(
+                Paragraph(
+                    "<br/>".join(
+                        linhas_observacao
+                    ),
+                    normal
+                )
+            )
+
+            story.append(
+                Spacer(
+                    1,
+                    4 * mm
+                )
+            )
 
         if isinstance(itens, pd.DataFrame):
             dados_itens = itens.to_dict("records")
@@ -9764,6 +9832,27 @@ elif menu == "Orçamentos":
         if itens.empty:
             st.info("Nenhum item foi salvo para este evento.")
             return
+
+        if evento is not None:
+            observacoes_drinks = str(
+                evento.get(
+                    "observacoes_drinks",
+                    ""
+                )
+                or ""
+            ).strip()
+
+            if observacoes_drinks:
+                st.markdown(
+                    "### 📝 Observações / Drinks Personalizados"
+                )
+
+                with st.container(
+                    border=True
+                ):
+                    st.write(
+                        observacoes_drinks
+                    )
 
         categorias_operacionais = [
             "Bebidas",
@@ -11895,6 +11984,106 @@ elif menu == "Orçamentos":
             st.divider()
         
             # =========================
+            # CARTA DE DRINKS
+            # =========================
+
+            st.subheader(
+                "🍸 Carta de Drinks"
+            )
+
+            st.caption(
+                "No Serviço Personalizado esta seleção é apenas operacional. "
+                "Ela informa quais drinks serão reproduzidos, sem gerar "
+                "ingredientes ou custos automáticos."
+            )
+
+            try:
+                df_receitas_sp = pd.DataFrame(
+                    supabase.table(
+                        "receitas"
+                    )
+                    .select("*")
+                    .execute()
+                    .data
+                    or []
+                )
+            except Exception:
+                df_receitas_sp = pd.DataFrame()
+
+            drinks_sp_disponiveis = []
+
+            if not df_receitas_sp.empty:
+
+                if "drink" in df_receitas_sp.columns:
+                    coluna_drink_sp = "drink"
+
+                elif "bebida" in df_receitas_sp.columns:
+                    coluna_drink_sp = "bebida"
+
+                else:
+                    coluna_drink_sp = None
+
+                if coluna_drink_sp is not None:
+
+                    drinks_sp_disponiveis = sorted(
+                        {
+                            str(x).strip()
+                            for x in (
+                                df_receitas_sp[
+                                    coluna_drink_sp
+                                ]
+                                .dropna()
+                                .astype(str)
+                                .tolist()
+                            )
+                            if str(x).strip()
+                        }
+                    )
+
+            drinks_sp_selecionados = st.multiselect(
+                "Selecionar drinks do evento",
+                drinks_sp_disponiveis,
+                key="sp_drinks_selecionados",
+                placeholder=(
+                    "Escolha os drinks que serão reproduzidos"
+                ),
+            )
+
+            if not drinks_sp_disponiveis:
+                st.caption(
+                    "Nenhum drink cadastrado em Receitas."
+                )
+
+            st.divider()
+
+            # =========================
+            # DRINKS PERSONALIZADOS / OBSERVAÇÕES
+            # =========================
+
+            st.subheader(
+                "📝 Drinks Personalizados / Observações"
+            )
+
+            st.caption(
+                "Registre receitas especiais, alterações do cliente "
+                "ou instruções que a equipe precise enxergar no checklist."
+            )
+
+            observacoes_drinks_sp = st.text_area(
+                "Observações para o checklist",
+                placeholder=(
+                    "Ex.:\n"
+                    "• Drink dos noivos: gin, frutas vermelhas e espuma.\n"
+                    "• Negroni sem laranja para o noivo.\n"
+                    "• Moscow Mule com menos gengibre."
+                ),
+                height=140,
+                key="sp_observacoes_drinks",
+            )
+
+            st.divider()
+
+            # =========================
             # PROFISSIONAIS
             # =========================
         
@@ -12062,7 +12251,14 @@ elif menu == "Orçamentos":
                     "convidados": 0,
                     "hora_chegada": str(hora_chegada),
                     "hora_inicio": str(hora_inicio),
-                    "drinks": "",
+                    "drinks": "\n".join(
+                        map(
+                            str,
+                            drinks_sp_selecionados
+                        )
+                    ),
+                    "observacoes_drinks":
+                        observacoes_drinks_sp,
                 }
 
                 pdf_sp, erro_pdf_sp = _gerar_pdf_checklist_operacional(
@@ -12268,6 +12464,17 @@ elif menu == "Orçamentos":
                     "comissao_valor": valor_comissao,
         
                     "equipe": nomes_equipe,
+
+                    "drinks": "\n".join(
+                        map(
+                            str,
+                            drinks_sp_selecionados
+                        )
+                    ),
+
+                    "observacoes_drinks":
+                        observacoes_drinks_sp.strip(),
+
         
                     "status": "pendente"
         
@@ -12369,6 +12576,16 @@ elif menu == "Orçamentos":
                         }).execute()
         
                 _limpar_estado_materiais("sp")
+
+                for chave_sp in [
+                    "sp_drinks_selecionados",
+                    "sp_observacoes_drinks",
+                ]:
+                    if chave_sp in st.session_state:
+                        del st.session_state[
+                            chave_sp
+                        ]
+
                 st.session_state["sp_itens_manuais"] = []
                 st.success(
                     "✅ Orçamento salvo com sucesso! "
