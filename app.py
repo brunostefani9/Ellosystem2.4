@@ -9434,99 +9434,244 @@ elif menu == "Orçamentos":
 
     def _gerar_pdf_checklist_operacional(evento, itens):
         """
-        PDF operacional inspirado no checklist físico do usuário.
+        PDF operacional premium.
         Não exibe custos, margem, lucro ou consumo gerencial.
         """
         try:
             from reportlab.lib import colors
             from reportlab.lib.pagesizes import A4, landscape
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
             from reportlab.lib.units import mm
             from reportlab.platypus import (
                 SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-                PageBreak, KeepTogether,
+                PageBreak,
             )
             from xml.sax.saxutils import escape
         except Exception:
             return None, (
                 "PDF indisponível: falta a biblioteca reportlab. "
-                "No terminal do projeto execute: python -m pip install reportlab "
-                "e depois reinicie o Streamlit."
+                "Adicione reportlab ao requirements.txt e reinicie o Streamlit."
             )
 
+        # -----------------------------------------------------
+        # PALETA
+        # -----------------------------------------------------
+        COR_ESCURO = colors.HexColor("#111827")
+        COR_ESCURO_2 = colors.HexColor("#1F2937")
+        COR_DOURADO = colors.HexColor("#C79A3B")
+        COR_DOURADO_CLARO = colors.HexColor("#F7E9C6")
+        COR_CLARO = colors.HexColor("#F8FAFC")
+        COR_CINZA = colors.HexColor("#6B7280")
+        COR_BORDA = colors.HexColor("#D1D5DB")
+        COR_BRANCO = colors.white
+
         buffer = io.BytesIO()
+
         doc = SimpleDocTemplate(
             buffer,
             pagesize=landscape(A4),
             rightMargin=10 * mm,
             leftMargin=10 * mm,
             topMargin=10 * mm,
-            bottomMargin=10 * mm,
+            bottomMargin=13 * mm,
+            title="Checklist Operacional do Evento",
+            author="Ellosystem",
         )
 
         styles = getSampleStyleSheet()
-        titulo = ParagraphStyle(
-            "titulo_check_v10",
-            parent=styles["Title"],
-            alignment=TA_CENTER,
-            fontSize=16,
-            leading=19,
-            spaceAfter=6,
+
+        marca = ParagraphStyle(
+            "check_marca_v16",
+            parent=styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=13,
+            textColor=COR_DOURADO,
+            alignment=TA_LEFT,
         )
+
+        titulo = ParagraphStyle(
+            "check_titulo_v16",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=18,
+            leading=21,
+            textColor=COR_BRANCO,
+            alignment=TA_LEFT,
+            spaceAfter=0,
+        )
+
+        frase = ParagraphStyle(
+            "check_frase_v16",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=8.5,
+            leading=11,
+            textColor=colors.HexColor("#E5E7EB"),
+            alignment=TA_LEFT,
+        )
+
         subtitulo = ParagraphStyle(
-            "sub_check_v10",
+            "check_sub_v16",
             parent=styles["Heading2"],
-            fontSize=10,
-            leading=12,
-            spaceBefore=5,
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=14,
+            textColor=COR_ESCURO,
+            spaceBefore=3,
             spaceAfter=4,
         )
+
         normal = ParagraphStyle(
-            "normal_check_v10",
+            "check_normal_v16",
             parent=styles["BodyText"],
+            fontName="Helvetica",
             fontSize=8.5,
-            leading=10,
+            leading=11,
+            textColor=COR_ESCURO_2,
         )
+
         pequeno = ParagraphStyle(
-            "peq_check_v10",
+            "check_peq_v16",
             parent=styles["BodyText"],
-            fontSize=7.5,
+            fontName="Helvetica",
+            fontSize=7.2,
             leading=9,
+            textColor=COR_CINZA,
         )
+
+        # -----------------------------------------------------
+        # RODAPÉ
+        # -----------------------------------------------------
+        def _rodape(canvas, doc_obj):
+            canvas.saveState()
+            largura, _ = landscape(A4)
+
+            canvas.setStrokeColor(COR_DOURADO)
+            canvas.setLineWidth(0.7)
+            canvas.line(
+                10 * mm,
+                9 * mm,
+                largura - 10 * mm,
+                9 * mm,
+            )
+
+            canvas.setFont("Helvetica", 7.2)
+            canvas.setFillColor(COR_CINZA)
+
+            canvas.drawString(
+                10 * mm,
+                5 * mm,
+                "Preparar bem é parte de servir bem. Conferir, registrar e retornar."
+            )
+
+            canvas.drawRightString(
+                largura - 10 * mm,
+                5 * mm,
+                f"Ellosystem • Página {doc_obj.page}"
+            )
+
+            canvas.restoreState()
 
         story = []
-        story.append(Paragraph("CHECKLIST DE LOGÍSTICA E REVISÃO DE EVENTO", titulo))
 
-        info = [
-            ["Cliente", str(evento.get("cliente", "") or ""),
-             "Data", str(evento.get("data", "") or ""),
-             "Evento", str(evento.get("tipo_evento", "") or "")],
-            ["Cidade", str(evento.get("cidade", "") or ""),
-             "Local", str(evento.get("endereco", "") or ""),
-             "Convidados", str(evento.get("convidados", "") or "")],
-            ["Chegada equipe", str(evento.get("hora_chegada", "") or ""),
-             "Início serviço", str(evento.get("hora_inicio", "") or ""),
-             "Evento #", str(evento.get("id", "") or "")],
+        # -----------------------------------------------------
+        # CABEÇALHO PREMIUM
+        # -----------------------------------------------------
+        cab_esq = [
+            Paragraph("ELLOSYSTEM", marca),
+            Paragraph("CHECKLIST OPERACIONAL DO EVENTO", titulo),
+            Paragraph(
+                "Mapa oficial da equipe para separação, conferência, retorno e fechamento.",
+                frase,
+            ),
         ]
-        t_info = Table(info, colWidths=[25*mm, 55*mm, 25*mm, 45*mm, 25*mm, 45*mm])
-        t_info.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#F3F4F6")),
-            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#B8BEC8")),
-            ("FONTNAME", (0,0), (-1,-1), "Helvetica"),
-            ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
-            ("FONTNAME", (2,0), (2,-1), "Helvetica-Bold"),
-            ("FONTNAME", (4,0), (4,-1), "Helvetica-Bold"),
-            ("FONTSIZE", (0,0), (-1,-1), 8),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("LEFTPADDING", (0,0), (-1,-1), 4),
-            ("RIGHTPADDING", (0,0), (-1,-1), 4),
-            ("TOPPADDING", (0,0), (-1,-1), 4),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-        ]))
-        story.append(t_info)
-        story.append(Spacer(1, 5*mm))
 
+        cab_dir = Paragraph(
+            "<b>Organização • Precisão • Cuidado</b><br/>"
+            "Cada detalhe preparado antes do evento ajuda a entregar uma experiência melhor.",
+            ParagraphStyle(
+                "check_header_right_v16",
+                parent=frase,
+                alignment=TA_CENTER,
+                fontSize=8,
+                leading=10,
+            ),
+        )
+
+        header = Table(
+            [[cab_esq, cab_dir]],
+            colWidths=[175 * mm, 92 * mm],
+        )
+        header.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_ESCURO),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ("LINEBELOW", (0, 0), (-1, -1), 2, COR_DOURADO),
+        ]))
+
+        story.append(header)
+        story.append(Spacer(1, 5 * mm))
+
+        # -----------------------------------------------------
+        # INFORMAÇÕES DO EVENTO
+        # -----------------------------------------------------
+        info = [
+            [
+                Paragraph("<b>Cliente</b>", pequeno),
+                Paragraph(escape(str(evento.get("cliente", "") or "")), normal),
+                Paragraph("<b>Data</b>", pequeno),
+                Paragraph(escape(str(evento.get("data", "") or "")), normal),
+                Paragraph("<b>Tipo</b>", pequeno),
+                Paragraph(escape(str(evento.get("tipo_evento", "") or "")), normal),
+            ],
+            [
+                Paragraph("<b>Cidade</b>", pequeno),
+                Paragraph(escape(str(evento.get("cidade", "") or "")), normal),
+                Paragraph("<b>Local</b>", pequeno),
+                Paragraph(escape(str(evento.get("endereco", "") or "")), normal),
+                Paragraph("<b>Convidados</b>", pequeno),
+                Paragraph(escape(str(evento.get("convidados", "") or "")), normal),
+            ],
+            [
+                Paragraph("<b>Chegada equipe</b>", pequeno),
+                Paragraph(escape(str(evento.get("hora_chegada", "") or "")), normal),
+                Paragraph("<b>Início serviço</b>", pequeno),
+                Paragraph(escape(str(evento.get("hora_inicio", "") or "")), normal),
+                Paragraph("<b>Evento</b>", pequeno),
+                Paragraph(f"#{escape(str(evento.get('id', '') or ''))}", normal),
+            ],
+        ]
+
+        t_info = Table(
+            info,
+            colWidths=[
+                24 * mm, 55 * mm,
+                24 * mm, 55 * mm,
+                24 * mm, 78 * mm,
+            ],
+        )
+
+        t_info.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_CLARO),
+            ("GRID", (0, 0), (-1, -1), 0.35, COR_BORDA),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+
+        story.append(t_info)
+        story.append(Spacer(1, 4 * mm))
+
+        # -----------------------------------------------------
+        # CARTA DE DRINKS
+        # -----------------------------------------------------
         drinks_txt = str(
             evento.get("drinks", "") or ""
         ).strip()
@@ -9538,76 +9683,84 @@ elif menu == "Orçamentos":
                 if d.strip()
             ]
 
-            story.append(
-                Paragraph(
-                    "Carta de Drinks",
-                    subtitulo
-                )
+            box_drinks = Table(
+                [[
+                    Paragraph(
+                        "<b>CARTA DE DRINKS</b><br/>"
+                        + "  •  ".join(
+                            escape(d)
+                            for d in lista
+                        ),
+                        normal,
+                    )
+                ]],
+                colWidths=[267 * mm],
             )
 
-            story.append(
-                Paragraph(
-                    " • ".join(
-                        escape(d)
-                        for d in lista
-                    ),
-                    normal
-                )
-            )
+            box_drinks.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F3F4F6")),
+                ("BOX", (0, 0), (-1, -1), 0.8, COR_DOURADO),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]))
 
-            story.append(
-                Spacer(
-                    1,
-                    4 * mm
-                )
-            )
+            story.append(box_drinks)
+            story.append(Spacer(1, 3 * mm))
 
+        # -----------------------------------------------------
+        # OBSERVAÇÕES / DRINKS PERSONALIZADOS
+        # -----------------------------------------------------
         observacoes_drinks = str(
-            evento.get(
-                "observacoes_drinks",
-                ""
-            )
-            or ""
+            evento.get("observacoes_drinks", "") or ""
         ).strip()
 
         if observacoes_drinks:
-
-            story.append(
-                Paragraph(
-                    "Observações / Drinks Personalizados",
-                    subtitulo
-                )
-            )
-
             linhas_observacao = [
                 escape(linha.strip())
                 for linha in observacoes_drinks.splitlines()
                 if linha.strip()
             ]
 
-            story.append(
-                Paragraph(
-                    "<br/>".join(
-                        linhas_observacao
-                    ),
-                    normal
-                )
+            box_obs = Table(
+                [[
+                    Paragraph(
+                        "<b>OBSERVAÇÕES / DRINKS PERSONALIZADOS</b><br/>"
+                        + "<br/>".join(linhas_observacao),
+                        normal,
+                    )
+                ]],
+                colWidths=[267 * mm],
             )
 
-            story.append(
-                Spacer(
-                    1,
-                    4 * mm
-                )
-            )
+            box_obs.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), COR_DOURADO_CLARO),
+                ("BOX", (0, 0), (-1, -1), 0.6, COR_DOURADO),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]))
 
+            story.append(box_obs)
+            story.append(Spacer(1, 4 * mm))
+
+        # -----------------------------------------------------
+        # ITENS
+        # -----------------------------------------------------
         if isinstance(itens, pd.DataFrame):
             dados_itens = itens.to_dict("records")
         else:
             dados_itens = list(itens or [])
 
-        # Somente itens físicos/operacionais entram no mapa de carga.
-        ignorar = {"equipe", "custos", "locação", "locacao"}
+        ignorar = {
+            "equipe",
+            "custos",
+            "locação",
+            "locacao",
+        }
+
         dados_itens = [
             x for x in dados_itens
             if str(x.get("categoria", "") or "").strip().lower() not in ignorar
@@ -9623,35 +9776,75 @@ elif menu == "Orçamentos":
             "Kit Bar": 6,
             "Materiais": 6,
             "Copos / Taças": 7,
-            "Locação": 7,
             "Decoração": 8,
         }
+
         dados_itens = sorted(
             dados_itens,
             key=lambda x: (
-                ordem.get(str(x.get("categoria", "") or ""), 99),
-                _norm_orcamento(x.get("produto", "")),
+                ordem.get(
+                    str(x.get("categoria", "") or ""),
+                    99
+                ),
+                _norm_orcamento(
+                    x.get("produto", "")
+                ),
             ),
         )
 
+        story.append(
+            Paragraph(
+                "MAPA DE CARGA E CONFERÊNCIA",
+                subtitulo
+            )
+        )
+
         cab = [
-            "Tipo do Material",
-            "Descrição do Item",
-            "Qtd. Sistema\n(Prevista)",
-            "Conf. Ida\n(Equipe)",
-            "Conf. Volta\n(Equipe)",
-            "Contagem Final\n(Estoque)",
-            "Diferença\nSobra / Perda",
+            "Categoria",
+            "Item / Descrição",
+            "Qtd. Sistema",
+            "Ida",
+            "Volta",
+            "Conf. Final",
+            "Diferença",
         ]
+
         linhas = [cab]
+
         for item in dados_itens:
             item_op = _orc_item_checklist_operacional(item)
-            unidade = str(item_op.get("unidade_exibicao", "") or "").strip()
-            qtd = _fmt_qtd_pdf(item_op.get("quantidade_exibicao", 0))
-            qtd_sistema = f"{qtd} {unidade}".strip()
+
+            unidade = str(
+                item_op.get(
+                    "unidade_exibicao",
+                    ""
+                )
+                or ""
+            ).strip()
+
+            qtd = _fmt_qtd_pdf(
+                item_op.get(
+                    "quantidade_exibicao",
+                    0
+                )
+            )
+
+            qtd_sistema = (
+                f"{qtd} {unidade}".strip()
+            )
+
             linhas.append([
-                str(item_op.get("categoria_exibicao", item.get("categoria", "")) or ""),
-                str(item.get("produto", "") or ""),
+                str(
+                    item_op.get(
+                        "categoria_exibicao",
+                        item.get("categoria", "")
+                    )
+                    or ""
+                ),
+                str(
+                    item.get("produto", "")
+                    or ""
+                ),
                 qtd_sistema,
                 "",
                 "",
@@ -9662,46 +9855,130 @@ elif menu == "Orçamentos":
         tabela = Table(
             linhas,
             repeatRows=1,
-            colWidths=[30*mm, 63*mm, 31*mm, 31*mm, 31*mm, 34*mm, 34*mm],
-            rowHeights=None,
+            colWidths=[
+                29 * mm,
+                79 * mm,
+                34 * mm,
+                29 * mm,
+                29 * mm,
+                34 * mm,
+                33 * mm,
+            ],
         )
-        tabela.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1F2937")),
-            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE", (0,0), (-1,0), 7.2),
-            ("ALIGN", (2,0), (-1,-1), "CENTER"),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("GRID", (0,0), (-1,-1), 0.45, colors.HexColor("#9CA3AF")),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#F9FAFB")]),
-            ("FONTSIZE", (0,1), (-1,-1), 7.8),
-            ("TOPPADDING", (0,0), (-1,-1), 5),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-            ("LEFTPADDING", (0,0), (-1,-1), 4),
-            ("RIGHTPADDING", (0,0), (-1,-1), 4),
-        ]))
-        story.append(tabela)
 
-        story.append(Spacer(1, 5*mm))
-        assinaturas = Table([
-            ["Conferência de Ida - Estoquista / Equipe", "Responsável pelo Evento", "Conferência Final - Estoque"],
-            ["\n\n________________________________", "\n\n________________________________", "\n\n________________________________"],
-        ], colWidths=[85*mm, 85*mm, 85*mm])
-        assinaturas.setStyle(TableStyle([
-            ("ALIGN", (0,0), (-1,-1), "CENTER"),
-            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE", (0,0), (-1,-1), 8),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+        tabela.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), COR_ESCURO_2),
+            ("TEXTCOLOR", (0, 0), (-1, 0), COR_BRANCO),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 7.4),
+            ("ALIGN", (2, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("GRID", (0, 0), (-1, -1), 0.4, COR_BORDA),
+            (
+                "ROWBACKGROUNDS",
+                (0, 1),
+                (-1, -1),
+                [
+                    COR_BRANCO,
+                    colors.HexColor("#F8FAFC"),
+                ],
+            ),
+            ("FONTSIZE", (0, 1), (-1, -1), 7.7),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("LINEBELOW", (0, 0), (-1, 0), 1.2, COR_DOURADO),
         ]))
+
+        story.append(tabela)
+        story.append(Spacer(1, 5 * mm))
+
+        # -----------------------------------------------------
+        # ASSINATURAS
+        # -----------------------------------------------------
+        assinaturas = Table(
+            [
+                [
+                    "CONFERÊNCIA DE IDA",
+                    "RESPONSÁVEL PELO EVENTO",
+                    "CONFERÊNCIA FINAL",
+                ],
+                [
+                    "\n\n________________________________",
+                    "\n\n________________________________",
+                    "\n\n________________________________",
+                ],
+                [
+                    "Estoque / Equipe",
+                    "Líder / Responsável",
+                    "Estoque",
+                ],
+            ],
+            colWidths=[
+                89 * mm,
+                89 * mm,
+                89 * mm,
+            ],
+        )
+
+        assinaturas.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("TEXTCOLOR", (0, 0), (-1, 0), COR_ESCURO),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+            ("BACKGROUND", (0, 0), (-1, 0), COR_DOURADO_CLARO),
+            ("BOX", (0, 0), (-1, -1), 0.4, COR_BORDA),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+
         story.append(assinaturas)
 
+        # -----------------------------------------------------
+        # PÁGINA 2 — OCORRÊNCIAS
+        # -----------------------------------------------------
         story.append(PageBreak())
-        story.append(Paragraph("REGISTRO DE OCORRÊNCIAS DO EVENTO", titulo))
-        story.append(Paragraph(
-            "Utilize esta página para registrar fatos que impactem o fechamento do evento.",
-            normal,
-        ))
-        story.append(Spacer(1, 4*mm))
+
+        ocorr_header = Table(
+            [[
+                Paragraph("ELLOSYSTEM", marca),
+                Paragraph(
+                    "REGISTRO DE OCORRÊNCIAS DO EVENTO",
+                    ParagraphStyle(
+                        "check_occ_title_v16",
+                        parent=titulo,
+                        alignment=TA_CENTER,
+                        fontSize=16,
+                    ),
+                ),
+            ]],
+            colWidths=[60 * mm, 207 * mm],
+        )
+
+        ocorr_header.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_ESCURO),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ("LINEBELOW", (0, 0), (-1, -1), 2, COR_DOURADO),
+        ]))
+
+        story.append(ocorr_header)
+        story.append(Spacer(1, 4 * mm))
+
+        story.append(
+            Paragraph(
+                "Registre somente fatos que possam impactar o fechamento, "
+                "a cobrança, a operação ou a responsabilidade por materiais.",
+                normal,
+            )
+        )
+
+        story.append(Spacer(1, 4 * mm))
 
         for secao in [
             "Horas extras / extensão do evento",
@@ -9709,118 +9986,620 @@ elif menu == "Orçamentos":
             "Quebras e avarias",
             "Observações gerais",
         ]:
-            story.append(Paragraph(secao, subtitulo))
-            linhas_obs = [["Data / Hora", "Descrição / Ocorrência", "Responsável"]]
-            linhas_obs += [["", "", ""] for _ in range(4)]
-            t = Table(linhas_obs, colWidths=[35*mm, 170*mm, 50*mm], rowHeights=[8*mm] + [11*mm]*4)
-            t.setStyle(TableStyle([
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#E5E7EB")),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("GRID", (0,0), (-1,-1), 0.4, colors.HexColor("#9CA3AF")),
-                ("FONTSIZE", (0,0), (-1,-1), 8),
-                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ]))
-            story.append(t)
-            story.append(Spacer(1, 3*mm))
 
-        doc.build(story)
+            story.append(
+                Paragraph(
+                    secao.upper(),
+                    subtitulo
+                )
+            )
+
+            linhas_obs = [
+                [
+                    "Data / Hora",
+                    "Descrição / Ocorrência",
+                    "Responsável",
+                ]
+            ]
+
+            linhas_obs += [
+                ["", "", ""]
+                for _ in range(4)
+            ]
+
+            t = Table(
+                linhas_obs,
+                colWidths=[
+                    35 * mm,
+                    170 * mm,
+                    62 * mm,
+                ],
+                rowHeights=[
+                    8 * mm
+                ] + [
+                    11 * mm
+                    for _ in range(4)
+                ],
+            )
+
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), COR_ESCURO_2),
+                ("TEXTCOLOR", (0, 0), (-1, 0), COR_BRANCO),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.4, COR_BORDA),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("LINEBELOW", (0, 0), (-1, 0), 1, COR_DOURADO),
+            ]))
+
+            story.append(t)
+            story.append(Spacer(1, 3 * mm))
+
+        doc.build(
+            story,
+            onFirstPage=_rodape,
+            onLaterPages=_rodape,
+        )
+
         buffer.seek(0)
         return buffer.getvalue(), None
 
     def _gerar_pdf_proposta_cliente(dados):
-        """Gera proposta comercial sem expor custos, margem ou lucro."""
+        """
+        Proposta comercial premium.
+        Não exibe custo interno, margem, lucro ou CMV.
+        """
         try:
             from reportlab.lib import colors
             from reportlab.lib.pagesizes import A4
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
             from reportlab.lib.units import mm
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.platypus import (
+                SimpleDocTemplate, Paragraph, Spacer,
+                Table, TableStyle, KeepTogether,
+            )
+            from xml.sax.saxutils import escape
         except Exception:
             return None, (
                 "PDF indisponível: falta a biblioteca reportlab. "
-                "No terminal do projeto execute: python -m pip install reportlab "
-                "e depois reinicie o Streamlit."
+                "Adicione reportlab ao requirements.txt e reinicie o Streamlit."
             )
 
+        # -----------------------------------------------------
+        # PALETA
+        # -----------------------------------------------------
+        COR_ESCURO = colors.HexColor("#111827")
+        COR_ESCURO_2 = colors.HexColor("#1F2937")
+        COR_DOURADO = colors.HexColor("#C79A3B")
+        COR_DOURADO_CLARO = colors.HexColor("#F7E9C6")
+        COR_CLARO = colors.HexColor("#F8FAFC")
+        COR_CINZA = colors.HexColor("#6B7280")
+        COR_BORDA = colors.HexColor("#D1D5DB")
+        COR_BRANCO = colors.white
+        COR_VERDE = colors.HexColor("#166534")
+
         buffer = io.BytesIO()
+
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
-            rightMargin=18*mm,
-            leftMargin=18*mm,
-            topMargin=15*mm,
-            bottomMargin=15*mm,
+            rightMargin=16 * mm,
+            leftMargin=16 * mm,
+            topMargin=14 * mm,
+            bottomMargin=15 * mm,
+            title="Proposta Comercial para Evento",
+            author="Ellosystem",
         )
+
         styles = getSampleStyleSheet()
+
+        marca = ParagraphStyle(
+            "prop_marca_v16",
+            parent=styles["BodyText"],
+            fontName="Helvetica-Bold",
+            fontSize=11,
+            leading=13,
+            textColor=COR_DOURADO,
+        )
+
         title = ParagraphStyle(
-            "prop_title_v10", parent=styles["Title"], alignment=TA_CENTER,
-            fontSize=20, leading=24, spaceAfter=8,
+            "prop_title_v16",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=22,
+            leading=25,
+            textColor=COR_BRANCO,
+            alignment=TA_LEFT,
         )
+
+        tagline = ParagraphStyle(
+            "prop_tagline_v16",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+            textColor=colors.HexColor("#E5E7EB"),
+        )
+
         h2 = ParagraphStyle(
-            "prop_h2_v10", parent=styles["Heading2"], fontSize=12,
-            leading=15, spaceBefore=8, spaceAfter=5,
+            "prop_h2_v16",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=15,
+            textColor=COR_ESCURO,
+            spaceBefore=6,
+            spaceAfter=5,
         )
+
         normal = ParagraphStyle(
-            "prop_norm_v10", parent=styles["BodyText"], fontSize=10, leading=14,
+            "prop_norm_v16",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9.3,
+            leading=13,
+            textColor=COR_ESCURO_2,
         )
+
+        pequeno = ParagraphStyle(
+            "prop_small_v16",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=7.8,
+            leading=10,
+            textColor=COR_CINZA,
+        )
+
         valor = ParagraphStyle(
-            "prop_val_v10", parent=styles["Title"], alignment=TA_CENTER,
-            fontSize=23, leading=28, textColor=colors.HexColor("#111827"),
-            spaceBefore=10, spaceAfter=8,
+            "prop_val_v16",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            alignment=TA_CENTER,
+            fontSize=24,
+            leading=28,
+            textColor=COR_VERDE,
+            spaceBefore=2,
+            spaceAfter=2,
         )
 
-        story = [
-            Paragraph("PROPOSTA PARA EVENTO", title),
-            Paragraph(
-                "Uma proposta preparada especialmente para o seu evento.",
-                normal,
-            ),
-            Spacer(1, 5*mm),
-        ]
-        info = [
-            ["Cliente", str(dados.get("cliente", "") or "")],
-            ["Evento", str(dados.get("tipo_evento", "") or "")],
-            ["Data", str(dados.get("data", "") or "")],
-            ["Local", str(dados.get("local", "") or "")],
-            ["Convidados", str(dados.get("convidados", "") or "")],
-            ["Duração", f"{dados.get('horas', 0)} horas"],
-        ]
-        t = Table(info, colWidths=[38*mm, 115*mm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#F3F4F6")),
-            ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
-            ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor("#D1D5DB")),
-            ("FONTSIZE", (0,0), (-1,-1), 9),
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("TOPPADDING", (0,0), (-1,-1), 5),
-            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ]))
-        story.append(t)
-        drinks = dados.get("drinks", []) or []
-        if drinks:
-            story.append(Paragraph("Carta de Drinks", h2))
-            for d in drinks:
-                story.append(Paragraph(f"• {d}", normal))
+        # -----------------------------------------------------
+        # RODAPÉ
+        # -----------------------------------------------------
+        def _rodape(canvas, doc_obj):
+            canvas.saveState()
 
-        story.append(Paragraph("Serviço", h2))
-        story.append(Paragraph(
-            "Estrutura e operação de bar conforme a modalidade contratada, "
-            "com os itens e equipe definidos para o evento.",
-            normal,
-        ))
-        story.append(Paragraph("Investimento", h2))
-        story.append(Paragraph(
-            f"R$ {float(dados.get('valor_final', 0) or 0):,.2f}", valor
-        ))
-        if float(dados.get("valor_por_convidado", 0) or 0) > 0:
-            story.append(Paragraph(
-                f"Referência por convidado: R$ {float(dados.get('valor_por_convidado', 0) or 0):,.2f}",
+            largura, _ = A4
+
+            canvas.setStrokeColor(COR_DOURADO)
+            canvas.setLineWidth(0.6)
+            canvas.line(
+                16 * mm,
+                10 * mm,
+                largura - 16 * mm,
+                10 * mm,
+            )
+
+            canvas.setFont("Helvetica", 7.2)
+            canvas.setFillColor(COR_CINZA)
+
+            canvas.drawString(
+                16 * mm,
+                6 * mm,
+                "Ellosystem • Proposta comercial para serviços em eventos"
+            )
+
+            canvas.drawRightString(
+                largura - 16 * mm,
+                6 * mm,
+                f"Página {doc_obj.page}"
+            )
+
+            canvas.restoreState()
+
+        story = []
+
+        # -----------------------------------------------------
+        # CAPA / CABEÇALHO
+        # -----------------------------------------------------
+        header = Table(
+            [[
+                [
+                    Paragraph("ELLOSYSTEM", marca),
+                    Paragraph("PROPOSTA COMERCIAL", title),
+                    Paragraph(
+                        "Cada evento é único. Nosso compromisso é transformar "
+                        "o serviço de bar em uma experiência fluida, elegante "
+                        "e memorável.",
+                        tagline,
+                    ),
+                ]
+            ]],
+            colWidths=[178 * mm],
+        )
+
+        header.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_ESCURO),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LINEBELOW", (0, 0), (-1, -1), 2.2, COR_DOURADO),
+        ]))
+
+        story.append(header)
+        story.append(Spacer(1, 6 * mm))
+
+        # -----------------------------------------------------
+        # ABERTURA
+        # -----------------------------------------------------
+        cliente = escape(
+            str(
+                dados.get("cliente", "")
+                or "Cliente"
+            )
+        )
+
+        story.append(
+            Paragraph(
+                f"<b>Olá, {cliente}.</b>",
+                h2,
+            )
+        )
+
+        story.append(
+            Paragraph(
+                "Preparamos esta proposta pensando na dinâmica do seu evento, "
+                "com atenção à operação, ao atendimento e aos detalhes que fazem "
+                "o serviço acontecer com tranquilidade do início ao fim.",
                 normal,
-            ))
-        story.append(Spacer(1, 8*mm))
-        story.append(Paragraph("Validade da proposta: 7 dias.", normal))
-        doc.build(story)
+            )
+        )
+
+        story.append(Spacer(1, 4 * mm))
+
+        # -----------------------------------------------------
+        # DADOS DO EVENTO
+        # -----------------------------------------------------
+        info = [
+            [
+                Paragraph("<b>Evento</b>", pequeno),
+                Paragraph(
+                    escape(
+                        str(
+                            dados.get(
+                                "tipo_evento",
+                                ""
+                            )
+                            or ""
+                        )
+                    ),
+                    normal,
+                ),
+                Paragraph("<b>Data</b>", pequeno),
+                Paragraph(
+                    escape(
+                        str(
+                            dados.get(
+                                "data",
+                                ""
+                            )
+                            or ""
+                        )
+                    ),
+                    normal,
+                ),
+            ],
+            [
+                Paragraph("<b>Local</b>", pequeno),
+                Paragraph(
+                    escape(
+                        str(
+                            dados.get(
+                                "local",
+                                ""
+                            )
+                            or ""
+                        )
+                    ),
+                    normal,
+                ),
+                Paragraph("<b>Convidados</b>", pequeno),
+                Paragraph(
+                    escape(
+                        str(
+                            dados.get(
+                                "convidados",
+                                ""
+                            )
+                            or ""
+                        )
+                    ),
+                    normal,
+                ),
+            ],
+            [
+                Paragraph("<b>Duração prevista</b>", pequeno),
+                Paragraph(
+                    f"{escape(str(dados.get('horas', 0) or 0))} horas",
+                    normal,
+                ),
+                Paragraph("<b>Proposta</b>", pequeno),
+                Paragraph(
+                    "Válida por 7 dias",
+                    normal,
+                ),
+            ],
+        ]
+
+        t_info = Table(
+            info,
+            colWidths=[
+                34 * mm,
+                55 * mm,
+                34 * mm,
+                55 * mm,
+            ],
+        )
+
+        t_info.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_CLARO),
+            ("GRID", (0, 0), (-1, -1), 0.35, COR_BORDA),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+
+        story.append(t_info)
+        story.append(Spacer(1, 5 * mm))
+
+        # -----------------------------------------------------
+        # CARTA DE DRINKS
+        # -----------------------------------------------------
+        drinks = dados.get("drinks", []) or []
+
+        if drinks:
+            story.append(
+                Paragraph(
+                    "Carta de Drinks",
+                    h2
+                )
+            )
+
+            bebidas_linhas = []
+
+            for indice, drink in enumerate(
+                drinks,
+                start=1
+            ):
+                bebidas_linhas.append([
+                    Paragraph(
+                        f"<b>{indice:02d}</b>",
+                        pequeno,
+                    ),
+                    Paragraph(
+                        escape(str(drink)),
+                        normal,
+                    ),
+                ])
+
+            tabela_drinks = Table(
+                bebidas_linhas,
+                colWidths=[
+                    14 * mm,
+                    164 * mm,
+                ],
+            )
+
+            tabela_drinks.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (0, -1), COR_DOURADO_CLARO),
+                ("TEXTCOLOR", (0, 0), (0, -1), COR_ESCURO),
+                ("GRID", (0, 0), (-1, -1), 0.3, COR_BORDA),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]))
+
+            story.append(tabela_drinks)
+            story.append(Spacer(1, 5 * mm))
+
+        # -----------------------------------------------------
+        # ESCOPO
+        # -----------------------------------------------------
+        story.append(
+            Paragraph(
+                "Experiência e Serviço",
+                h2
+            )
+        )
+
+        escopo = Table(
+            [
+                [
+                    Paragraph("<b>ATENDIMENTO</b>", pequeno),
+                    Paragraph(
+                        "Operação conduzida conforme a modalidade contratada "
+                        "e as necessidades definidas para o evento.",
+                        normal,
+                    ),
+                ],
+                [
+                    Paragraph("<b>ORGANIZAÇÃO</b>", pequeno),
+                    Paragraph(
+                        "Planejamento prévio de equipe, itens e estrutura para "
+                        "uma execução mais segura e organizada.",
+                        normal,
+                    ),
+                ],
+                [
+                    Paragraph("<b>EXPERIÊNCIA</b>", pequeno),
+                    Paragraph(
+                        "Cuidado no preparo e no atendimento para que cada brinde "
+                        "faça parte de uma boa lembrança.",
+                        normal,
+                    ),
+                ],
+            ],
+            colWidths=[
+                35 * mm,
+                143 * mm,
+            ],
+        )
+
+        escopo.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F3F4F6")),
+            ("BOX", (0, 0), (-1, -1), 0.4, COR_BORDA),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, COR_BORDA),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+
+        story.append(escopo)
+        story.append(Spacer(1, 6 * mm))
+
+        # -----------------------------------------------------
+        # INVESTIMENTO
+        # -----------------------------------------------------
+        valor_final = float(
+            dados.get(
+                "valor_final",
+                0
+            )
+            or 0
+        )
+
+        valor_formatado = (
+            f"{valor_final:,.2f}"
+            .replace(",", "X")
+            .replace(".", ",")
+            .replace("X", ".")
+        )
+
+        investimento = Table(
+            [[
+                [
+                    Paragraph(
+                        "INVESTIMENTO DO EVENTO",
+                        ParagraphStyle(
+                            "prop_invest_label_v16",
+                            parent=pequeno,
+                            alignment=TA_CENTER,
+                            fontName="Helvetica-Bold",
+                            textColor=COR_ESCURO,
+                        ),
+                    ),
+                    Paragraph(
+                        f"R$ {valor_formatado}",
+                        valor,
+                    ),
+                ]
+            ]],
+            colWidths=[178 * mm],
+        )
+
+        investimento.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_DOURADO_CLARO),
+            ("BOX", (0, 0), (-1, -1), 1.0, COR_DOURADO),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+
+        story.append(investimento)
+
+        valor_por_convidado = float(
+            dados.get(
+                "valor_por_convidado",
+                0
+            )
+            or 0
+        )
+
+        if valor_por_convidado > 0:
+            valor_pc = (
+                f"{valor_por_convidado:,.2f}"
+                .replace(",", "X")
+                .replace(".", ",")
+                .replace("X", ".")
+            )
+
+            story.append(
+                Spacer(
+                    1,
+                    2 * mm
+                )
+            )
+
+            story.append(
+                Paragraph(
+                    f"Referência aproximada por convidado: <b>R$ {valor_pc}</b>",
+                    ParagraphStyle(
+                        "prop_pc_v16",
+                        parent=normal,
+                        alignment=TA_CENTER,
+                    ),
+                )
+            )
+
+        story.append(Spacer(1, 6 * mm))
+
+        # -----------------------------------------------------
+        # FECHAMENTO
+        # -----------------------------------------------------
+        fechamento = Table(
+            [[
+                Paragraph(
+                    "<b>Nosso compromisso</b><br/>"
+                    "Organização, presença e cuidado em cada detalhe — "
+                    "do primeiro preparo ao último brinde.<br/><br/>"
+                    "<b>Que cada brinde conte uma boa história.</b>",
+                    ParagraphStyle(
+                        "prop_close_v16",
+                        parent=normal,
+                        alignment=TA_CENTER,
+                        leading=14,
+                    ),
+                )
+            ]],
+            colWidths=[178 * mm],
+        )
+
+        fechamento.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_CLARO),
+            ("BOX", (0, 0), (-1, -1), 0.5, COR_BORDA),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ]))
+
+        story.append(fechamento)
+        story.append(Spacer(1, 4 * mm))
+
+        story.append(
+            Paragraph(
+                "Esta proposta representa o escopo e o investimento definidos "
+                "para o evento. Ajustes posteriores podem gerar nova versão da proposta.",
+                pequeno,
+            )
+        )
+
+        doc.build(
+            story,
+            onFirstPage=_rodape,
+            onLaterPages=_rodape,
+        )
+
         buffer.seek(0)
         return buffer.getvalue(), None
 
@@ -12592,7 +13371,7 @@ elif menu == "Orçamentos":
                     "Os materiais operacionais também foram gravados no checklist."
                 )
 
-        # =========================================================
+# =========================================================
         # ABA 2 - PENDENTES / CHECKLIST
         # =========================================================
         with tab2:
