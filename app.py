@@ -9569,7 +9569,7 @@ elif menu == "Orçamentos":
             canvas.drawRightString(
                 largura - 10 * mm,
                 5 * mm,
-                f"Ellosystem • Página {doc_obj.page}"
+                f"BS Gold Drinks • Gerado pelo Ellosystem • Página {doc_obj.page}"
             )
 
             canvas.restoreState()
@@ -9580,7 +9580,7 @@ elif menu == "Orçamentos":
         # CABEÇALHO PREMIUM
         # -----------------------------------------------------
         cab_esq = [
-            Paragraph("ELLOSYSTEM", marca),
+            Paragraph("BS GOLD DRINKS", marca),
             Paragraph("CHECKLIST OPERACIONAL DO EVENTO", titulo),
             Paragraph(
                 "Mapa oficial da equipe para separação, conferência, retorno e fechamento.",
@@ -9943,7 +9943,7 @@ elif menu == "Orçamentos":
 
         ocorr_header = Table(
             [[
-                Paragraph("ELLOSYSTEM", marca),
+                Paragraph("BS GOLD DRINKS", marca),
                 Paragraph(
                     "REGISTRO DE OCORRÊNCIAS DO EVENTO",
                     ParagraphStyle(
@@ -10048,7 +10048,7 @@ elif menu == "Orçamentos":
 
     def _gerar_pdf_proposta_cliente(dados):
         """
-        Proposta comercial premium.
+        Proposta comercial BS Gold Drinks.
         Não exibe custo interno, margem, lucro ou CMV.
         """
         try:
@@ -10059,7 +10059,7 @@ elif menu == "Orçamentos":
             from reportlab.lib.units import mm
             from reportlab.platypus import (
                 SimpleDocTemplate, Paragraph, Spacer,
-                Table, TableStyle, KeepTogether,
+                Table, TableStyle,
             )
             from xml.sax.saxutils import escape
         except Exception:
@@ -10068,18 +10068,16 @@ elif menu == "Orçamentos":
                 "Adicione reportlab ao requirements.txt e reinicie o Streamlit."
             )
 
-        # -----------------------------------------------------
-        # PALETA
-        # -----------------------------------------------------
         COR_ESCURO = colors.HexColor("#111827")
-        COR_ESCURO_2 = colors.HexColor("#1F2937")
-        COR_DOURADO = colors.HexColor("#C79A3B")
-        COR_DOURADO_CLARO = colors.HexColor("#F7E9C6")
+        COR_DOURADO = colors.HexColor("#B8872F")
+        COR_DOURADO_CLARO = colors.HexColor("#F9EDCF")
+        COR_CREME = colors.HexColor("#FFF7E8")
         COR_CLARO = colors.HexColor("#F8FAFC")
         COR_CINZA = colors.HexColor("#6B7280")
         COR_BORDA = colors.HexColor("#D1D5DB")
         COR_BRANCO = colors.white
         COR_VERDE = colors.HexColor("#166534")
+        COR_VINHO = colors.HexColor("#991B1B")
 
         buffer = io.BytesIO()
 
@@ -10090,23 +10088,23 @@ elif menu == "Orçamentos":
             leftMargin=16 * mm,
             topMargin=14 * mm,
             bottomMargin=15 * mm,
-            title="Proposta Comercial para Evento",
-            author="Ellosystem",
+            title="Proposta Comercial BS Gold Drinks",
+            author="BS Gold Drinks",
         )
 
         styles = getSampleStyleSheet()
 
         marca = ParagraphStyle(
-            "prop_marca_v16",
+            "prop_marca_v17",
             parent=styles["BodyText"],
             fontName="Helvetica-Bold",
-            fontSize=11,
-            leading=13,
+            fontSize=12,
+            leading=14,
             textColor=COR_DOURADO,
         )
 
         title = ParagraphStyle(
-            "prop_title_v16",
+            "prop_title_v17",
             parent=styles["Title"],
             fontName="Helvetica-Bold",
             fontSize=22,
@@ -10116,36 +10114,47 @@ elif menu == "Orçamentos":
         )
 
         tagline = ParagraphStyle(
-            "prop_tagline_v16",
+            "prop_tagline_v17",
             parent=styles["BodyText"],
             fontName="Helvetica",
-            fontSize=9,
+            fontSize=9.2,
             leading=12,
             textColor=colors.HexColor("#E5E7EB"),
         )
 
         h2 = ParagraphStyle(
-            "prop_h2_v16",
+            "prop_h2_v17",
             parent=styles["Heading2"],
             fontName="Helvetica-Bold",
-            fontSize=12,
+            fontSize=12.5,
             leading=15,
             textColor=COR_ESCURO,
-            spaceBefore=6,
+            spaceBefore=5,
             spaceAfter=5,
         )
 
+        destaque = ParagraphStyle(
+            "prop_destaque_v17",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=14,
+            leading=17,
+            textColor=COR_VINHO,
+            alignment=TA_CENTER,
+            spaceAfter=4,
+        )
+
         normal = ParagraphStyle(
-            "prop_norm_v16",
+            "prop_norm_v17",
             parent=styles["BodyText"],
             fontName="Helvetica",
             fontSize=9.3,
             leading=13,
-            textColor=COR_ESCURO_2,
+            textColor=colors.HexColor("#1F2937"),
         )
 
         pequeno = ParagraphStyle(
-            "prop_small_v16",
+            "prop_small_v17",
             parent=styles["BodyText"],
             fontName="Helvetica",
             fontSize=7.8,
@@ -10153,24 +10162,18 @@ elif menu == "Orçamentos":
             textColor=COR_CINZA,
         )
 
-        valor = ParagraphStyle(
-            "prop_val_v16",
+        valor_style = ParagraphStyle(
+            "prop_val_v17",
             parent=styles["Title"],
             fontName="Helvetica-Bold",
             alignment=TA_CENTER,
             fontSize=24,
             leading=28,
             textColor=COR_VERDE,
-            spaceBefore=2,
-            spaceAfter=2,
         )
 
-        # -----------------------------------------------------
-        # RODAPÉ
-        # -----------------------------------------------------
         def _rodape(canvas, doc_obj):
             canvas.saveState()
-
             largura, _ = A4
 
             canvas.setStrokeColor(COR_DOURADO)
@@ -10188,7 +10191,7 @@ elif menu == "Orçamentos":
             canvas.drawString(
                 16 * mm,
                 6 * mm,
-                "Ellosystem • Proposta comercial para serviços em eventos"
+                "BS Gold Drinks • Experiência, organização e cuidado em cada detalhe"
             )
 
             canvas.drawRightString(
@@ -10201,18 +10204,18 @@ elif menu == "Orçamentos":
 
         story = []
 
-        # -----------------------------------------------------
-        # CAPA / CABEÇALHO
-        # -----------------------------------------------------
+        modalidade = str(
+            dados.get("modalidade", "")
+            or "Serviço de Bar"
+        ).strip()
+
         header = Table(
             [[
                 [
-                    Paragraph("ELLOSYSTEM", marca),
+                    Paragraph("BS GOLD DRINKS", marca),
                     Paragraph("PROPOSTA COMERCIAL", title),
                     Paragraph(
-                        "Cada evento é único. Nosso compromisso é transformar "
-                        "o serviço de bar em uma experiência fluida, elegante "
-                        "e memorável.",
+                        "Mais do que drinks, uma experiência completa para o seu evento.",
                         tagline,
                     ),
                 ]
@@ -10232,9 +10235,6 @@ elif menu == "Orçamentos":
         story.append(header)
         story.append(Spacer(1, 6 * mm))
 
-        # -----------------------------------------------------
-        # ABERTURA
-        # -----------------------------------------------------
         cliente = escape(
             str(
                 dados.get("cliente", "")
@@ -10244,91 +10244,54 @@ elif menu == "Orçamentos":
 
         story.append(
             Paragraph(
-                f"<b>Olá, {cliente}.</b>",
-                h2,
+                "É uma honra fazer parte deste momento.",
+                destaque,
             )
         )
 
         story.append(
             Paragraph(
-                "Preparamos esta proposta pensando na dinâmica do seu evento, "
-                "com atenção à operação, ao atendimento e aos detalhes que fazem "
-                "o serviço acontecer com tranquilidade do início ao fim.",
+                f"Olá, <b>{cliente}</b>. Preparamos esta proposta pensando na dinâmica "
+                "do seu evento e na tranquilidade que uma operação de bar bem organizada "
+                "deve proporcionar. Nosso objetivo é cuidar da execução, do atendimento "
+                "e dos detalhes para que você e seus convidados possam aproveitar o momento.",
                 normal,
             )
         )
 
         story.append(Spacer(1, 4 * mm))
 
-        # -----------------------------------------------------
-        # DADOS DO EVENTO
-        # -----------------------------------------------------
         info = [
             [
                 Paragraph("<b>Evento</b>", pequeno),
                 Paragraph(
-                    escape(
-                        str(
-                            dados.get(
-                                "tipo_evento",
-                                ""
-                            )
-                            or ""
-                        )
-                    ),
+                    escape(str(dados.get("tipo_evento", "") or "")),
                     normal,
                 ),
+                Paragraph("<b>Modalidade</b>", pequeno),
+                Paragraph(escape(modalidade), normal),
+            ],
+            [
                 Paragraph("<b>Data</b>", pequeno),
                 Paragraph(
-                    escape(
-                        str(
-                            dados.get(
-                                "data",
-                                ""
-                            )
-                            or ""
-                        )
-                    ),
+                    escape(str(dados.get("data", "") or "")),
                     normal,
                 ),
-            ],
-            [
                 Paragraph("<b>Local</b>", pequeno),
                 Paragraph(
-                    escape(
-                        str(
-                            dados.get(
-                                "local",
-                                ""
-                            )
-                            or ""
-                        )
-                    ),
-                    normal,
-                ),
-                Paragraph("<b>Convidados</b>", pequeno),
-                Paragraph(
-                    escape(
-                        str(
-                            dados.get(
-                                "convidados",
-                                ""
-                            )
-                            or ""
-                        )
-                    ),
+                    escape(str(dados.get("local", "") or "")),
                     normal,
                 ),
             ],
             [
+                Paragraph("<b>Convidados</b>", pequeno),
+                Paragraph(
+                    escape(str(dados.get("convidados", "") or "")),
+                    normal,
+                ),
                 Paragraph("<b>Duração prevista</b>", pequeno),
                 Paragraph(
                     f"{escape(str(dados.get('horas', 0) or 0))} horas",
-                    normal,
-                ),
-                Paragraph("<b>Proposta</b>", pequeno),
-                Paragraph(
-                    "Válida por 7 dias",
                     normal,
                 ),
             ],
@@ -10337,10 +10300,10 @@ elif menu == "Orçamentos":
         t_info = Table(
             info,
             colWidths=[
-                34 * mm,
-                55 * mm,
-                34 * mm,
-                55 * mm,
+                33 * mm,
+                56 * mm,
+                33 * mm,
+                56 * mm,
             ],
         )
 
@@ -10357,9 +10320,88 @@ elif menu == "Orçamentos":
         story.append(t_info)
         story.append(Spacer(1, 5 * mm))
 
-        # -----------------------------------------------------
-        # CARTA DE DRINKS
-        # -----------------------------------------------------
+        story.append(
+            Paragraph(
+                "A experiência que queremos entregar",
+                h2
+            )
+        )
+
+        box_experiencia = Table(
+            [[
+                Paragraph(
+                    "Cada evento tem seu próprio ritmo, perfil e expectativa. "
+                    "Por isso, a operação é planejada para unir <b>organização, "
+                    "presença, agilidade e cuidado no atendimento</b>. "
+                    "Mais do que preparar drinks, queremos que o bar faça parte "
+                    "da experiência do evento — com uma equipe orientada, "
+                    "materiais preparados e uma execução pensada do início ao fim.",
+                    normal,
+                )
+            ]],
+            colWidths=[178 * mm],
+        )
+
+        box_experiencia.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_CREME),
+            ("BOX", (0, 0), (-1, -1), 0.7, COR_DOURADO),
+            ("LEFTPADDING", (0, 0), (-1, -1), 9),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ]))
+
+        story.append(box_experiencia)
+        story.append(Spacer(1, 5 * mm))
+
+        inclusos = dados.get("inclusos", []) or []
+
+        if inclusos:
+            story.append(
+                Paragraph(
+                    "O que está incluso nesta proposta",
+                    h2
+                )
+            )
+
+            linhas_inclusos = []
+
+            for item in inclusos:
+                linhas_inclusos.append([
+                    Paragraph(
+                        "✓",
+                        ParagraphStyle(
+                            "check_incluso_v17",
+                            parent=normal,
+                            fontName="Helvetica-Bold",
+                            textColor=COR_DOURADO,
+                            alignment=TA_CENTER,
+                        ),
+                    ),
+                    Paragraph(
+                        escape(str(item)),
+                        normal,
+                    ),
+                ])
+
+            tabela_inclusos = Table(
+                linhas_inclusos,
+                colWidths=[10 * mm, 168 * mm],
+            )
+
+            tabela_inclusos.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), COR_CLARO),
+                ("GRID", (0, 0), (-1, -1), 0.25, COR_BORDA),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+
+            story.append(tabela_inclusos)
+            story.append(Spacer(1, 5 * mm))
+
         drinks = dados.get("drinks", []) or []
 
         if drinks:
@@ -10389,15 +10431,11 @@ elif menu == "Orçamentos":
 
             tabela_drinks = Table(
                 bebidas_linhas,
-                colWidths=[
-                    14 * mm,
-                    164 * mm,
-                ],
+                colWidths=[14 * mm, 164 * mm],
             )
 
             tabela_drinks.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (0, -1), COR_DOURADO_CLARO),
-                ("TEXTCOLOR", (0, 0), (0, -1), COR_ESCURO),
                 ("GRID", (0, 0), (-1, -1), 0.3, COR_BORDA),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
@@ -10409,66 +10447,47 @@ elif menu == "Orçamentos":
             story.append(tabela_drinks)
             story.append(Spacer(1, 5 * mm))
 
-        # -----------------------------------------------------
-        # ESCOPO
-        # -----------------------------------------------------
-        story.append(
-            Paragraph(
-                "Experiência e Serviço",
-                h2
+        observacoes = str(
+            dados.get("observacoes", "")
+            or ""
+        ).strip()
+
+        if observacoes:
+            story.append(
+                Paragraph(
+                    "Observações especiais",
+                    h2
+                )
             )
-        )
 
-        escopo = Table(
-            [
-                [
-                    Paragraph("<b>ATENDIMENTO</b>", pequeno),
+            linhas_obs = [
+                escape(x.strip())
+                for x in observacoes.splitlines()
+                if x.strip()
+            ]
+
+            box_obs = Table(
+                [[
                     Paragraph(
-                        "Operação conduzida conforme a modalidade contratada "
-                        "e as necessidades definidas para o evento.",
-                        normal,
-                    ),
-                ],
-                [
-                    Paragraph("<b>ORGANIZAÇÃO</b>", pequeno),
-                    Paragraph(
-                        "Planejamento prévio de equipe, itens e estrutura para "
-                        "uma execução mais segura e organizada.",
-                        normal,
-                    ),
-                ],
-                [
-                    Paragraph("<b>EXPERIÊNCIA</b>", pequeno),
-                    Paragraph(
-                        "Cuidado no preparo e no atendimento para que cada brinde "
-                        "faça parte de uma boa lembrança.",
-                        normal,
-                    ),
-                ],
-            ],
-            colWidths=[
-                35 * mm,
-                143 * mm,
-            ],
-        )
+                        "<br/>".join(linhas_obs),
+                        normal
+                    )
+                ]],
+                colWidths=[178 * mm],
+            )
 
-        escopo.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F3F4F6")),
-            ("BOX", (0, 0), (-1, -1), 0.4, COR_BORDA),
-            ("INNERGRID", (0, 0), (-1, -1), 0.3, COR_BORDA),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ]))
+            box_obs.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), COR_DOURADO_CLARO),
+                ("BOX", (0, 0), (-1, -1), 0.6, COR_DOURADO),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]))
 
-        story.append(escopo)
-        story.append(Spacer(1, 6 * mm))
+            story.append(box_obs)
+            story.append(Spacer(1, 5 * mm))
 
-        # -----------------------------------------------------
-        # INVESTIMENTO
-        # -----------------------------------------------------
         valor_final = float(
             dados.get(
                 "valor_final",
@@ -10488,9 +10507,9 @@ elif menu == "Orçamentos":
             [[
                 [
                     Paragraph(
-                        "INVESTIMENTO DO EVENTO",
+                        "INVESTIMENTO PARA O SEU EVENTO",
                         ParagraphStyle(
-                            "prop_invest_label_v16",
+                            "prop_invest_label_v17",
                             parent=pequeno,
                             alignment=TA_CENTER,
                             fontName="Helvetica-Bold",
@@ -10499,7 +10518,7 @@ elif menu == "Orçamentos":
                     ),
                     Paragraph(
                         f"R$ {valor_formatado}",
-                        valor,
+                        valor_style,
                     ),
                 ]
             ]],
@@ -10533,18 +10552,13 @@ elif menu == "Orçamentos":
                 .replace("X", ".")
             )
 
-            story.append(
-                Spacer(
-                    1,
-                    2 * mm
-                )
-            )
+            story.append(Spacer(1, 2 * mm))
 
             story.append(
                 Paragraph(
                     f"Referência aproximada por convidado: <b>R$ {valor_pc}</b>",
                     ParagraphStyle(
-                        "prop_pc_v16",
+                        "prop_pc_v17",
                         parent=normal,
                         alignment=TA_CENTER,
                     ),
@@ -10553,18 +10567,126 @@ elif menu == "Orçamentos":
 
         story.append(Spacer(1, 6 * mm))
 
-        # -----------------------------------------------------
-        # FECHAMENTO
-        # -----------------------------------------------------
+        condicoes = dados.get(
+            "condicoes_pagamento",
+            []
+        ) or []
+
+        if isinstance(condicoes, str):
+            condicoes = [
+                x.strip()
+                for x in condicoes.splitlines()
+                if x.strip()
+            ]
+
+        if condicoes:
+            story.append(
+                Paragraph(
+                    "Condições de pagamento",
+                    h2
+                )
+            )
+
+            linhas_cond = []
+
+            for item in condicoes:
+                linhas_cond.append([
+                    Paragraph("•", normal),
+                    Paragraph(
+                        escape(str(item)),
+                        normal,
+                    ),
+                ])
+
+            tabela_cond = Table(
+                linhas_cond,
+                colWidths=[8 * mm, 170 * mm],
+            )
+
+            tabela_cond.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), COR_CLARO),
+                ("BOX", (0, 0), (-1, -1), 0.4, COR_BORDA),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+
+            story.append(tabela_cond)
+            story.append(Spacer(1, 5 * mm))
+
+        sinal = float(
+            dados.get("sinal_reserva", 0)
+            or 0
+        )
+
+        prazo_saldo = escape(
+            str(
+                dados.get(
+                    "prazo_saldo",
+                    ""
+                )
+                or ""
+            )
+        )
+
+        texto_reserva = (
+            "A data do evento é garantida mediante confirmação da proposta"
+        )
+
+        if sinal > 0:
+            texto_reserva += (
+                f" e pagamento do sinal de reserva de <b>{sinal:.0f}%</b>"
+            )
+
+        if prazo_saldo:
+            texto_reserva += (
+                f". O saldo fica previsto para pagamento {prazo_saldo}"
+            )
+
+        texto_reserva += "."
+
+        story.append(
+            Paragraph(
+                "Reserva da Data",
+                h2
+            )
+        )
+
+        reserva_box = Table(
+            [[
+                Paragraph(
+                    texto_reserva,
+                    normal
+                )
+            ]],
+            colWidths=[178 * mm],
+        )
+
+        reserva_box.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), COR_CREME),
+            ("BOX", (0, 0), (-1, -1), 0.7, COR_DOURADO),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+        ]))
+
+        story.append(reserva_box)
+        story.append(Spacer(1, 5 * mm))
+
         fechamento = Table(
             [[
                 Paragraph(
-                    "<b>Nosso compromisso</b><br/>"
-                    "Organização, presença e cuidado em cada detalhe — "
-                    "do primeiro preparo ao último brinde.<br/><br/>"
+                    "<b>Mais do que servir drinks, entregamos organização, "
+                    "experiência e cuidado no atendimento.</b><br/><br/>"
+                    "Queremos que você aproveite o evento com a tranquilidade "
+                    "de saber que a operação do bar foi pensada, preparada e "
+                    "executada com atenção aos detalhes.<br/><br/>"
                     "<b>Que cada brinde conte uma boa história.</b>",
                     ParagraphStyle(
-                        "prop_close_v16",
+                        "prop_close_v17",
                         parent=normal,
                         alignment=TA_CENTER,
                         leading=14,
@@ -10588,8 +10710,8 @@ elif menu == "Orçamentos":
 
         story.append(
             Paragraph(
-                "Esta proposta representa o escopo e o investimento definidos "
-                "para o evento. Ajustes posteriores podem gerar nova versão da proposta.",
+                "Proposta válida por 7 dias. Ajustes posteriores no escopo, "
+                "carta, estrutura ou período de atendimento podem gerar nova versão.",
                 pequeno,
             )
         )
@@ -10845,6 +10967,15 @@ elif menu == "Orçamentos":
         cidade_evento = col3.text_input("Cidade / Local")
 
         telefone = st.text_input("📞 Telefone")
+
+        documento_cliente = st.text_input(
+            "🪪 CPF / CNPJ do cliente",
+            key="orc_documento_cliente",
+            help=(
+                "Informação interna para cadastro e futura emissão de NFS-e. "
+                "Não aparece na proposta comercial."
+            ),
+        )
         endereco = st.text_input("📍 Endereço do evento")
 
         tipo_evento = st.selectbox(
@@ -10856,6 +10987,106 @@ elif menu == "Orçamentos":
                 "Festa privada",
                 "Outro",
             ],
+        )
+
+        # =====================================================
+        # CONDIÇÕES COMERCIAIS DA PROPOSTA
+        # =====================================================
+
+        with st.expander(
+            "💳 Condições de pagamento do cliente",
+            expanded=False,
+        ):
+
+            formas_pagamento_cliente = st.multiselect(
+                "Formas de pagamento disponíveis",
+                [
+                    "PIX",
+                    "Transferência bancária",
+                    "Cartão de crédito",
+                    "Dinheiro",
+                ],
+                default=[
+                    "PIX",
+                    "Transferência bancária",
+                    "Cartão de crédito",
+                    "Dinheiro",
+                ],
+                key="orc_formas_pagamento_cliente",
+            )
+
+            cp1, cp2 = st.columns(2)
+
+            sinal_reserva_cliente = cp1.number_input(
+                "Sinal para reserva da data (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=60.0,
+                step=5.0,
+                key="orc_sinal_reserva_cliente",
+            )
+
+            desconto_avista_cliente = cp2.number_input(
+                "Desconto à vista via PIX/Dinheiro (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=10.0,
+                step=1.0,
+                key="orc_desconto_avista_cliente",
+            )
+
+            prazo_saldo_cliente = st.selectbox(
+                "Prazo para pagamento do saldo",
+                [
+                    "até a realização do evento",
+                    "até 3 dias antes do evento",
+                    "na data do evento",
+                ],
+                key="orc_prazo_saldo_cliente",
+            )
+
+        condicoes_pagamento_cliente = []
+
+        if "Cartão de crédito" in formas_pagamento_cliente:
+            condicoes_pagamento_cliente.append(
+                "Parcelamento via cartão de crédito"
+            )
+
+        if "Transferência bancária" in formas_pagamento_cliente:
+            condicoes_pagamento_cliente.append(
+                "Transferência bancária"
+            )
+
+        if "PIX" in formas_pagamento_cliente:
+            condicoes_pagamento_cliente.append(
+                "PIX"
+            )
+
+        if "Dinheiro" in formas_pagamento_cliente:
+            condicoes_pagamento_cliente.append(
+                "Dinheiro"
+            )
+
+        if sinal_reserva_cliente > 0:
+            condicoes_pagamento_cliente.append(
+                f"Entrada de {sinal_reserva_cliente:.0f}% para reserva da data "
+                f"+ saldo {prazo_saldo_cliente}"
+            )
+
+        if (
+            desconto_avista_cliente > 0
+            and (
+                "PIX" in formas_pagamento_cliente
+                or "Dinheiro" in formas_pagamento_cliente
+            )
+        ):
+            condicoes_pagamento_cliente.append(
+                f"Pagamento à vista via PIX ou dinheiro: "
+                f"{desconto_avista_cliente:.0f}% de desconto"
+            )
+
+        texto_condicoes_pagamento = "\\n".join(
+            condicoes_pagamento_cliente
         )
 
         st.divider()
@@ -12489,6 +12720,7 @@ elif menu == "Orçamentos":
                         dados_proposta = {
                             "cliente": nome_cliente,
                             "tipo_evento": tipo_evento,
+                            "modalidade": "Bar Completo",
                             "data": str(data_evento),
                             "local": cidade_evento or endereco,
                             "convidados": num_convidados,
@@ -12496,6 +12728,20 @@ elif menu == "Orçamentos":
                             "drinks": list(selecao),
                             "valor_final": valor_final_venda,
                             "valor_por_convidado": valor_por_convidado,
+                            "inclusos": [
+                                "Planejamento e operação do bar para o período contratado",
+                                "Equipe profissional conforme o dimensionamento do evento",
+                                "Execução da carta de drinks selecionada",
+                                "Ingredientes, bebidas e insumos previstos no orçamento",
+                                "Materiais e utensílios selecionados para a operação",
+                                "Checklist operacional e organização pré-evento",
+                            ],
+                            "condicoes_pagamento":
+                                condicoes_pagamento_cliente,
+                            "sinal_reserva":
+                                sinal_reserva_cliente,
+                            "prazo_saldo":
+                                prazo_saldo_cliente,
                         }
                         pdf_proposta, erro_pdf_proposta = _gerar_pdf_proposta_cliente(
                             dados_proposta
@@ -12574,6 +12820,12 @@ elif menu == "Orçamentos":
 
                                             "telefone":
                                                 telefone.strip(),
+
+                                            "documento_cliente":
+                                                documento_cliente.strip(),
+
+                                            "condicoes_pagamento":
+                                                texto_condicoes_pagamento,
 
                                             "endereco":
                                                 endereco.strip(),
@@ -12759,6 +13011,34 @@ elif menu == "Orçamentos":
                 ],
                 key="sp_tipo"
             )
+
+            sp_info1, sp_info2 = st.columns(2)
+
+            num_convidados_sp = sp_info1.number_input(
+                "👥 Número estimado de convidados",
+                min_value=0,
+                value=0,
+                step=1,
+                key="sp_qtd_convidados_info",
+                help=(
+                    "Informação para o evento e para a proposta. "
+                    "Não altera o custo automaticamente."
+                ),
+            )
+
+            duracao_sp = sp_info2.number_input(
+                "⏱️ Duração prevista do serviço (horas)",
+                min_value=1.0,
+                max_value=24.0,
+                value=4.0,
+                step=0.5,
+                key="sp_duracao_info",
+                help=(
+                    "Informação comercial/operacional. "
+                    "Não altera o custo automaticamente."
+                ),
+            )
+
         
             st.divider()
         
@@ -13027,7 +13307,7 @@ elif menu == "Orçamentos":
                     "cidade": cidade_evento,
                     "endereco": endereco,
                     "tipo_evento": tipo_evento_sp,
-                    "convidados": 0,
+                    "convidados": int(num_convidados_sp),
                     "hora_chegada": str(hora_chegada),
                     "hora_inicio": str(hora_inicio),
                     "drinks": "\n".join(
@@ -13211,6 +13491,115 @@ elif menu == "Orçamentos":
 
             
             # =========================
+            # PROPOSTA COMERCIAL — CLIENTE
+            # =========================
+
+            st.divider()
+
+            st.subheader(
+                "👁️ Proposta ao Cliente"
+            )
+
+            st.caption(
+                "Versão comercial do Serviço Personalizado, sem custos internos, "
+                "margem ou lucro."
+            )
+
+            valor_por_convidado_sp = (
+                valor_final_venda / num_convidados_sp
+                if num_convidados_sp > 0
+                else 0.0
+            )
+
+            inclusos_sp = [
+                "Equipe profissional conforme o dimensionamento definido no orçamento",
+                "Execução da carta de drinks informada para o evento",
+                "Organização operacional dos materiais e utensílios selecionados",
+                "Checklist de separação, ida, retorno e conferência",
+                "Atendimento durante o período contratado",
+            ]
+
+            if observacoes_drinks_sp.strip():
+                inclusos_sp.append(
+                    "Orientações especiais e drinks personalizados registrados para a equipe"
+                )
+
+            dados_proposta_sp = {
+                "cliente":
+                    nome_cliente,
+
+                "tipo_evento":
+                    tipo_evento_sp,
+
+                "modalidade":
+                    "Serviço Personalizado / Mão de Obra",
+
+                "data":
+                    str(data_evento),
+
+                "local":
+                    cidade_evento or endereco,
+
+                "convidados":
+                    int(num_convidados_sp),
+
+                "horas":
+                    duracao_sp,
+
+                "drinks":
+                    list(
+                        drinks_sp_selecionados
+                    ),
+
+                "observacoes":
+                    observacoes_drinks_sp,
+
+                "valor_final":
+                    valor_final_venda,
+
+                "valor_por_convidado":
+                    valor_por_convidado_sp,
+
+                "inclusos":
+                    inclusos_sp,
+
+                "condicoes_pagamento":
+                    condicoes_pagamento_cliente,
+
+                "sinal_reserva":
+                    sinal_reserva_cliente,
+
+                "prazo_saldo":
+                    prazo_saldo_cliente,
+            }
+
+            pdf_proposta_sp, erro_proposta_sp = (
+                _gerar_pdf_proposta_cliente(
+                    dados_proposta_sp
+                )
+            )
+
+            if pdf_proposta_sp:
+
+                st.download_button(
+                    "📄 Baixar Proposta Comercial PDF",
+                    data=pdf_proposta_sp,
+                    file_name=(
+                        f"proposta_servico_"
+                        f"{_safe_key(nome_cliente or 'cliente')}.pdf"
+                    ),
+                    mime="application/pdf",
+                    key="sp_pdf_proposta_cliente",
+                    use_container_width=True,
+                )
+
+            elif erro_proposta_sp:
+
+                st.caption(
+                    erro_proposta_sp
+                )
+
+            # =========================
             # SALVAR ORÇAMENTO
             # =========================
         
@@ -13225,6 +13614,8 @@ elif menu == "Orçamentos":
                     "data": str(data_evento),
                     "cidade": cidade_evento,
                     "telefone": telefone,
+                    "documento_cliente": documento_cliente.strip(),
+                    "condicoes_pagamento": texto_condicoes_pagamento,
                     "endereco": endereco,
         
                     "tipo_evento": tipo_evento_sp,
@@ -13234,7 +13625,7 @@ elif menu == "Orçamentos":
                     "hora_inicio": str(hora_inicio),
                     "hora_convidados": str(hora_convidados),
         
-                    "convidados": 0,
+                    "convidados": int(num_convidados_sp),
         
                     "custo": custo_total,
                     "venda": valor_final_venda,
@@ -13371,7 +13762,7 @@ elif menu == "Orçamentos":
                     "Os materiais operacionais também foram gravados no checklist."
                 )
 
-# =========================================================
+        # =========================================================
         # ABA 2 - PENDENTES / CHECKLIST
         # =========================================================
         with tab2:
@@ -13473,6 +13864,10 @@ elif menu == "Orçamentos":
                         info1.write(
                             f"**📞 Telefone:** "
                             f"{row.get('telefone', '')}"
+                        )
+                        info1.write(
+                            f"**🪪 CPF/CNPJ:** "
+                            f"{row.get('documento_cliente', '')}"
                         )
                         info1.write(
                             f"**🎉 Tipo:** "
@@ -13776,6 +14171,15 @@ elif menu == "Orçamentos":
                             key=f"orc_edit_tel_{evento_id}",
                         )
 
+                        novo_documento = col1.text_input(
+                            "🪪 CPF / CNPJ",
+                            value=str(
+                                row.get("documento_cliente", "")
+                                or ""
+                            ),
+                            key=f"orc_edit_doc_{evento_id}",
+                        )
+
                         novo_endereco = col1.text_input(
                             "🏠 Endereço",
                             value=str(
@@ -13942,6 +14346,9 @@ elif menu == "Orçamentos":
 
                                     "telefone":
                                         novo_telefone,
+
+                                    "documento_cliente":
+                                        novo_documento,
 
                                     "endereco":
                                         novo_endereco,
