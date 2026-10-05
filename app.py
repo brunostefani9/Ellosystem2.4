@@ -22012,37 +22012,27 @@ elif menu == "Notas Fiscais":
             )
         )
 
-        vencimento_das = (
-            s2.date_input(
-                "Vencimento",
-              # 1. Pega o valor (string, data ou None) do dicionário/função
-                val_venc_raw = _nf_data(
-                    das_existente.get("vencimento")
-                ) or _nf_proximo_vencimento(ano_das, mes_das)
-                
-                # 2. Converte de forma segura para objeto date (se falhar, usa hoje)
-                try:
-                    if val_venc_raw:
-                        val_venc_parsed = pd.to_datetime(val_venc_raw).date()
-                    else:
-                        val_venc_parsed = datetime.date.today()
-                except Exception:
-                    val_venc_parsed = datetime.date.today()
-                
-                # 3. Passa a data convertida no date_input
-                vencimento_das = s2.date_input(
-                    "Vencimento",
-                    value=val_venc_parsed,
-                    key=f"nf_das_venc_{ano_das}_{mes_das}"
-                )
-                                ),
-                key=(
-                    f"nf_das_venc_"
-                    f"{ano_das}_{mes_das}"
-                )
-            )
-        )
+        # 1. Pega o valor (string, data ou None) do dicionario/funcao
+        val_venc_raw = _nf_data(
+            das_existente.get("vencimento")
+        ) or _nf_proximo_vencimento(ano_das, mes_das)
 
+        # 2. Converte de forma segura para objeto date (se falhar, usa hoje)
+        try:
+            if val_venc_raw:
+                val_venc_parsed = pd.to_datetime(val_venc_raw).date()
+            else:
+                val_venc_parsed = datetime.date.today()
+        except Exception:
+            val_venc_parsed = datetime.date.today()
+
+        # 3. Passa a data convertida no date_input
+        vencimento_das = s2.date_input(
+            "Vencimento",
+            value=val_venc_parsed,
+            key=f"nf_das_venc_{ano_das}_{mes_das}"
+        )
+          
         p1, p2 = st.columns(2)
 
         data_pagamento = (
