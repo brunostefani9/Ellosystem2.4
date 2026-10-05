@@ -350,6 +350,7 @@ menu = st.sidebar.radio(
         "Vendas",
         "CMV",
         "Financeiro",
+        "Notas Fiscais",
         "Pacotes",
         "Fundo da Equipe"
     ]
@@ -19879,6 +19880,2862 @@ elif menu == "Financeiro":
                         st.error(
                             f"Erro ao excluir registro: {e}"
                         )
+
+
+elif menu == "Notas Fiscais":
+
+    # ============================================================
+    # MÓDULO FISCAL V1
+    # Registro Interno + DAS + preparação para NFS-e
+    # ============================================================
+
+    import io
+    import calendar
+    from datetime import datetime, date
+
+    st.title("🧾 Notas Fiscais / Faturamento")
+    st.caption(
+        "Controle fiscal interno da BS Gold Drinks. "
+        "O Registro Interno NÃO substitui uma NFS-e oficial. "
+        "A estrutura abaixo já deixa os dados preparados para futura integração com o Emissor Nacional."
+    )
+
+    # ============================================================
+    # CONEXÃO FISCAL SEGURA
+    # ============================================================
+
+    try:
+        from supabase import create_client
+
+        chave_fiscal = st.secrets.get(
+            "SUPABASE_FISCAL_SECRET",
+            ""
+        )
+
+    except Exception:
+        chave_fiscal = ""
+
+    if not chave_fiscal:
+
+        st.error(
+            "🔐 O módulo fiscal precisa de uma chave server-side protegida. "
+            "Adicione SUPABASE_FISCAL_SECRET nos Secrets do Streamlit. "
+            "Não coloque essa chave dentro do app.py ou GitHub."
+        )
+
+        st.code(
+            'SUPABASE_FISCAL_SECRET = "SUA_CHAVE_SERVER_SIDE_AQUI"',
+            language="toml"
+        )
+
+        st.stop()
+
+    try:
+
+        supabase_fiscal = create_client(
+            SUPABASE_URL,
+            chave_fiscal
+        )
+
+    except Exception as erro_conexao_fiscal:
+
+        st.error(
+            f"Não foi possível iniciar a conexão fiscal segura: "
+            f"{erro_conexao_fiscal}"
+        )
+
+        st.stop()
+
+    # ============================================================
+    # HELPERS
+    # ============================================================
+
+    def _nf_num(valor, padrao=0.0):
+
+        try:
+
+            if valor is None or pd.isna(valor):
+                return float(padrao)
+
+            return float(valor)
+
+        except Exception:
+            return float(padrao)
+
+    def _nf_txt(valor):
+
+        if valor is None:
+            return ""
+
+        try:
+            if pd.isna(valor):
+                return ""
+        except Exception:
+            pass
+
+        txt = str(valor).strip()
+
+        if txt.lower() in {
+            "none",
+            "nan",
+            "null"
+        }:
+            return ""
+
+        return txt
+
+    def _nf_moeda(valor):
+
+        valor = _nf_num(valor)
+
+        return (
+            f"R$ {valor:,.2f}"
+            .replace(",", "X")
+            .replace(".", ",")
+            .replace("X", ".")
+        )
+
+    def _nf_data(valor):
+
+        try:
+            return pd.to_datetime(valor).date()
+        except Exception:
+            return None
+
+    def _nf_data_br(valor):
+
+        data_tmp = _nf_data(valor)
+
+        if data_tmp is None:
+            return "-"
+
+        return data_tmp.strftime(
+            "%d/%m/%Y"
+        )
+
+    def _nf_carregar_config():
+
+        try:
+
+            dados = (
+                supabase_fiscal
+                .table("fiscal_configuracao")
+                .select("*")
+                .eq("id", 1)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+
+            return (
+                dados[0]
+                if dados
+                else {}
+            )
+
+        except Exception:
+            return {}
+
+    def _nf_carregar_eventos():
+
+        try:
+
+            dados = (
+                supabase_fiscal
+                .table("eventos")
+                .select("*")
+                .order(
+                    "data",
+                    desc=True
+                )
+                .execute()
+                .data
+                or []
+            )
+
+            return pd.DataFrame(
+                dados
+            )
+
+        except Exception as erro:
+
+            st.error(
+                f"Erro ao carregar eventos: {erro}"
+            )
+
+            return pd.DataFrame()
+
+    def _nf_carregar_adendos():
+
+        try:
+
+            dados = (
+                supabase_fiscal
+                .table("aditivos_evento")
+                .select("*")
+                .execute()
+                .data
+                or []
+            )
+
+            return pd.DataFrame(
+                dados
+            )
+
+        except Exception:
+            return pd.DataFrame()
+
+    def _nf_faturamento_evento(
+        evento,
+        df_adendos
+    ):
+
+        # Fechamento oficial do CMV é a prioridade.
+        fat_snapshot = _nf_num(
+            evento.get(
+                "cmv_faturamento_total"
+            )
+        )
+
+        if fat_snapshot > 0:
+            return fat_snapshot
+
+        venda = _nf_num(
+            evento.get("venda")
+        )
+
+        evento_id = evento.get("id")
+
+        adendos = 0.0
+
+        if (
+            not df_adendos.empty
+            and evento_id is not None
+            and "evento_id"
+            in df_adendos.columns
+        ):
+
+            temp = df_adendos[
+                pd.to_numeric(
+                    df_adendos[
+                        "evento_id"
+                    ],
+                    errors="coerce"
+                )
+                ==
+                _nf_num(
+                    evento_id,
+                    -1
+                )
+            ].copy()
+
+            if (
+                not temp.empty
+                and "status"
+                in temp.columns
+            ):
+
+                temp = temp[
+                    temp[
+                        "status"
+                    ]
+                    .fillna("")
+                    .astype(str)
+                    .str.lower()
+                    !=
+                    "cancelado"
+                ]
+
+            if (
+                not temp.empty
+                and "valor_cliente"
+                in temp.columns
+            ):
+
+                adendos = (
+                    pd.to_numeric(
+                        temp[
+                            "valor_cliente"
+                        ],
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .sum()
+                )
+
+        return (
+            venda
+            +
+            float(adendos)
+        )
+
+    def _nf_descricao_evento(
+        evento
+    ):
+
+        tipo = _nf_txt(
+            evento.get(
+                "tipo_evento"
+            )
+        )
+
+        cidade = _nf_txt(
+            evento.get(
+                "cidade"
+            )
+        )
+
+        data_evento = _nf_data_br(
+            evento.get(
+                "data"
+            )
+        )
+
+        descricao = (
+            "Prestação de serviços de bar, "
+            "bartender e coquetelaria"
+        )
+
+        if tipo:
+            descricao += (
+                f" para evento do tipo "
+                f"{tipo}"
+            )
+
+        if data_evento != "-":
+            descricao += (
+                f", realizado em "
+                f"{data_evento}"
+            )
+
+        if cidade:
+            descricao += (
+                f", em {cidade}"
+            )
+
+        return (
+            descricao
+            +
+            "."
+        )
+
+    def _nf_proximo_vencimento(
+        ano,
+        mes
+    ):
+
+        if mes == 12:
+            return date(
+                ano + 1,
+                1,
+                20
+            )
+
+        return date(
+            ano,
+            mes + 1,
+            20
+        )
+
+    def _nf_pdf_registro(
+        registro,
+        config,
+        das_competencia=None
+    ):
+
+        try:
+
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import (
+                getSampleStyleSheet,
+                ParagraphStyle
+            )
+            from reportlab.lib.enums import (
+                TA_CENTER
+            )
+            from reportlab.lib.units import mm
+            from reportlab.platypus import (
+                SimpleDocTemplate,
+                Paragraph,
+                Spacer,
+                Table,
+                TableStyle,
+            )
+            from xml.sax.saxutils import escape
+
+        except Exception:
+
+            return None
+
+        COR_ESCURO = colors.HexColor(
+            "#111827"
+        )
+
+        COR_DOURADO = colors.HexColor(
+            "#B8872F"
+        )
+
+        COR_CREME = colors.HexColor(
+            "#FFF7E8"
+        )
+
+        COR_CLARO = colors.HexColor(
+            "#F8FAFC"
+        )
+
+        COR_BORDA = colors.HexColor(
+            "#D1D5DB"
+        )
+
+        COR_VERMELHO = colors.HexColor(
+            "#991B1B"
+        )
+
+        buffer = io.BytesIO()
+
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=16 * mm,
+            leftMargin=16 * mm,
+            topMargin=14 * mm,
+            bottomMargin=14 * mm,
+            title=(
+                "Registro Interno "
+                "de Prestação de Serviço"
+            ),
+            author="BS Gold Drinks",
+        )
+
+        styles = getSampleStyleSheet()
+
+        titulo = ParagraphStyle(
+            "nf_titulo",
+            parent=styles["Title"],
+            fontName="Helvetica-Bold",
+            fontSize=20,
+            leading=23,
+            textColor=colors.white,
+        )
+
+        h2 = ParagraphStyle(
+            "nf_h2",
+            parent=styles["Heading2"],
+            fontName="Helvetica-Bold",
+            fontSize=12,
+            leading=15,
+            textColor=COR_ESCURO,
+        )
+
+        normal = ParagraphStyle(
+            "nf_normal",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=13,
+            textColor=COR_ESCURO,
+        )
+
+        pequeno = ParagraphStyle(
+            "nf_peq",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=7.5,
+            leading=10,
+            textColor=colors.HexColor(
+                "#6B7280"
+            ),
+        )
+
+        alerta = ParagraphStyle(
+            "nf_alerta",
+            parent=normal,
+            fontName="Helvetica-Bold",
+            alignment=TA_CENTER,
+            textColor=COR_VERMELHO,
+        )
+
+        story = []
+
+        header = Table(
+            [[
+                [
+                    Paragraph(
+                        "BS GOLD DRINKS",
+                        ParagraphStyle(
+                            "nf_marca",
+                            parent=normal,
+                            fontName="Helvetica-Bold",
+                            textColor=COR_DOURADO,
+                            fontSize=11,
+                        )
+                    ),
+                    Paragraph(
+                        "REGISTRO INTERNO "
+                        "DE PRESTAÇÃO DE SERVIÇO",
+                        titulo
+                    ),
+                ]
+            ]],
+            colWidths=[
+                178 * mm
+            ],
+        )
+
+        header.setStyle(
+            TableStyle([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    COR_ESCURO
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    10
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    10
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    9
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    9
+                ),
+                (
+                    "LINEBELOW",
+                    (0, 0),
+                    (-1, -1),
+                    2,
+                    COR_DOURADO
+                ),
+            ])
+        )
+
+        story.append(header)
+        story.append(
+            Spacer(
+                1,
+                5 * mm
+            )
+        )
+
+        aviso = Table(
+            [[
+                Paragraph(
+                    "DOCUMENTO DE CONTROLE INTERNO — "
+                    "NÃO É NFS-e E NÃO POSSUI "
+                    "VALIDADE FISCAL.",
+                    alerta
+                )
+            ]],
+            colWidths=[
+                178 * mm
+            ],
+        )
+
+        aviso.setStyle(
+            TableStyle([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    colors.HexColor(
+                        "#FEE2E2"
+                    )
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.7,
+                    COR_VERMELHO
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    7
+                ),
+            ])
+        )
+
+        story.append(aviso)
+        story.append(
+            Spacer(
+                1,
+                5 * mm
+            )
+        )
+
+        numero = _nf_txt(
+            registro.get(
+                "numero_interno"
+            )
+        )
+
+        info = [
+            [
+                "Registro",
+                numero,
+                "Status",
+                _nf_txt(
+                    registro.get(
+                        "status"
+                    )
+                ),
+            ],
+            [
+                "Cliente",
+                _nf_txt(
+                    registro.get(
+                        "evento_cliente"
+                    )
+                ),
+                "CPF/CNPJ",
+                _nf_txt(
+                    registro.get(
+                        "documento_tomador"
+                    )
+                ),
+            ],
+            [
+                "Competência",
+                _nf_data_br(
+                    registro.get(
+                        "data_competencia"
+                    )
+                ),
+                "Evento",
+                f"#{_nf_txt(registro.get('evento_id'))}",
+            ],
+        ]
+
+        t_info = Table(
+            info,
+            colWidths=[
+                29 * mm,
+                60 * mm,
+                29 * mm,
+                60 * mm,
+            ],
+        )
+
+        t_info.setStyle(
+            TableStyle([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    COR_CLARO
+                ),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.35,
+                    COR_BORDA
+                ),
+                (
+                    "FONTNAME",
+                    (0, 0),
+                    (0, -1),
+                    "Helvetica-Bold"
+                ),
+                (
+                    "FONTNAME",
+                    (2, 0),
+                    (2, -1),
+                    "Helvetica-Bold"
+                ),
+                (
+                    "FONTSIZE",
+                    (0, 0),
+                    (-1, -1),
+                    8.5
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    6
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    6
+                ),
+            ])
+        )
+
+        story.append(t_info)
+        story.append(
+            Spacer(
+                1,
+                5 * mm
+            )
+        )
+
+        story.append(
+            Paragraph(
+                "Serviço registrado",
+                h2
+            )
+        )
+
+        story.append(
+            Paragraph(
+                escape(
+                    _nf_txt(
+                        registro.get(
+                            "descricao_servico"
+                        )
+                    )
+                ),
+                normal
+            )
+        )
+
+        story.append(
+            Spacer(
+                1,
+                4 * mm
+            )
+        )
+
+        valor = _nf_moeda(
+            registro.get(
+                "valor_servico"
+            )
+        )
+
+        box_valor = Table(
+            [[
+                Paragraph(
+                    "<b>VALOR DO SERVIÇO</b>",
+                    normal
+                ),
+                Paragraph(
+                    f"<b>{valor}</b>",
+                    ParagraphStyle(
+                        "nf_valor",
+                        parent=normal,
+                        alignment=TA_CENTER,
+                        fontSize=18,
+                        textColor=colors.HexColor(
+                            "#166534"
+                        ),
+                    )
+                ),
+            ]],
+            colWidths=[
+                80 * mm,
+                98 * mm
+            ],
+        )
+
+        box_valor.setStyle(
+            TableStyle([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, -1),
+                    COR_CREME
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.8,
+                    COR_DOURADO
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE"
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    9
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    9
+                ),
+            ])
+        )
+
+        story.append(box_valor)
+        story.append(
+            Spacer(
+                1,
+                6 * mm
+            )
+        )
+
+        story.append(
+            Paragraph(
+                "Controle tributário interno",
+                h2
+            )
+        )
+
+        regime = (
+            _nf_txt(
+                registro.get(
+                    "regime_snapshot"
+                )
+            )
+            or
+            _nf_txt(
+                config.get(
+                    "regime_tributario"
+                )
+            )
+        )
+
+        tributario = [
+            [
+                "Regime informado",
+                regime or "-",
+            ],
+            [
+                "Tratamento no Ellosystem",
+                (
+                    "Tributos não são calculados como "
+                    "percentual desta emissão. "
+                    "O DAS é controlado por competência mensal."
+                ),
+            ],
+        ]
+
+        if das_competencia:
+
+            tributario.extend([
+                [
+                    "DAS da competência",
+                    _nf_moeda(
+                        das_competencia.get(
+                            "valor_total"
+                        )
+                    ),
+                ],
+                [
+                    "Situação do DAS",
+                    _nf_txt(
+                        das_competencia.get(
+                            "status"
+                        )
+                    ),
+                ],
+            ])
+
+        t_tributo = Table(
+            tributario,
+            colWidths=[
+                50 * mm,
+                128 * mm,
+            ],
+        )
+
+        t_tributo.setStyle(
+            TableStyle([
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (0, -1),
+                    COR_CLARO
+                ),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.35,
+                    COR_BORDA
+                ),
+                (
+                    "FONTNAME",
+                    (0, 0),
+                    (0, -1),
+                    "Helvetica-Bold"
+                ),
+                (
+                    "FONTSIZE",
+                    (0, 0),
+                    (-1, -1),
+                    8
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5
+                ),
+            ])
+        )
+
+        story.append(t_tributo)
+        story.append(
+            Spacer(
+                1,
+                5 * mm
+            )
+        )
+
+        story.append(
+            Paragraph(
+                "Este espelho foi criado para organização "
+                "interna e apoio ao contador. A obrigação "
+                "tributária oficial deve ser confirmada no "
+                "PGMEI/Simples Nacional e, quando aplicável, "
+                "na NFS-e efetivamente autorizada.",
+                pequeno
+            )
+        )
+
+        doc.build(story)
+
+        buffer.seek(0)
+
+        return buffer.getvalue()
+
+    # ============================================================
+    # BASES
+    # ============================================================
+
+    config_fiscal = (
+        _nf_carregar_config()
+    )
+
+    df_eventos_nf = (
+        _nf_carregar_eventos()
+    )
+
+    df_adendos_nf = (
+        _nf_carregar_adendos()
+    )
+
+    tab_faturar, tab_registros, tab_das, tab_config = st.tabs([
+        "🧾 A Faturar",
+        "📚 Registros Internos",
+        "📅 DAS / Impostos",
+        "⚙️ Fiscal / NFS-e",
+    ])
+
+    # ============================================================
+    # TAB — A FATURAR
+    # ============================================================
+
+    with tab_faturar:
+
+        st.subheader(
+            "🧾 Criar Registro Interno"
+        )
+
+        st.info(
+            "Para MEI/SIMEI, o imposto não é tratado aqui "
+            "como uma porcentagem de cada nota. "
+            "O Ellosystem separa o faturamento do controle mensal do DAS."
+        )
+
+        if df_eventos_nf.empty:
+
+            st.info(
+                "Nenhum evento encontrado."
+            )
+
+        else:
+
+            mostrar_abertos = (
+                st.checkbox(
+                    "Mostrar também eventos sem CMV fechado",
+                    value=False,
+                    key="nf_mostrar_abertos"
+                )
+            )
+
+            df_elegiveis = (
+                df_eventos_nf.copy()
+            )
+
+            if (
+                not mostrar_abertos
+                and "cmv_status"
+                in df_elegiveis.columns
+            ):
+
+                df_elegiveis = (
+                    df_elegiveis[
+                        df_elegiveis[
+                            "cmv_status"
+                        ]
+                        .fillna("")
+                        .astype(str)
+                        .str.lower()
+                        ==
+                        "fechado"
+                    ]
+                    .copy()
+                )
+
+            if df_elegiveis.empty:
+
+                st.warning(
+                    "Nenhum evento com CMV fechado. "
+                    "Marque a opção acima somente se precisar "
+                    "preparar um registro antes do fechamento."
+                )
+
+            else:
+
+                def _rotulo_evento_nf(row):
+
+                    evento_id = int(
+                        _nf_num(
+                            row.get("id")
+                        )
+                    )
+
+                    cliente = (
+                        _nf_txt(
+                            row.get(
+                                "cliente"
+                            )
+                        )
+                        or
+                        "Sem cliente"
+                    )
+
+                    data_txt = (
+                        _nf_data_br(
+                            row.get("data")
+                        )
+                    )
+
+                    valor = (
+                        _nf_faturamento_evento(
+                            row,
+                            df_adendos_nf
+                        )
+                    )
+
+                    return (
+                        f"#{evento_id} | "
+                        f"{cliente} | "
+                        f"{data_txt} | "
+                        f"{_nf_moeda(valor)}"
+                    )
+
+                opcoes_eventos = {
+                    _rotulo_evento_nf(row):
+                        int(
+                            _nf_num(
+                                row.get("id")
+                            )
+                        )
+                    for _, row
+                    in df_elegiveis.iterrows()
+                }
+
+                escolha_evento = (
+                    st.selectbox(
+                        "Selecionar evento",
+                        list(
+                            opcoes_eventos.keys()
+                        ),
+                        key="nf_evento_faturar"
+                    )
+                )
+
+                evento_id_nf = (
+                    opcoes_eventos[
+                        escolha_evento
+                    ]
+                )
+
+                evento_nf = (
+                    df_elegiveis[
+                        pd.to_numeric(
+                            df_elegiveis["id"],
+                            errors="coerce"
+                        )
+                        ==
+                        evento_id_nf
+                    ]
+                    .iloc[0]
+                    .to_dict()
+                )
+
+                valor_padrao = (
+                    _nf_faturamento_evento(
+                        evento_nf,
+                        df_adendos_nf
+                    )
+                )
+
+                c1, c2, c3, c4 = (
+                    st.columns(4)
+                )
+
+                c1.metric(
+                    "Cliente",
+                    _nf_txt(
+                        evento_nf.get(
+                            "cliente"
+                        )
+                    )
+                    or "-"
+                )
+
+                c2.metric(
+                    "Data do serviço",
+                    _nf_data_br(
+                        evento_nf.get(
+                            "data"
+                        )
+                    )
+                )
+
+                c3.metric(
+                    "Faturamento real",
+                    _nf_moeda(
+                        valor_padrao
+                    )
+                )
+
+                c4.metric(
+                    "CMV",
+                    (
+                        "✅ Fechado"
+                        if (
+                            _nf_txt(
+                                evento_nf.get(
+                                    "cmv_status"
+                                )
+                            ).lower()
+                            ==
+                            "fechado"
+                        )
+                        else
+                        "⚠️ Aberto"
+                    )
+                )
+
+                documento_tomador = (
+                    st.text_input(
+                        "CPF / CNPJ do tomador",
+                        value=_nf_txt(
+                            evento_nf.get(
+                                "documento_cliente"
+                            )
+                        ),
+                        key="nf_doc_tomador"
+                    )
+                )
+
+                data_evento_nf = (
+                    _nf_data(
+                        evento_nf.get(
+                            "data"
+                        )
+                    )
+                    or
+                    date.today()
+                )
+
+                data_competencia = (
+                    st.date_input(
+                        "Data de competência",
+                        value=data_evento_nf,
+                        key="nf_competencia"
+                    )
+                )
+
+                valor_documento = (
+                    st.number_input(
+                        "Valor do serviço",
+                        min_value=0.0,
+                        value=float(
+                            valor_padrao
+                        ),
+                        step=10.0,
+                        format="%.2f",
+                        key="nf_valor_documento"
+                    )
+                )
+
+                descricao_padrao = (
+                    _nf_txt(
+                        config_fiscal.get(
+                            "descricao_servico_padrao"
+                        )
+                    )
+                    or
+                    _nf_descricao_evento(
+                        evento_nf
+                    )
+                )
+
+                descricao_servico = (
+                    st.text_area(
+                        "Descrição do serviço",
+                        value=descricao_padrao,
+                        height=120,
+                        key="nf_descricao_servico"
+                    )
+                )
+
+                observacao_interna = (
+                    st.text_area(
+                        "Observação interna / contador",
+                        placeholder=(
+                            "Ex.: serviço pago via PIX; "
+                            "aguardando emissão oficial da NFS-e."
+                        ),
+                        height=90,
+                        key="nf_obs_contador"
+                    )
+                )
+
+                if (
+                    not documento_tomador
+                ):
+
+                    st.warning(
+                        "CPF/CNPJ do cliente ainda não informado. "
+                        "Você pode criar o registro interno, "
+                        "mas ele ficará incompleto para a futura NFS-e."
+                    )
+
+                confirmar = (
+                    st.checkbox(
+                        "Confirmo que este documento é somente um "
+                        "registro interno e ainda NÃO é uma NFS-e oficial.",
+                        key="nf_confirma_registro"
+                    )
+                )
+
+                if st.button(
+                    "💾 Criar Registro Interno",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=(
+                        not confirmar
+                        or valor_documento <= 0
+                        or not descricao_servico.strip()
+                    ),
+                    key="nf_criar_registro"
+                ):
+
+                    try:
+
+                        payload = {
+                            "evento_id":
+                                int(
+                                    evento_id_nf
+                                ),
+
+                            "evento_cliente":
+                                _nf_txt(
+                                    evento_nf.get(
+                                        "cliente"
+                                    )
+                                ),
+
+                            "documento_tomador":
+                                documento_tomador.strip(),
+
+                            "data_evento":
+                                data_evento_nf.isoformat(),
+
+                            "data_competencia":
+                                data_competencia.isoformat(),
+
+                            "valor_servico":
+                                float(
+                                    valor_documento
+                                ),
+
+                            "descricao_servico":
+                                descricao_servico.strip(),
+
+                            "tipo_documento":
+                                "Registro Interno",
+
+                            "status":
+                                "Pendente NFS-e",
+
+                            "regime_snapshot":
+                                _nf_txt(
+                                    config_fiscal.get(
+                                        "regime_tributario"
+                                    )
+                                ),
+
+                            "cnpj_prestador_snapshot":
+                                _nf_txt(
+                                    config_fiscal.get(
+                                        "cnpj"
+                                    )
+                                ),
+
+                            "inscricao_municipal_snapshot":
+                                _nf_txt(
+                                    config_fiscal.get(
+                                        "inscricao_municipal"
+                                    )
+                                ),
+
+                            "codigo_servico_snapshot":
+                                _nf_txt(
+                                    config_fiscal.get(
+                                        "codigo_servico_nacional"
+                                    )
+                                ),
+
+                            "codigo_tributacao_municipal_snapshot":
+                                _nf_txt(
+                                    config_fiscal.get(
+                                        "codigo_tributacao_municipal"
+                                    )
+                                ),
+
+                            "nbs_snapshot":
+                                _nf_txt(
+                                    config_fiscal.get(
+                                        "nbs"
+                                    )
+                                ),
+
+                            "observacao_tributaria":
+                                (
+                                    "MEI/SIMEI: tributos controlados "
+                                    "no DAS mensal; não calculados "
+                                    "como percentual desta emissão."
+                                    +
+                                    (
+                                        f" | {observacao_interna.strip()}"
+                                        if observacao_interna.strip()
+                                        else
+                                        ""
+                                    )
+                                ),
+                        }
+
+                        resp = (
+                            supabase_fiscal
+                            .table(
+                                "fiscal_documentos"
+                            )
+                            .insert(
+                                payload
+                            )
+                            .execute()
+                        )
+
+                        novo_id = None
+
+                        if resp.data:
+                            novo_id = (
+                                resp.data[0]
+                                .get("id")
+                            )
+
+                        if novo_id:
+
+                            numero_interno = (
+                                f"INT-"
+                                f"{data_competencia.year}-"
+                                f"{int(novo_id):05d}"
+                            )
+
+                            (
+                                supabase_fiscal
+                                .table(
+                                    "fiscal_documentos"
+                                )
+                                .update({
+                                    "numero_interno":
+                                        numero_interno,
+
+                                    "atualizado_em":
+                                        datetime.now()
+                                        .isoformat(),
+                                })
+                                .eq(
+                                    "id",
+                                    int(
+                                        novo_id
+                                    )
+                                )
+                                .execute()
+                            )
+
+                        # Se o documento foi digitado agora,
+                        # atualiza o evento para uso futuro.
+                        if (
+                            documento_tomador.strip()
+                            and not _nf_txt(
+                                evento_nf.get(
+                                    "documento_cliente"
+                                )
+                            )
+                        ):
+
+                            try:
+
+                                (
+                                    supabase_fiscal
+                                    .table(
+                                        "eventos"
+                                    )
+                                    .update({
+                                        "documento_cliente":
+                                            documento_tomador.strip()
+                                    })
+                                    .eq(
+                                        "id",
+                                        int(
+                                            evento_id_nf
+                                        )
+                                    )
+                                    .execute()
+                                )
+
+                            except Exception:
+                                pass
+
+                        st.success(
+                            "✅ Registro interno criado. "
+                            "Ele ficou marcado como Pendente NFS-e."
+                        )
+
+                        st.rerun()
+
+                    except Exception as erro_registro:
+
+                        st.error(
+                            f"Erro ao criar registro interno: "
+                            f"{erro_registro}"
+                        )
+
+    # ============================================================
+    # TAB — REGISTROS
+    # ============================================================
+
+    with tab_registros:
+
+        st.subheader(
+            "📚 Registros Internos / NFS-e"
+        )
+
+        try:
+
+            registros = (
+                supabase_fiscal
+                .table(
+                    "fiscal_documentos"
+                )
+                .select("*")
+                .order(
+                    "id",
+                    desc=True
+                )
+                .execute()
+                .data
+                or []
+            )
+
+            df_registros = (
+                pd.DataFrame(
+                    registros
+                )
+            )
+
+        except Exception as erro:
+
+            st.error(
+                f"Erro ao carregar registros: "
+                f"{erro}"
+            )
+
+            df_registros = (
+                pd.DataFrame()
+            )
+
+        if df_registros.empty:
+
+            st.info(
+                "Nenhum registro fiscal interno criado."
+            )
+
+        else:
+
+            tabela_visual = (
+                df_registros.copy()
+            )
+
+            for coluna in [
+                "valor_servico"
+            ]:
+
+                if coluna in tabela_visual.columns:
+
+                    tabela_visual[
+                        coluna
+                    ] = pd.to_numeric(
+                        tabela_visual[
+                            coluna
+                        ],
+                        errors="coerce"
+                    ).fillna(0)
+
+            st.dataframe(
+                tabela_visual[
+                    [
+                        col
+                        for col in [
+                            "numero_interno",
+                            "evento_cliente",
+                            "documento_tomador",
+                            "data_competencia",
+                            "valor_servico",
+                            "status",
+                            "nfse_numero",
+                            "nfse_chave_acesso",
+                        ]
+                        if col
+                        in tabela_visual.columns
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "numero_interno":
+                        "Registro",
+
+                    "evento_cliente":
+                        "Cliente",
+
+                    "documento_tomador":
+                        "CPF/CNPJ",
+
+                    "data_competencia":
+                        "Competência",
+
+                    "valor_servico":
+                        st.column_config.NumberColumn(
+                            "Valor",
+                            format="R$ %.2f"
+                        ),
+
+                    "status":
+                        "Status",
+
+                    "nfse_numero":
+                        "NFS-e",
+
+                    "nfse_chave_acesso":
+                        "Chave",
+                }
+            )
+
+            opcoes_registros = {
+                (
+                    f"{_nf_txt(row.get('numero_interno'))} | "
+                    f"{_nf_txt(row.get('evento_cliente'))} | "
+                    f"{_nf_moeda(row.get('valor_servico'))}"
+                ):
+                    int(
+                        _nf_num(
+                            row.get("id")
+                        )
+                    )
+                for _, row
+                in df_registros.iterrows()
+            }
+
+            escolha_registro = (
+                st.selectbox(
+                    "Abrir registro",
+                    list(
+                        opcoes_registros.keys()
+                    ),
+                    key="nf_abrir_registro"
+                )
+            )
+
+            id_registro = (
+                opcoes_registros[
+                    escolha_registro
+                ]
+            )
+
+            registro = (
+                df_registros[
+                    pd.to_numeric(
+                        df_registros["id"],
+                        errors="coerce"
+                    )
+                    ==
+                    id_registro
+                ]
+                .iloc[0]
+                .to_dict()
+            )
+
+            with st.container(
+                border=True
+            ):
+
+                r1, r2, r3, r4 = (
+                    st.columns(4)
+                )
+
+                r1.metric(
+                    "Registro",
+                    _nf_txt(
+                        registro.get(
+                            "numero_interno"
+                        )
+                    )
+                )
+
+                r2.metric(
+                    "Cliente",
+                    _nf_txt(
+                        registro.get(
+                            "evento_cliente"
+                        )
+                    )
+                )
+
+                r3.metric(
+                    "Valor",
+                    _nf_moeda(
+                        registro.get(
+                            "valor_servico"
+                        )
+                    )
+                )
+
+                r4.metric(
+                    "Status",
+                    _nf_txt(
+                        registro.get(
+                            "status"
+                        )
+                    )
+                )
+
+            competencia_reg = (
+                _nf_data(
+                    registro.get(
+                        "data_competencia"
+                    )
+                )
+            )
+
+            das_comp = None
+
+            if competencia_reg:
+
+                try:
+
+                    dados_das = (
+                        supabase_fiscal
+                        .table(
+                            "fiscal_das_mensal"
+                        )
+                        .select("*")
+                        .eq(
+                            "ano",
+                            competencia_reg.year
+                        )
+                        .eq(
+                            "mes",
+                            competencia_reg.month
+                        )
+                        .limit(1)
+                        .execute()
+                        .data
+                        or []
+                    )
+
+                    if dados_das:
+                        das_comp = (
+                            dados_das[0]
+                        )
+
+                except Exception:
+                    das_comp = None
+
+            pdf_interno = (
+                _nf_pdf_registro(
+                    registro,
+                    config_fiscal,
+                    das_comp
+                )
+            )
+
+            if pdf_interno:
+
+                st.download_button(
+                    "📄 Baixar Espelho Interno / Contador",
+                    data=pdf_interno,
+                    file_name=(
+                        f"{_nf_txt(registro.get('numero_interno'))}"
+                        "_interno.pdf"
+                    ),
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key=(
+                        f"nf_pdf_"
+                        f"{id_registro}"
+                    )
+                )
+
+            st.markdown(
+                "### 🔗 Vincular NFS-e oficial"
+            )
+
+            st.caption(
+                "Use esta área depois que a NFS-e oficial "
+                "for emitida pelo portal ou, futuramente, pela API."
+            )
+
+            n1, n2 = st.columns(2)
+
+            nfse_numero = (
+                n1.text_input(
+                    "Número da NFS-e",
+                    value=_nf_txt(
+                        registro.get(
+                            "nfse_numero"
+                        )
+                    ),
+                    key=(
+                        f"nf_numero_"
+                        f"{id_registro}"
+                    )
+                )
+            )
+
+            nfse_chave = (
+                n2.text_input(
+                    "Chave de acesso",
+                    value=_nf_txt(
+                        registro.get(
+                            "nfse_chave_acesso"
+                        )
+                    ),
+                    key=(
+                        f"nf_chave_"
+                        f"{id_registro}"
+                    )
+                )
+            )
+
+            data_emissao_nfse = (
+                st.date_input(
+                    "Data de emissão da NFS-e",
+                    value=(
+                        _nf_data(
+                            registro.get(
+                                "nfse_data_emissao"
+                            )
+                        )
+                        or
+                        date.today()
+                    ),
+                    key=(
+                        f"nf_data_emissao_"
+                        f"{id_registro}"
+                    )
+                )
+            )
+
+            if st.button(
+                "✅ Marcar como NFS-e Emitida",
+                use_container_width=True,
+                disabled=(
+                    not nfse_numero.strip()
+                    or not nfse_chave.strip()
+                ),
+                key=(
+                    f"nf_vincular_"
+                    f"{id_registro}"
+                )
+            ):
+
+                try:
+
+                    (
+                        supabase_fiscal
+                        .table(
+                            "fiscal_documentos"
+                        )
+                        .update({
+                            "status":
+                                "NFS-e Emitida",
+
+                            "nfse_numero":
+                                nfse_numero.strip(),
+
+                            "nfse_chave_acesso":
+                                nfse_chave.strip(),
+
+                            "nfse_data_emissao":
+                                datetime.combine(
+                                    data_emissao_nfse,
+                                    datetime.min.time()
+                                ).isoformat(),
+
+                            "atualizado_em":
+                                datetime.now()
+                                .isoformat(),
+                        })
+                        .eq(
+                            "id",
+                            id_registro
+                        )
+                        .execute()
+                    )
+
+                    st.success(
+                        "✅ NFS-e oficial vinculada ao registro."
+                    )
+
+                    st.rerun()
+
+                except Exception as erro_vinculo:
+
+                    st.error(
+                        f"Erro ao vincular NFS-e: "
+                        f"{erro_vinculo}"
+                    )
+
+    # ============================================================
+    # TAB — DAS / IMPOSTOS
+    # ============================================================
+
+    with tab_das:
+
+        st.subheader(
+            "📅 DAS / Impostos"
+        )
+
+        st.info(
+            "MEI/SIMEI não funciona como uma alíquota "
+            "aplicada em cada NFS-e. O DAS é uma obrigação "
+            "mensal de valor fixo conforme o enquadramento. "
+            "Por isso o Ellosystem controla o DAS por competência, "
+            "separado de cada registro de serviço."
+        )
+
+        hoje_nf = date.today()
+
+        d1, d2 = st.columns(2)
+
+        ano_das = int(
+            d1.number_input(
+                "Ano",
+                min_value=2020,
+                max_value=2100,
+                value=hoje_nf.year,
+                step=1,
+                key="nf_das_ano"
+            )
+        )
+
+        meses = {
+            1: "Janeiro",
+            2: "Fevereiro",
+            3: "Março",
+            4: "Abril",
+            5: "Maio",
+            6: "Junho",
+            7: "Julho",
+            8: "Agosto",
+            9: "Setembro",
+            10: "Outubro",
+            11: "Novembro",
+            12: "Dezembro",
+        }
+
+        mes_das = (
+            d2.selectbox(
+                "Competência",
+                list(
+                    meses.keys()
+                ),
+                index=hoje_nf.month - 1,
+                format_func=lambda x: (
+                    meses[x]
+                ),
+                key="nf_das_mes"
+            )
+        )
+
+        try:
+
+            dados_mes = (
+                supabase_fiscal
+                .table(
+                    "fiscal_das_mensal"
+                )
+                .select("*")
+                .eq(
+                    "ano",
+                    ano_das
+                )
+                .eq(
+                    "mes",
+                    mes_das
+                )
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+
+            das_existente = (
+                dados_mes[0]
+                if dados_mes
+                else {}
+            )
+
+        except Exception:
+
+            das_existente = {}
+
+        # Referência oficial conhecida para 2026.
+        # Para outros anos o usuário/contador deve informar.
+        if (
+            not das_existente
+            and ano_das == 2026
+        ):
+
+            inss_padrao = 81.05
+            iss_padrao = 5.00
+            icms_padrao = 0.00
+
+        else:
+
+            inss_padrao = _nf_num(
+                das_existente.get(
+                    "inss"
+                )
+            )
+
+            iss_padrao = _nf_num(
+                das_existente.get(
+                    "iss"
+                )
+            )
+
+            icms_padrao = _nf_num(
+                das_existente.get(
+                    "icms"
+                )
+            )
+
+        if (
+            ano_das != 2026
+            and not das_existente
+        ):
+
+            st.warning(
+                "Para este ano não há valor padrão carregado. "
+                "Informe os valores confirmados no PGMEI/contador."
+            )
+
+        st.caption(
+            "Referência 2026 para MEI de serviços: "
+            "INSS R$ 81,05 + ISS R$ 5,00. "
+            "Se também houver atividade sujeita a ICMS, "
+            "o DAS pode incluir mais R$ 1,00."
+        )
+
+        v1, v2, v3, v4 = (
+            st.columns(4)
+        )
+
+        inss = v1.number_input(
+            "INSS",
+            min_value=0.0,
+            value=float(
+                inss_padrao
+            ),
+            step=0.01,
+            format="%.2f",
+            key=(
+                f"nf_das_inss_"
+                f"{ano_das}_{mes_das}"
+            )
+        )
+
+        iss = v2.number_input(
+            "ISS",
+            min_value=0.0,
+            value=float(
+                iss_padrao
+            ),
+            step=0.01,
+            format="%.2f",
+            key=(
+                f"nf_das_iss_"
+                f"{ano_das}_{mes_das}"
+            )
+        )
+
+        icms = v3.number_input(
+            "ICMS",
+            min_value=0.0,
+            value=float(
+                icms_padrao
+            ),
+            step=0.01,
+            format="%.2f",
+            key=(
+                f"nf_das_icms_"
+                f"{ano_das}_{mes_das}"
+            )
+        )
+
+        outros = v4.number_input(
+            "Outros",
+            min_value=0.0,
+            value=_nf_num(
+                das_existente.get(
+                    "outros"
+                )
+            ),
+            step=0.01,
+            format="%.2f",
+            key=(
+                f"nf_das_outros_"
+                f"{ano_das}_{mes_das}"
+            )
+        )
+
+        total_das = (
+            float(inss)
+            +
+            float(iss)
+            +
+            float(icms)
+            +
+            float(outros)
+        )
+
+        st.metric(
+            "DAS da competência",
+            _nf_moeda(
+                total_das
+            )
+        )
+
+        s1, s2 = st.columns(2)
+
+        status_das = (
+            s1.selectbox(
+                "Status",
+                [
+                    "Pendente",
+                    "Pago",
+                    "Em atraso",
+                    "Parcelado",
+                ],
+                index=(
+                    [
+                        "Pendente",
+                        "Pago",
+                        "Em atraso",
+                        "Parcelado",
+                    ].index(
+                        _nf_txt(
+                            das_existente.get(
+                                "status"
+                            )
+                        )
+                    )
+                    if _nf_txt(
+                        das_existente.get(
+                            "status"
+                        )
+                    )
+                    in [
+                        "Pendente",
+                        "Pago",
+                        "Em atraso",
+                        "Parcelado",
+                    ]
+                    else 0
+                ),
+                key=(
+                    f"nf_das_status_"
+                    f"{ano_das}_{mes_das}"
+                )
+            )
+        )
+
+        vencimento_das = (
+            s2.date_input(
+                "Vencimento",
+                value=(
+                    _nf_data(
+                        das_existente.get(
+                            "vencimento"
+                        )
+                    )
+                    or
+                    _nf_proximo_vencimento(
+                        ano_das,
+                        mes_das
+                    )
+                ),
+                key=(
+                    f"nf_das_venc_"
+                    f"{ano_das}_{mes_das}"
+                )
+            )
+        )
+
+        p1, p2 = st.columns(2)
+
+        data_pagamento = (
+            p1.date_input(
+                "Data de pagamento",
+                value=(
+                    _nf_data(
+                        das_existente.get(
+                            "data_pagamento"
+                        )
+                    )
+                    or
+                    date.today()
+                ),
+                disabled=(
+                    status_das
+                    !=
+                    "Pago"
+                ),
+                key=(
+                    f"nf_das_pag_"
+                    f"{ano_das}_{mes_das}"
+                )
+            )
+        )
+
+        valor_pago = (
+            p2.number_input(
+                "Valor pago",
+                min_value=0.0,
+                value=(
+                    _nf_num(
+                        das_existente.get(
+                            "valor_pago"
+                        ),
+                        total_das
+                    )
+                    if status_das
+                    ==
+                    "Pago"
+                    else 0.0
+                ),
+                step=0.01,
+                format="%.2f",
+                disabled=(
+                    status_das
+                    !=
+                    "Pago"
+                ),
+                key=(
+                    f"nf_das_vpago_"
+                    f"{ano_das}_{mes_das}"
+                )
+            )
+        )
+
+        obs_das = (
+            st.text_area(
+                "Observações",
+                value=_nf_txt(
+                    das_existente.get(
+                        "observacoes"
+                    )
+                ),
+                key=(
+                    f"nf_das_obs_"
+                    f"{ano_das}_{mes_das}"
+                )
+            )
+        )
+
+        if st.button(
+            "💾 Salvar competência DAS",
+            use_container_width=True,
+            key=(
+                f"nf_salvar_das_"
+                f"{ano_das}_{mes_das}"
+            )
+        ):
+
+            try:
+
+                payload_das = {
+                    "ano":
+                        int(
+                            ano_das
+                        ),
+
+                    "mes":
+                        int(
+                            mes_das
+                        ),
+
+                    "inss":
+                        float(
+                            inss
+                        ),
+
+                    "iss":
+                        float(
+                            iss
+                        ),
+
+                    "icms":
+                        float(
+                            icms
+                        ),
+
+                    "outros":
+                        float(
+                            outros
+                        ),
+
+                    "valor_total":
+                        float(
+                            total_das
+                        ),
+
+                    "vencimento":
+                        vencimento_das
+                        .isoformat(),
+
+                    "status":
+                        status_das,
+
+                    "data_pagamento":
+                        (
+                            data_pagamento
+                            .isoformat()
+                            if status_das
+                            ==
+                            "Pago"
+                            else None
+                        ),
+
+                    "valor_pago":
+                        (
+                            float(
+                                valor_pago
+                            )
+                            if status_das
+                            ==
+                            "Pago"
+                            else None
+                        ),
+
+                    "observacoes":
+                        obs_das.strip(),
+
+                    "atualizado_em":
+                        datetime.now()
+                        .isoformat(),
+                }
+
+                (
+                    supabase_fiscal
+                    .table(
+                        "fiscal_das_mensal"
+                    )
+                    .upsert(
+                        payload_das,
+                        on_conflict=(
+                            "ano,mes"
+                        )
+                    )
+                    .execute()
+                )
+
+                st.success(
+                    "✅ Competência DAS salva."
+                )
+
+                st.rerun()
+
+            except Exception as erro_das:
+
+                st.error(
+                    f"Erro ao salvar DAS: "
+                    f"{erro_das}"
+                )
+
+        st.markdown(
+            "### 📊 Histórico do DAS"
+        )
+
+        try:
+
+            historico_das = (
+                supabase_fiscal
+                .table(
+                    "fiscal_das_mensal"
+                )
+                .select("*")
+                .eq(
+                    "ano",
+                    ano_das
+                )
+                .order(
+                    "mes"
+                )
+                .execute()
+                .data
+                or []
+            )
+
+            df_das_hist = (
+                pd.DataFrame(
+                    historico_das
+                )
+            )
+
+        except Exception:
+            df_das_hist = (
+                pd.DataFrame()
+            )
+
+        if df_das_hist.empty:
+
+            st.info(
+                "Nenhuma competência salva neste ano."
+            )
+
+        else:
+
+            st.dataframe(
+                df_das_hist[
+                    [
+                        col
+                        for col in [
+                            "mes",
+                            "inss",
+                            "iss",
+                            "icms",
+                            "valor_total",
+                            "vencimento",
+                            "status",
+                            "valor_pago",
+                        ]
+                        if col
+                        in df_das_hist.columns
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "mes":
+                        "Mês",
+
+                    "inss":
+                        st.column_config.NumberColumn(
+                            "INSS",
+                            format="R$ %.2f"
+                        ),
+
+                    "iss":
+                        st.column_config.NumberColumn(
+                            "ISS",
+                            format="R$ %.2f"
+                        ),
+
+                    "icms":
+                        st.column_config.NumberColumn(
+                            "ICMS",
+                            format="R$ %.2f"
+                        ),
+
+                    "valor_total":
+                        st.column_config.NumberColumn(
+                            "DAS",
+                            format="R$ %.2f"
+                        ),
+
+                    "valor_pago":
+                        st.column_config.NumberColumn(
+                            "Pago",
+                            format="R$ %.2f"
+                        ),
+                }
+            )
+
+    # ============================================================
+    # TAB — CONFIGURAÇÃO / NFS-e
+    # ============================================================
+
+    with tab_config:
+
+        st.subheader(
+            "⚙️ Configuração Fiscal"
+        )
+
+        st.caption(
+            "Cadastre somente dados que você conhece. "
+            "Código do serviço, NBS e tributação municipal "
+            "devem ser confirmados antes da emissão oficial."
+        )
+
+        cfg = (
+            _nf_carregar_config()
+        )
+
+        with st.form(
+            "nf_form_config"
+        ):
+
+            a1, a2 = st.columns(2)
+
+            nome_fantasia = (
+                a1.text_input(
+                    "Nome fantasia",
+                    value=_nf_txt(
+                        cfg.get(
+                            "nome_fantasia"
+                        )
+                    )
+                    or
+                    "BS Gold Drinks"
+                )
+            )
+
+            razao_social = (
+                a2.text_input(
+                    "Razão social",
+                    value=_nf_txt(
+                        cfg.get(
+                            "razao_social"
+                        )
+                    )
+                )
+            )
+
+            b1, b2 = st.columns(2)
+
+            cnpj = (
+                b1.text_input(
+                    "CNPJ",
+                    value=_nf_txt(
+                        cfg.get(
+                            "cnpj"
+                        )
+                    )
+                )
+            )
+
+            inscricao_municipal = (
+                b2.text_input(
+                    "Inscrição Municipal",
+                    value=_nf_txt(
+                        cfg.get(
+                            "inscricao_municipal"
+                        )
+                    )
+                )
+            )
+
+            regime = (
+                st.selectbox(
+                    "Regime tributário",
+                    [
+                        "MEI / SIMEI",
+                        "Simples Nacional",
+                        "Outro",
+                    ],
+                    index=(
+                        [
+                            "MEI / SIMEI",
+                            "Simples Nacional",
+                            "Outro",
+                        ].index(
+                            _nf_txt(
+                                cfg.get(
+                                    "regime_tributario"
+                                )
+                            )
+                        )
+                        if _nf_txt(
+                            cfg.get(
+                                "regime_tributario"
+                            )
+                        )
+                        in [
+                            "MEI / SIMEI",
+                            "Simples Nacional",
+                            "Outro",
+                        ]
+                        else 0
+                    )
+                )
+            )
+
+            c1, c2, c3 = (
+                st.columns(
+                    [2, 1, 1]
+                )
+            )
+
+            municipio = (
+                c1.text_input(
+                    "Município",
+                    value=_nf_txt(
+                        cfg.get(
+                            "municipio"
+                        )
+                    )
+                    or
+                    "Passo Fundo"
+                )
+            )
+
+            uf = (
+                c2.text_input(
+                    "UF",
+                    value=_nf_txt(
+                        cfg.get(
+                            "uf"
+                        )
+                    )
+                    or
+                    "RS"
+                )
+            )
+
+            codigo_ibge = (
+                c3.text_input(
+                    "Código IBGE",
+                    value=_nf_txt(
+                        cfg.get(
+                            "codigo_municipio_ibge"
+                        )
+                    )
+                )
+            )
+
+            st.markdown(
+                "#### Classificação do serviço"
+            )
+
+            d1, d2, d3 = (
+                st.columns(3)
+            )
+
+            codigo_servico = (
+                d1.text_input(
+                    "Código do serviço nacional",
+                    value=_nf_txt(
+                        cfg.get(
+                            "codigo_servico_nacional"
+                        )
+                    )
+                )
+            )
+
+            codigo_municipal = (
+                d2.text_input(
+                    "Código tributação municipal",
+                    value=_nf_txt(
+                        cfg.get(
+                            "codigo_tributacao_municipal"
+                        )
+                    )
+                )
+            )
+
+            nbs = (
+                d3.text_input(
+                    "NBS",
+                    value=_nf_txt(
+                        cfg.get(
+                            "nbs"
+                        )
+                    )
+                )
+            )
+
+            descricao_padrao_cfg = (
+                st.text_area(
+                    "Descrição padrão do serviço",
+                    value=(
+                        _nf_txt(
+                            cfg.get(
+                                "descricao_servico_padrao"
+                            )
+                        )
+                        or
+                        (
+                            "Prestação de serviços de bar, "
+                            "bartender e coquetelaria para evento."
+                        )
+                    ),
+                    height=100
+                )
+            )
+
+            observacoes_cfg = (
+                st.text_area(
+                    "Observações fiscais internas",
+                    value=_nf_txt(
+                        cfg.get(
+                            "observacoes"
+                        )
+                    ),
+                    height=90
+                )
+            )
+
+            salvar_cfg = (
+                st.form_submit_button(
+                    "💾 Salvar configuração fiscal",
+                    use_container_width=True
+                )
+            )
+
+        if salvar_cfg:
+
+            try:
+
+                (
+                    supabase_fiscal
+                    .table(
+                        "fiscal_configuracao"
+                    )
+                    .upsert({
+                        "id":
+                            1,
+
+                        "nome_fantasia":
+                            nome_fantasia.strip(),
+
+                        "razao_social":
+                            razao_social.strip(),
+
+                        "cnpj":
+                            cnpj.strip(),
+
+                        "inscricao_municipal":
+                            inscricao_municipal.strip(),
+
+                        "regime_tributario":
+                            regime,
+
+                        "municipio":
+                            municipio.strip(),
+
+                        "uf":
+                            uf.strip(),
+
+                        "codigo_municipio_ibge":
+                            codigo_ibge.strip(),
+
+                        "codigo_servico_nacional":
+                            codigo_servico.strip(),
+
+                        "codigo_tributacao_municipal":
+                            codigo_municipal.strip(),
+
+                        "nbs":
+                            nbs.strip(),
+
+                        "descricao_servico_padrao":
+                            descricao_padrao_cfg.strip(),
+
+                        "observacoes":
+                            observacoes_cfg.strip(),
+
+                        "ambiente_nfse":
+                            "Não integrado",
+
+                        "api_habilitada":
+                            False,
+
+                        "atualizado_em":
+                            datetime.now()
+                            .isoformat(),
+                    })
+                    .execute()
+                )
+
+                st.success(
+                    "✅ Configuração fiscal salva."
+                )
+
+                st.rerun()
+
+            except Exception as erro_cfg:
+
+                st.error(
+                    f"Erro ao salvar configuração: "
+                    f"{erro_cfg}"
+                )
+
+        st.markdown(
+            "### 🔌 Preparação para NFS-e"
+        )
+
+        cfg_atual = (
+            _nf_carregar_config()
+        )
+
+        requisitos = {
+            "CNPJ do prestador":
+                bool(
+                    _nf_txt(
+                        cfg_atual.get(
+                            "cnpj"
+                        )
+                    )
+                ),
+
+            "Município / UF":
+                bool(
+                    _nf_txt(
+                        cfg_atual.get(
+                            "municipio"
+                        )
+                    )
+                    and
+                    _nf_txt(
+                        cfg_atual.get(
+                            "uf"
+                        )
+                    )
+                ),
+
+            "Código IBGE":
+                bool(
+                    _nf_txt(
+                        cfg_atual.get(
+                            "codigo_municipio_ibge"
+                        )
+                    )
+                ),
+
+            "Código do serviço":
+                bool(
+                    _nf_txt(
+                        cfg_atual.get(
+                            "codigo_servico_nacional"
+                        )
+                    )
+                ),
+
+            "Descrição padrão":
+                bool(
+                    _nf_txt(
+                        cfg_atual.get(
+                            "descricao_servico_padrao"
+                        )
+                    )
+                ),
+        }
+
+        for requisito, pronto in (
+            requisitos.items()
+        ):
+
+            st.write(
+                (
+                    "✅ "
+                    if pronto
+                    else
+                    "⬜ "
+                )
+                +
+                requisito
+            )
+
+        if all(
+            requisitos.values()
+        ):
+
+            st.success(
+                "Estrutura cadastral básica preenchida. "
+                "Ainda faltará validar enquadramento/código do serviço "
+                "e configurar autenticação/certificado para emissão oficial."
+            )
+
+        else:
+
+            st.info(
+                "Complete os itens acima aos poucos. "
+                "O controle interno já pode funcionar mesmo antes "
+                "da integração oficial."
+            )
+
+        st.warning(
+            "🔒 Certificado digital, senha, token ou chave privada "
+            "NUNCA devem ser salvos nessas tabelas nem no GitHub. "
+            "Na futura integração, esses dados ficarão exclusivamente "
+            "nos Secrets do ambiente."
+        )
+
+        st.button(
+            "🔌 Emitir NFS-e pela API",
+            disabled=True,
+            use_container_width=True,
+            help=(
+                "Reservado para a próxima etapa. "
+                "O botão será ativado depois da validação fiscal "
+                "e configuração segura da integração com o Emissor Nacional."
+            )
+        )
+
+
 
 elif menu == "Pacotes":
 
