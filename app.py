@@ -10579,7 +10579,15 @@ elif menu == "Orçamentos":
                 if x.strip()
             ]
 
-        if condicoes:
+        # O desconto à vista pode continuar cadastrado internamente,
+        # mas não é exibido na proposta comercial.
+        condicoes_pdf = [
+            item
+            for item in condicoes
+            if "desconto" not in str(item).lower()
+        ]
+
+        if condicoes_pdf:
             story.append(
                 Paragraph(
                     "Condições de pagamento",
@@ -10589,7 +10597,7 @@ elif menu == "Orçamentos":
 
             linhas_cond = []
 
-            for item in condicoes:
+            for item in condicoes_pdf:
                 linhas_cond.append([
                     Paragraph("•", normal),
                     Paragraph(
@@ -12729,12 +12737,14 @@ elif menu == "Orçamentos":
                             "valor_final": valor_final_venda,
                             "valor_por_convidado": valor_por_convidado,
                             "inclusos": [
-                                "Planejamento e operação do bar para o período contratado",
-                                "Equipe profissional conforme o dimensionamento do evento",
-                                "Execução da carta de drinks selecionada",
-                                "Ingredientes, bebidas e insumos previstos no orçamento",
-                                "Materiais e utensílios selecionados para a operação",
-                                "Checklist operacional e organização pré-evento",
+                                "Equipe de bartenders profissionais",
+                                "Layout decorativo completo de bar",
+                                "Copos, taças, materiais, equipamentos e utensílios profissionais necessários",
+                                "Ingredientes e insumos",
+                                "Bebidas, sucos e tudo relacionado aos drinks",
+                                "Suporte pré-evento completo",
+                                "Degustação para escolha dos drinks",
+                                "Atendimento de excelência na sua festa",
                             ],
                             "condicoes_pagamento":
                                 condicoes_pagamento_cliente,
@@ -13512,17 +13522,12 @@ elif menu == "Orçamentos":
             )
 
             inclusos_sp = [
-                "Equipe profissional conforme o dimensionamento definido no orçamento",
-                "Execução da carta de drinks informada para o evento",
-                "Organização operacional dos materiais e utensílios selecionados",
-                "Checklist de separação, ida, retorno e conferência",
-                "Atendimento durante o período contratado",
+                "Equipe profissional de bartenders",
+                "Materiais, equipamentos e utensílios profissionais necessários",
+                "Layout decorativo, copos e taças conforme definido para o evento",
+                "Suporte pré-evento completo",
+                "Atendimento de excelência na sua festa",
             ]
-
-            if observacoes_drinks_sp.strip():
-                inclusos_sp.append(
-                    "Orientações especiais e drinks personalizados registrados para a equipe"
-                )
 
             dados_proposta_sp = {
                 "cliente":
