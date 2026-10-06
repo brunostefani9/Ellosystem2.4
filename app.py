@@ -21970,43 +21970,16 @@ elif menu == "Notas Fiscais":
 
         s1, s2 = st.columns(2)
 
-        status_das = (
-            s1.selectbox(
-                "Status",
-                [
-                    "Pendente",
-                    "Pago",
-                    "Em atraso",
-                    "Parcelado",
-                ],
-                index=(
-                    [
-                        "Pendente",
-                        "Pago",
-                        "Em atraso",
-                        "Parcelado",
-                    ].index(
-                        _nf_txt(
-                            das_existente.get(
-                                "status"
-                            )
-                        )
-                    )
-                    if _nf_txt(
-                        das_existente.get(
-                            "status"
-                        )
-                    )
-          in [
-                        "Pendente",
-                        "Pago",
-                        "Em atraso",
-                        "Parcelado",
-                    ]
-                    else 0
-                ),
-                key=f"nf_das_status_{ano_das}_{mes_das}"
-            )
+       status_opcoes = ["Pendente", "Pago", "Em atraso", "Parcelado"]
+        status_atual = _nf_txt(das_existente.get("status")) if das_existente else None
+        idx_status = status_opcoes.index(status_atual) if status_atual in status_opcoes else 0
+
+        status_das = s1.selectbox(
+            "Status",
+            status_opcoes,
+            index=idx_status,
+            key=f"nf_das_status_{ano_das}_{mes_das}"
+        )
 
         # 1. Pega o valor (string, data ou None) do dicionario/funcao
         val_venc_raw = _nf_data(
