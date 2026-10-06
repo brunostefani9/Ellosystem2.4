@@ -21981,36 +21981,36 @@ elif menu == "Notas Fiscais":
             key=f"nf_das_status_{ano_das}_{mes_das}"
             )
     
-                    val_venc_raw = (
-                das_existente.get("vencimento")
-                or _nf_proximo_vencimento(ano_das, mes_das)
+        val_venc_raw = (
+            das_existente.get("vencimento")
+            or _nf_proximo_vencimento(ano_das, mes_das)
+        )
+
+        try:
+            data_convertida = pd.to_datetime(
+                val_venc_raw,
+                errors="coerce"
             )
-    
-            try:
-                data_convertida = pd.to_datetime(
-                    val_venc_raw,
-                    errors="coerce"
-                )
-    
-                if pd.isna(data_convertida):
-                    val_venc_parsed = date.today()
-                else:
-                    val_venc_parsed = data_convertida.date()
-    
-            except (TypeError, ValueError, OverflowError):
+
+            if pd.isna(data_convertida):
                 val_venc_parsed = date.today()
-    
-            data_minima = date(1900, 1, 1)
-            data_maxima = date(2100, 12, 31)
-    
-            if not data_minima <= val_venc_parsed <= data_maxima:
-                val_venc_parsed = date.today()
-    
-            vencimento_das = s2.date_input(
-                "Vencimento",
-                value=val_venc_parsed,
-                key=f"nf_das_venc_{ano_das}_{mes_das}"
-            )
+            else:
+                val_venc_parsed = data_convertida.date()
+
+        except (TypeError, ValueError, OverflowError):
+            val_venc_parsed = date.today()
+
+        data_minima = date(1900, 1, 1)
+        data_maxima = date(2100, 12, 31)
+
+        if not data_minima <= val_venc_parsed <= data_maxima:
+            val_venc_parsed = date.today()
+
+        vencimento_das = s2.date_input(
+            "Vencimento",
+            value=val_venc_parsed,
+            key=f"nf_das_venc_{ano_das}_{mes_das}"
+        )
           
         p1, p2 = st.columns(2)
 
