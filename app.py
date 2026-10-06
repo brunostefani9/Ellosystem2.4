@@ -21981,21 +21981,31 @@ elif menu == "Notas Fiscais":
             key=f"nf_das_status_{ano_das}_{mes_das}"
         )
 
-        # 1. Pega o valor (string, data ou None) do dicionario/funcao
-        val_venc_raw = _nf_data(
+                val_venc_raw = (
             das_existente.get("vencimento")
-        ) or _nf_proximo_vencimento(ano_das, mes_das)
+            or _nf_proximo_vencimento(ano_das, mes_das)
+        )
 
-        # 2. Converte de forma segura para objeto date (se falhar, usa hoje)
         try:
-            if val_venc_raw:
-                val_venc_parsed = pd.to_datetime(val_venc_raw).date()
-            else:
-                val_venc_parsed = datetime.date.today()
-        except Exception:
-            val_venc_parsed = datetime.date.today()
+            data_convertida = pd.to_datetime(
+                val_venc_raw,
+                errors="coerce"
+            )
 
-        # 3. Passa a data convertida no date_input
+            if pd.isna(data_convertida):
+                val_venc_parsed = date.today()
+            else:
+                val_venc_parsed = data_convertida.date()
+
+        except (TypeError, ValueError, OverflowError):
+            val_venc_parsed = date.today()
+
+        data_minima = date(1900, 1, 1)
+        data_maxima = date(2100, 12, 31)
+
+        if not data_minima <= val_venc_parsed <= data_maxima:
+            val_venc_parsed = date.today()
+
         vencimento_das = s2.date_input(
             "Vencimento",
             value=val_venc_parsed,
