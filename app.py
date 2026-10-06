@@ -21997,7 +21997,18 @@ elif menu == "Notas Fiscais":
                             "status"
                         )
                     )
-                # 1. Pega o valor (string, data ou None) do dicionario/funcao
+          in [
+                        "Pendente",
+                        "Pago",
+                        "Em atraso",
+                        "Parcelado",
+                    ]
+                    else 0
+                ),
+                key=f"nf_das_status_{ano_das}_{mes_das}"
+            )
+
+        # 1. Pega o valor (string, data ou None) do dicionario/funcao
         val_venc_raw = _nf_data(
             das_existente.get("vencimento")
         ) or _nf_proximo_vencimento(ano_das, mes_das)
@@ -22020,22 +22031,27 @@ elif menu == "Notas Fiscais":
           
         p1, p2 = st.columns(2)
 
-        # --- TRATAMENTO SEGURO PARA A DATA DE PAGAMENTO ---
-        val_pag_raw = _nf_data(das_existente.get("data_pagamento"))
-        try:
-            if val_pag_raw:
-                val_pag_parsed = pd.to_datetime(val_pag_raw).date()
-            else:
-                val_pag_parsed = datetime.date.today() # ou None, se o Streamlit permitir vazio na sua versão
-        except Exception:
-            val_pag_parsed = datetime.date.today()
-
         data_pagamento = (
             p1.date_input(
                 "Data de pagamento",
-                value=val_pag_parsed,
-                disabled=(status_das != "Pago"),
-                key=f"nf_das_pag_{ano_das}_{mes_das}"
+                value=(
+                    _nf_data(
+                        das_existente.get(
+                            "data_pagamento"
+                        )
+                    )
+                    or
+                    date.today()
+                ),
+                disabled=(
+                    status_das
+                    !=
+                    "Pago"
+                ),
+                key=(
+                    f"nf_das_pag_"
+                    f"{ano_das}_{mes_das}"
+                )
             )
         )
 
