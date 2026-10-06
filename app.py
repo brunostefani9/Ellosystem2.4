@@ -22014,29 +22014,36 @@ elif menu == "Notas Fiscais":
           
         p1, p2 = st.columns(2)
 
-        data_pagamento = (
-            p1.date_input(
-                "Data de pagamento",
-                value=(
-                    _nf_data(
-                        das_existente.get(
-                            "data_pagamento"
-                        )
-                    )
-                    or
-                    date.today()
-                ),
-                disabled=(
-                    status_das
-                    !=
-                    "Pago"
-                ),
-                key=(
-                    f"nf_das_pag_"
-                    f"{ano_das}_{mes_das}"
-                )
-            )
+        data_pag_raw = (
+            _nf_data(das_existente.get("data_pagamento"))
+            if das_existente
+            else None
         )
+
+        try:
+            data_pag_convertida = pd.to_datetime(
+                data_pag_raw,
+                errors="coerce"
+            )
+
+            if pd.isna(data_pag_convertida):
+                data_pag_inicial = date.today()
+            else:
+                data_pag_inicial = data_pag_convertida.date()
+
+        except (TypeError, ValueError, OverflowError):
+            data_pag_inicial = date.today()
+
+        if not date(1900, 1, 1) <= data_pag_inicial <= date(2100, 12, 31):
+            data_pag_inicial = date.today()
+
+        data_pagamento = p1.date_input(
+            "Data de pagamento",
+            value=data_pag_inicial,
+            disabled=(status_das != "Pago"),
+            key=f"nf_das_pag_{ano_das}_{mes_das}"
+        )
+
 
         valor_pago = (
             p2.number_input(
